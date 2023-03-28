@@ -92,8 +92,7 @@ fun quantified_typ (t as Const (_, T_to_bool_to_bool)) =
     else error "not a quantifier"
   | quantified_typ _ = error ""
 
-(* Term position, mostly for documentation / testing purposes. FIXME: check that this matches what
-the paper has in mind. See question below: *)
+(* Term position, mostly for documentation / testing purposes. See long comment at bottom. *)
 type tpos = int list;
 type full_pos = tpos * lpos * cpos
 
@@ -110,25 +109,28 @@ fun tposs_of (Abs(_,_,u)) = []::map (cons 0) (tposs_of u)
     end
   | tposs_of _ = [[]]
 
+(* The arguments of f are in green position iff. f \<in> \<Sigma>\<setminus>{\<forall>, \<exists>}, where Free _ variables are taken to
+be in \<Sigma>. *)
 fun can_have_green_args (t as (Const _)) = not (is_quantifier t)
   | can_have_green_args (Free _) = true
   | can_have_green_args _ = false
 
-fun green_tposs_of (Abs _) = [[]]
-  | green_tposs_of (t as (_$_)) =
-      if is_Const (head_of t) andalso not (is_quantifier (head_of t))
+fun green_tposs_of (t as (_$_)) =
+      if can_have_green_args (head_of t)
         then
           let
-            val tposs_of_head_and_args : tpos list list = map green_tposs_of (uncurry cons (strip_comb t))
+            val tposs_of_head_and_args : tpos list list =
+              map green_tposs_of (uncurry cons (strip_comb t))
             val tposs_of_comb =
               (* prepend term position in the combination *)
               map_index (fn (idx, tposs_of_subterm) => map (cons idx) tposs_of_subterm)
                 tposs_of_head_and_args
           in
+            (* drop the heads (sub)positions *)
             []::flat (drop 1 tposs_of_comb)
           end 
       else [[]]
-  | green_tposs_of _ = [[]]
+  | green_tposs_of _ = [[]] (* [\<epsilon>] *)
 
 (* t|\<^sub>p *)
 fun subterm_at_tpos t [] = t
@@ -143,20 +145,15 @@ fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (ac
   case t of
     Abs(_,_,u) => f (lvl + 1) u acc (* the abstraction itself is still green, it's body is not *)
   | (_$_) =>
-    (* FIXME: Free should also be in \<Sigma> !
-    Check that we allow everything that is a non-quantifier function symbol in the sense
-    of o\<lambda>Sup (which might not match the sense of Isabelle/HOL because of definitions in more
-    primitive terms.*)
-    let
-      val head = head_of t
-      val args = Term.args_of t
-    in
-      if not (is_Const (head)) orelse is_quantifier (head)
-        (* the whole combination is still green, but it's head and all of the arguments aren't *)
-        then fold (f lvl) (head::args) acc
-        (* all of the arguments are green (recurse) but the head isn't (pass to f) *)
-        else fold (fold_non_greens_lvl f lvl) args acc |> f lvl head
-    end
+      let
+        val (head, args) = strip_comb t
+      in
+        if not (can_have_green_args head)
+          (* the whole combination is still green, but it's head and all of the arguments aren't *)
+          then fold (f lvl) (head::args) acc
+          (* all of the arguments are green (recurse) but the head isn't (pass to f) *)
+          else fold (fold_non_greens_lvl f lvl) args acc |> f lvl head
+      end
   | _ => acc (* leaves of the expression tree can be green, in which case there is no
   nongreen-subtree that can be viewed as a leaf. *)
 
@@ -412,7 +409,7 @@ fun given_clause_loop passive active =
 (*
 Question:
 
-f x y           f(x, y)
+f x y         f(x, y)
 
   $              f
  /|\      or    / \    ?
@@ -437,6 +434,31 @@ nongreen leaves:
 f    
 
 FIXME: f x is a subterm
+
+Counter argument:
+o\<lambda>Sup paper, below Definition 6:
+  "[...] or has an argument of the form \<lambda>x. v such that x occurs free in a nongreen position of v."
+
+consider v = f x y
+
+If the term f x is in a nongreen position f x y then x occurs in a nongreen position subterm of v. x also
+occurs in a green position of v.
+
+But if we take v = f y x then x occurs only in green positions of v.
+
+If however f x is not a subterm of f x y at all, this ambiguity disappears.
+
+Proposed Definitions:
+* variadic application (/combination) with function as it's first child and arguments as the rest
+* term positions: standard definition of position in a tree
+* green positions as in paper
+* nongreen positions are all the other positions
+
+Observation:
+* The whole tree is green.
+* Every suffix of a green position is a green position.
+=> The green positions span a subtree starting at the root.
+
 
 
 
