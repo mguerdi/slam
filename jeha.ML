@@ -8,7 +8,7 @@ general procedure:
 
 *)
 
-signature JEHA = 
+signature JEHA =
 sig
   (* basics *)
   type literal = term * term * bool
@@ -63,7 +63,7 @@ fun mk_lit_eq_bool (@{term Not} $ t) b = mk_lit_eq_bool t (not b)
   | mk_lit_eq_bool t b = (t, if b then @{term True} else @{term False}, true)
 
 (* turn a boolean term into an equational literal *)
-fun lit_of t = 
+fun lit_of t =
   let
     fun lit_of_aux b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
       | lit_of_aux b (@{term Not} $ t) = lit_of_aux (not b) t
@@ -131,7 +131,7 @@ fun green_tposs_of (t as (_$_)) =
           in
             (* drop the heads (sub)positions *)
             []::flat (drop 1 tposs_of_comb)
-          end 
+          end
       else [[]]
   | green_tposs_of _ = [[]] (* [\<epsilon>] *)
 
@@ -168,7 +168,7 @@ fun fold_non_greens f = fold_non_greens_lvl (K f) 0
 
 (* "A raw \<lambda>-term is ground if it is built without using type variables and contains no free
 term variables" *)
-fun is_not_ground t = 
+fun is_not_ground t =
   let
     fun is_not_ground_type T =
       fold_atyps (fn U => fn acc => acc orelse is_TFree U orelse is_TVar U) T false
@@ -207,7 +207,7 @@ fun norm_quantifier_poly_eq t =
     val t = Envir.beta_eta_contract t
     fun bound_occurs_free_nongreen (Abs (a, _, s)) =
       (* Check if var referring to Bound 0 occurs in a nongreen position of s. *)
-      if fold_non_greens_lvl 
+      if fold_non_greens_lvl
           (fn lvl => fn tm_nongreen => fn acc =>
             acc orelse loose_bvar1 (tm_nongreen, lvl)
           ) 0 s false
@@ -215,7 +215,7 @@ fun norm_quantifier_poly_eq t =
         else NONE
       | bound_occurs_free_nongreen _ = error "not a \<lambda>-abstraction"
     fun rewrite_quantifier (t as Const(quantifier, _)) (x : string) =
-      let 
+      let
         val T = quantified_typ t
         val yT = T --> HOLogic.boolT
         val body = case quantifier of
@@ -235,7 +235,7 @@ fun norm_quantifier_poly_eq t =
       Const _ => if is_quantifier t then rewrite_quantifier t Name.uu else t
       (* cases 2 & 3 *)
     | s $ u =>
-        let val s' = 
+        let val s' =
           if is_quantifier s then
             (* case 2 *)
             if not (is_Abs u) then
@@ -312,7 +312,7 @@ fun ml_bool_of @{term True} = true
   | ml_bool_of @{term False} = false
   | ml_bool_of _ = error "term is not HOL.True or HOL.False"
 
-fun is_eq_bool_lit (s, t, true) = exists is_boolean_const [s, t] 
+fun is_eq_bool_lit (s, t, true) = exists is_boolean_const [s, t]
     (* FIXME: Maybe accept boolean disequations? (by turning them into equations) *)
   | is_eq_bool_lit _ = false
 
@@ -343,7 +343,7 @@ fun infer_eq_neq_outer_claus c i =
   in
     if not (fastype_of s = @{typ bool} andalso fastype_of t = @{typ bool})
       then error "not boolean equation"
-    else if b 
+    else if b
       then (* EqOuterClaus *)
         [ mk_lit_eq_bool s false::mk_lit_eq_bool t true::c
         , mk_lit_eq_bool s true::mk_lit_eq_bool t false::c
@@ -400,7 +400,7 @@ fun given_clause_loop passive active =
       (* if given_clause simplifies to (or is) [] then UNSAT *)
       if exists (curry (op =) []) (given_clause::simplifications)
         then NONE
-        else 
+        else
           let
             (* following zipperposition (src/prover/saturate.ml) add all simplifications except one
             (the current given_clause) to the passive set *)
