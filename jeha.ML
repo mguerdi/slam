@@ -85,6 +85,9 @@ fun is_quantifier (Const (@{const_name HOL.All}, _)) = true
   | is_quantifier (Const (@{const_name HOL.Ex}, _)) = true
   | is_quantifier _ = false
 
+fun is_Abs (Abs _) = true
+  | is_Abs _ = false
+
 (* the type of the variable bound by the quantifier *)
 fun quantified_typ (t as Const (_, T_to_bool_to_bool)) =
   if is_quantifier t
@@ -196,17 +199,22 @@ fun might_be_fluid (t as (Abs _)) = is_not_ground t
     1. Quantifier has no arguments, or
     NOTE: the two cases below require \<beta>-reduction afterwards
     2. has an argument that is not a \<lambda>-expression (see questions below!), or
-    (* FIXME: see question under Def. 6 in o\<lambda>Sup paper *)
     3. has an argument \<lambda>x. v and x occurs free in a nongreen position of v. *)
 fun norm_quantifier_poly_eq t =
   let
+    (* \<beta>\<eta>-reduce first, to obtain situation where case 2 above is "logically meaningful" (??) for
+    \<eta>-expansion (as is done in norm_beta_eta_qeta could always avoid case 2. *)
+    val t = Envir.beta_eta_contract t
     fun bound_occurs_free_nongreen (Abs (a, _, s)) =
       (* Check if var referring to Bound 0 occurs in a nongreen position of s. *)
-      if fold_non_greens_lvl (fn lvl => fn tm => fn acc => acc orelse loose_bvar1 (tm, lvl)) 0 s false
+      if fold_non_greens_lvl 
+          (fn lvl => fn tm_nongreen => fn acc =>
+            acc orelse loose_bvar1 (tm_nongreen, lvl)
+          ) 0 s false
         then SOME a
         else NONE
       | bound_occurs_free_nongreen _ = error "not a \<lambda>-abstraction"
-    fun rewrite (t as Const(quantifier, _)) x =
+    fun rewrite_quantifier (t as Const(quantifier, _)) (x : string) =
       let 
         val T = quantified_typ t
         val yT = T --> HOLogic.boolT
@@ -220,19 +228,24 @@ fun norm_quantifier_poly_eq t =
       in
         absfree ("y", T --> HOLogic.boolT) body
       end
-      | rewrite _ _ = error "not a constant"
+      | rewrite_quantifier _ _ = error "not a constant"
   in
     case t of
-      s $ u =>
+      (* case 1: lone term w/o args *)
+      Const _ => if is_quantifier t then rewrite_quantifier t Name.uu else t
+      (* cases 2 & 3 *)
+    | s $ u =>
         let val s' = 
           if is_quantifier s then
-            case bound_occurs_free_nongreen u of
-              SOME x => rewrite s x
+            (* case 2 *)
+            if not (is_Abs u) then
+              rewrite_quantifier s Name.uu
+            (* case 3 *)
+            else case bound_occurs_free_nongreen u of
+              SOME x => rewrite_quantifier s x
             | NONE => s
           else s
         in s' $ norm_quantifier_poly_eq u end
-      (* lone term w/o args *)
-    | Const _ => if is_quantifier t then rewrite t "" else t
     | Abs(a, T, u) => Abs(a, T, norm_quantifier_poly_eq u)
     | _ => t
   end
@@ -244,9 +257,6 @@ good reasons. What are they?
 Answer: "The Q\<^sub>\<approx>-normality of the initial clause set of a derivation will be a
 precondition of the completeness theorem." *)
 
-(* Question: Isabelle always uses \<eta>-long form under quantifiers. So case 2. above can't
-arise? *)
-
 (* \<forall> (\<lambda>x.v) \<mapsto> \<lambda>y.y\<approx>(\<lambda>x.\<top>) *)
 
 
@@ -254,9 +264,10 @@ arise? *)
 fun ensure_lambda_under_q (t $ Abs (x, T, u)) = t $ Abs (x, T, ensure_lambda_under_q u)
   | ensure_lambda_under_q (t $ u) =
       if is_quantifier t
-        (* FIXME: Name the abstracted variable, would Name.uu_ or similar be appropriate? Or just "x" as in Envir.eta_long? A: Yes Name.uu_ *)
-        (* FIXME: upshift loose bounds in u! Term.incr_bv .*)
-        then let val (T, _) = dest_funT (fastype_of u) in Abs("", T, ensure_lambda_under_q u $ Bound 0) end
+        then
+          let val (T, _) = dest_funT (fastype_of u) in
+            Abs(Name.uu, T, incr_boundvars 1 (ensure_lambda_under_q u) $ Bound 0)
+          end
         else ensure_lambda_under_q t $ ensure_lambda_under_q u
   | ensure_lambda_under_q t = t
 
