@@ -25,6 +25,7 @@ sig
   val tposs_of : term -> tpos list
   val green_tposs_of : term -> tpos list
   val subterm_at_tpos : term -> tpos -> term
+  val subterm_at_full_pos : clause -> full_pos -> term
   (* preprocessing *)
   val fold_non_greens_lvl : (int -> term -> 'a -> 'a) -> int -> term -> 'a -> 'a
   val fold_non_greens : (term -> 'a -> 'a) -> term -> 'a -> 'a
@@ -35,6 +36,7 @@ sig
   val outer_clausify : bool -> term -> clause -> clause list
   val simp_bool_outer_claus : clause -> cpos -> clause list
   val infer_eq_neq_outer_claus : clause -> cpos -> clause list
+  val infer_sup : Context.generic -> clause -> cpos -> clause -> full_pos -> clause list
   (* *)
   val given_clause_loop : clauses -> clauses -> (clauses * clauses) option
 end
@@ -53,8 +55,9 @@ datatype lpos = Left | Right;
 (* position of literal in a clause *)
 type cpos = int;
 
-
 fun swap_lit (s, t, b) = (t, s, b)
+
+fun map_lit f (s, t, b) = (f s, f t, b)
 
 (* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
 (* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
@@ -143,6 +146,27 @@ fun subterm_at_tpos t [] = t
   that. Scoping broken?? *)
   | subterm_at_tpos (t as (_$_)) (i::p) = subterm_at_tpos (nth (uncurry cons (strip_comb t)) i) p
   | subterm_at_tpos _ _ = error ""
+
+fun term_at_lpos (l, _, _) Left = l
+  | term_at_lpos (_, r, _) Right = r
+
+fun subterm_at_full_pos c (tp, lp, cp) = subterm_at_tpos (term_at_lpos (nth c cp) lp) tp
+
+fun head_tail_pair [] = error ""
+  | head_tail_pair (x::xs) = (x, xs)
+
+fun map_at_tpos [] f t = f t
+  | map_at_tpos (0::p) f (Abs(x,T,u)) = Abs(x,T,map_at_tpos p f u)
+  | map_at_tpos (i::p) f (t as (_$_)) =
+      t |> strip_comb |> uncurry cons |> nth_map i (map_at_tpos p f) |> head_tail_pair |> list_comb
+  | map_at_tpos _ _ _ = error ""
+
+fun map_at_lpos Left f (l, r, b) = (f l, r, b)
+  | map_at_lpos Right f (l, r, b) = (l, f r, b)
+
+val map_at_cpos = nth_map
+
+fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (map_at_lpos lp (map_at_tpos tp f)) c
 
 fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (acc : 'a) =
   case t of
@@ -300,11 +324,14 @@ fun ensure_lambda_under_q (t $ Abs (x, T, u)) = t $ Abs (x, T, ensure_lambda_und
         else ensure_lambda_under_q t $ ensure_lambda_under_q u
   | ensure_lambda_under_q t = t
 
+(* apply substitution and normalize (compare Envir.beta_eta_contract) *)
+fun norm_beta_eta_qeta_env env = ensure_lambda_under_q o Envir.eta_contract o Envir.norm_term env
+
 (* applies \<beta> and \<eta> reduction and the rewrite rule
     Q t \<mapsto> Q (\<lambda>x. t x)
   i.e. \<eta>-expansion under quantifiers.
 *)
-val norm_beta_eta_qeta = ensure_lambda_under_q  o Envir.beta_eta_contract;
+val norm_beta_eta_qeta = norm_beta_eta_qeta_env Envir.init
 
 (* oc function from the paper
 logically: outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
@@ -383,6 +410,51 @@ fun infer_eq_neq_outer_claus c i =
         ]
   end
 
+fun prefix_Vars_TVars prefix =
+  let 
+    fun prefix_if_Var prefix (Var ((s, i),T)) = Var ((prefix ^ s, i), T)
+      | prefix_if_Var _ u = u
+    fun prefix_if_TVar prefix = map_type_tvar (fn ((s, i), S) => TVar ((prefix ^ s, i), S))
+  in
+    map_aterms (prefix_if_Var prefix) o map_types (prefix_if_TVar prefix)
+  end
+
+(* Sup inference *)
+fun infer_sup (ctxt : Context.generic) (d : clause) (i : cpos) (c : clause) (j : full_pos) =
+  let
+    (* FIXME: better renaming strategy: collect Vars from one term in a Vars structure (term_item.ML),
+    traverse the other creating an environment mapping names already used to fresh names
+    ALSO: Only make t and u (and compose environments afterwards? Envir.merge?)
+    OR: try to use Envir.empty max_idx (augment clauses with max_idx?) and Envir.genvar
+    NOTE: how to handle TVars? *)
+    val d = map (map_lit (prefix_Vars_TVars "L")) d
+    val c = map (map_lit (prefix_Vars_TVars "R")) c
+    (* FIXME: pick the correct one (t or t') *)
+    val (t, t', true) = nth d i
+    val u = subterm_at_full_pos c j
+  in
+    if might_be_fluid u
+      then error "u might be fluid"
+    else if is_Var u andalso occurs_deeply u c
+      then error "u occurs deeply in c"
+    else
+      (* FIXME: Is smash_unifiers the one we want? How lossy is this? *)
+      (* FIXME: Later, try to keep around flex-flex pairs for a while? *)
+      let
+        val unifiers = Unify.smash_unifiers ctxt [(t, u)] Envir.init
+        (* FIXME: print warning message when discarding unifiers *)
+        val (unifiers, _) = Seq.chop 4 unifiers
+        fun build_conclusion unifier =
+          let
+            val d' = nth_drop i d
+            val ct' = map_at_full_pos j (K t') c
+          in
+            map (map_lit (norm_beta_eta_qeta_env unifier)) (d' @ ct')
+          end
+      in
+        map build_conclusion unifiers
+      end
+  end
 
 
 
