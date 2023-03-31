@@ -188,6 +188,39 @@ fun might_be_fluid (t as (Abs _)) = is_not_ground t
   | might_be_fluid (Var _ $ _) = true
   | might_be_fluid _ = false
 
+fun occurs_in_term x = exists_subterm (curry (op =) x)
+
+(* FIXME: Check that this is the correct reading of Definition 23.
+
+x occurs deeply in
+
+y u\<^sub>n       iff. x occurs in any u\<^sub>i
+Q (\<lambda>z.v)   iff. x occurs deeply in v
+s u\<^sub>n       iff. x occurs deeply in s or x occurs deeply in any u\<^sub>i
+(\<lambda>z.v)     iff. x occurs in v
+
+Idea: recurse until condition is encountered which makes every occurence deep. *)
+fun occurs_deeply_in_term x (t as (_ $ _)) =
+  let
+    val (head, args) = strip_comb t
+  in
+    case head of
+      Var _ => exists (occurs_in_term x) args
+    | _ =>
+        if is_quantifier head andalso is_Abs (the_single args)
+          then let val Abs(_,_,v) = the_single args in occurs_deeply_in_term x v end
+          else exists (occurs_deeply_in_term x) (head::args)
+  end
+  (* we know this abstraction will not be directly below a quantifier *)
+  | occurs_deeply_in_term x (Abs(_,_,v)) = occurs_in_term x v
+  (* in particular: x does not occur deeply in x *)
+  | occurs_deeply_in_term _ _ = false
+
+fun occurs_deeply_in_lit x (l, r, _) = occurs_deeply_in_term x l orelse occurs_deeply_in_term x r
+
+fun occurs_deeply (x as (Var _)) = exists (occurs_deeply_in_lit x)
+  | occurs_deeply _ = error "only Vars can occur deeply"
+
 (* Q\<^sub>\<approx> normalizes, i.e. applies the rewrite rules
     \<forall> \<mapsto> \<lambda>y. y = (\<lambda>x. True)  (this is the polymorphic HOL.eq)
     \<exists> \<mapsto> \<lambda>y. y \<noteq> (\<lambda>x. False)
