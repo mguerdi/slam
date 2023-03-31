@@ -166,8 +166,8 @@ they form a subtree starting at the root. The nongreen "leaves" are the ones 1 b
 leaves. *)
 fun fold_non_greens f = fold_non_greens_lvl (K f) 0
 
-(* "A raw \<lambda>-term is ground if it is built without using type variables and contains no free
-term variables" *)
+(* "A raw \<lambda>-term is ground if it is built without using type variables and contains no free term
+variables" *)
 fun is_not_ground t =
   let
     fun is_not_ground_type T =
@@ -185,11 +185,7 @@ fun is_not_ground t =
 
 (* overapproximation of fluid terms *)
 fun might_be_fluid (t as (Abs _)) = is_not_ground t
-  | might_be_fluid (t as (_ $ _)) =
-      (case head_of t of
-        Free _ => true
-      | Var _ => true
-      | _ => false)
+  | might_be_fluid (Var _ $ _) = true
   | might_be_fluid _ = false
 
 (* Q\<^sub>\<approx> normalizes, i.e. applies the rewrite rules
