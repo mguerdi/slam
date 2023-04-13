@@ -35,16 +35,58 @@ setup \<open> term_pat_setup \<close>
 
 setup \<open> type_pat_setup \<close>
 
-
-ML_file jeha.ML
-
 ML \<open>
+  fun verbose_of ctxt = config_put_many_bool ctxt
+    [show_types, show_brackets, show_markup, (* show_sorts, *) show_structs]
+  and config_put_many_bool ctxt options =
+    List.foldr (fn (option, ctxt) => Config.put option true ctxt) ctxt options
   fun pretty_term ctxt t = Syntax.pretty_term ctxt t |> Pretty.string_of
   fun pretty_terms ctxt terms =
     terms
     |> map (Syntax.pretty_term ctxt)
     |> Pretty.commas |> Pretty.block |> Pretty.string_of
+  fun pretty_type ctxt typ = Pretty.string_of (Syntax.pretty_typ ctxt typ)
 \<close>
+
+ML \<open>
+  local
+    fun pp_pair (x, y) = Pretty.list "(" ")" [x, y]
+    fun pp_triple (x, y, z) = Pretty.list "(" ")" [x, y, z]
+    fun pp_list xs = Pretty.list "[" "]" xs
+    fun pp_str s = Pretty.str s
+    fun pp_qstr s = Pretty.quote (pp_str s)
+    fun pp_int i = pp_str (string_of_int i)
+    fun pp_sort S = pp_list (map pp_qstr S)
+    fun pp_constr a args = Pretty.block [pp_str a, Pretty.brk 1, args]
+  in
+  fun raw_pp_typ (TVar ((a, i), S)) = pp_constr "TVar" (pp_pair (pp_pair (pp_qstr a, pp_int i), pp_sort S))
+  | raw_pp_typ (TFree (a, S)) = pp_constr "TFree" (pp_pair (pp_qstr a, pp_sort S))
+  | raw_pp_typ (Type (a, tys)) =  pp_constr "Type" (pp_pair (pp_qstr a, pp_list (map raw_pp_typ tys)))
+  fun raw_pp_term  (Const (c, T)) = pp_constr "Const" (pp_pair (pp_qstr c, raw_pp_typ T))
+    | raw_pp_term (Free (x, T)) = pp_constr "Free" (pp_pair (pp_qstr x, raw_pp_typ T))
+    | raw_pp_term (Var ((x, i), T)) = pp_constr "Var" (pp_pair (pp_pair (pp_qstr x, pp_int i), raw_pp_typ T))
+    | raw_pp_term (Bound i) = pp_constr "Bound" (pp_int i)
+    | raw_pp_term (Abs(x, T, t)) = pp_constr "Abs" (pp_triple (pp_qstr x, raw_pp_typ T, raw_pp_term t))
+    | raw_pp_term (s $ t) = pp_constr "$" (pp_pair (raw_pp_term s, raw_pp_term t))
+  end;
+  ML_system_pp (fn _ => fn _ => Pretty.to_polyml o raw_pp_typ);
+  ML_system_pp (fn _ => fn _ => Pretty.to_polyml o raw_pp_term);
+  val some_typ = @{typ "'a \<Rightarrow> 'b"}
+  val _ = writeln (pretty_type @{context} some_typ)
+  val list_typ = @{typ "'a list"}
+  val _ = writeln (pretty_type @{context} some_typ)
+  val bool_typ = @{typ "bool"}
+  val int_typ = @{typ "int"}
+  val _ = writeln (pretty_type @{context} (Type ("Int.int", [])));
+  (* reset to default pretty printer *)
+  ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_typ Theory.get_pure);
+  ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_term Theory.get_pure);
+\<close>
+
+
+ML_file \<open>jeha_common.ML\<close>
+ML_file \<open>jeha.ML\<close>
+ML_file \<open>jeha_tactic.ML\<close>
 
 ML \<open>
   @{term_pat ?x}
@@ -74,4 +116,64 @@ ML \<open>
   map (writeln o pretty_normed_unnormed @{context}) rewrite_tests;
   writeln "Making Higher-Order Superposition work, Example 5:";
   writeln (pretty_green_nongreen_subterms @{context} @{term_pat "?F a \<and> p (\<forall> x . q x) b"});
+  writeln (pretty_term @{context} (HOLogic.mk_not (HOLogic.mk_eq (@{term "a::'a"}, @{term "b::'a"}))));
 \<close>
+
+(* sup tests *)
+ML \<open>
+  (* part of Example 25 from o\<lambda>Sup paper (WORKS) *)
+  val (a, b, w) = (@{term "a::'a"}, @{term "b::'a"}, @{term_pat "?w::'a \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> 'a"});
+  val cs = Jeha.infer_sup @{context} ([(w $ a $ b $ b, w $ b $ a $ b, true)], (Jeha.Left, 0)) ([(a, b, false)], ([], Jeha.Right, 0));
+  writeln (pretty_terms @{context} (map Jeha.term_of_clause cs));
+  (* part of Example 27 from the o\<lambda>Sup paper (WORKS) *)
+  val (a, b, h, g) = (@{term "a::'a"}, @{term "b::'a"}, @{term "h::'b \<Rightarrow> 'c"}, @{term "g::bool \<Rightarrow> 'c"})
+  val (x2, x3) = (@{term_pat "?x2 :: 'a \<Rightarrow> 'd"}, @{term_pat "?x3 :: 'a \<Rightarrow> 'd"});
+  (* val d = [((h $ (g $ (HOLogic.mk_eq (x2 $ a, x3 $ a)))), h $ (g $ @{term True}), false), (@{term False}, @{term True}, true), (x2 $ b, x3 $ b, true)];
+  val d_term = Jeha.term_of_clause d; *)
+  val d = Jeha.clause_of @{term_pat "h(g(?x2 a = ?x3 a)) \<noteq> h(g(True)) \<or> False = True \<or> ?x2 b = ?x3 b"};
+  (* writeln ("D_anti: " ^ pretty_term @{context} d_anti);
+  writeln ("D_anti_clause: " ^ pretty_term @{context} (Jeha.term_of_clause (Jeha.clause_of d_anti))); *)
+  writeln ("D: " ^ pretty_term @{context} (Jeha.term_of_clause d));
+  val c = [(a, b, false)];
+  writeln ("C: " ^ pretty_term @{context} (Jeha.term_of_clause c));
+  val cs = Jeha.infer_sup @{context} (d, (Jeha.Left, 2)) (c, ([], Jeha.Right, 0));
+  val cs_terms = map Jeha.term_of_clause cs;
+  writeln (pretty_terms (verbose_of @{context}) (map Jeha.term_of_clause cs));
+\<close>
+
+declare [[jeha_trace = true]]
+
+(* lemma
+  shows "x \<Longrightarrow> x"
+  by jeha
+end *)
+
+lemma test:
+  shows "\<forall>x y z. (x = y) \<longrightarrow> (y = z) \<longrightarrow> (x = z)"
+  by auto
+
+ML \<open>
+  (* val eq_trans = Thm.prop_of @{thm test}
+  val (axioms, conjecture) = Logic.strip_prems (2, [], eq_trans)
+  val clauses = HOLogic.mk_not (Object_Logic.atomize_term @{context} conjecture) :: map (Object_Logic.atomize_term @{context}) axioms *)
+  val clauses = map Jeha.clause_of [@{term "x = y"}, @{term "y = z"}, @{term "x \<noteq> z"}]
+  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha.term_of_clause clauses))
+  val result = Jeha.given_clause_loop @{context} 12 (Jeha.passive_set_of_list clauses) []
+\<close>
+
+(*
+notepad
+begin
+
+  fix a::'a
+  fix b::'a
+  fix g::"bool \<Rightarrow> 'b"
+  fix h::"'b \<Rightarrow> 'c"
+
+  (* term "h(g(x'' a = x''' a)) \<noteq> h(g(True)) \<or> False = True \<or> x'' b = x''' b" *)
+
+  let ?t = "h(g(x'' a = x''' a)) \<noteq> h(g(True)) \<or> False = True \<or> x'' b = x''' b"
+
+  term ?t
+end
+*)

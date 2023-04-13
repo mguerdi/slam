@@ -13,15 +13,17 @@ sig
   (* basics *)
   type literal = term * term * bool
   type clause = literal list
-  type clauses = clause list
   datatype lpos = Left | Right
   type cpos = int
   val lit_of : term -> literal
+  val map_lit : (term -> term) -> literal -> literal
   val clause_of : term -> clause
+  val term_of_clause : clause -> term
   val is_quantifier : term -> bool
   val quantified_typ : term -> typ
   type tpos = int list
   type full_pos = tpos * lpos * cpos
+  val green_full_poss_of : clause -> full_pos list
   val tposs_of : term -> tpos list
   val green_tposs_of : term -> tpos list
   val subterm_at_tpos : term -> tpos -> term
@@ -36,9 +38,17 @@ sig
   val outer_clausify : bool -> term -> clause -> clause list
   val simp_bool_outer_claus : clause -> cpos -> clause list
   val infer_eq_neq_outer_claus : clause -> cpos -> clause list
-  val infer_sup : Context.generic -> clause -> cpos -> clause -> full_pos -> clause list
+  val infer_sup : Proof.context -> (clause * (lpos * cpos)) -> (clause * full_pos) -> clause list
+  val infer_eres : Proof.context -> (clause * cpos) -> clause list
+  val simplify : Proof.context -> clause list -> clause -> clause list
+  val infer_clauses : Proof.context -> clause list -> clause -> clause list
   (* *)
-  val given_clause_loop : clauses -> clauses -> (clauses * clauses) option
+  structure Passive_Set : HEAP
+  val passive_set_of_list : clause list -> Passive_Set.T
+  type loopstate
+  val given_clause_loop : Proof.context -> int -> Passive_Set.T -> clause list -> string
+  val given_clause_step : Proof.context -> int -> Passive_Set.T -> clause list -> loopstate
+  val refutable : Proof.context -> thm list -> thm -> bool
 end
 
 structure Jeha : JEHA =
@@ -48,14 +58,19 @@ struct
 type literal = term * term * bool;
 (* disjunction of literals *)
 type clause = literal list;
-(* conjunction of clauses *)
-type clauses = clause list
 (* left or right side of an equational literal *)
 datatype lpos = Left | Right;
 (* position of literal in a clause *)
 type cpos = int;
 
+(* cartesian_product : 'a list -> 'b list -> ('a * 'b) list *)
+fun cartesian_product [] _ = []
+  | cartesian_product (x :: xs) ys = map (pair x) ys @ cartesian_product xs ys
+
 fun swap_lit (s, t, b) = (t, s, b)
+
+fun swap_lpos Left = Right
+  | swap_lpos Right = Left
 
 fun map_lit f (s, t, b) = (f s, f t, b)
 
@@ -84,6 +99,16 @@ fun clause_of t =
     then error "can only turn boolean terms into clauses"
     else HOLogic.disjuncts t |> map lit_of
 
+fun term_of_lit (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
+
+fun term_of_clause [] = @{term False}
+  | term_of_clause (c as (_ :: _)) =
+      let
+        val (x :: xs) = rev c
+      in
+        fold (curry HOLogic.mk_disj) (map term_of_lit xs) (term_of_lit x)
+      end
+
 fun is_quantifier (Const (@{const_name HOL.All}, _)) = true
   | is_quantifier (Const (@{const_name HOL.Ex}, _)) = true
   | is_quantifier _ = false
@@ -102,7 +127,11 @@ fun quantified_typ (t as Const (_, T_to_bool_to_bool)) =
 type tpos = int list;
 type full_pos = tpos * lpos * cpos
 
-fun tposs_of (Abs(_,_,u)) = []::map (cons 0) (tposs_of u)
+fun cposs_of clause = 0 upto (length clause - 1)
+
+fun lposs_of _ = [Left, Right]
+
+fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
   | tposs_of (t as (_$_)) =
     let
       val tposs_of_head_and_args : tpos list list = map tposs_of (uncurry cons (strip_comb t))
@@ -111,7 +140,7 @@ fun tposs_of (Abs(_,_,u)) = []::map (cons 0) (tposs_of u)
         map_index (fn (idx, tposs_of_subterm) => map (cons idx) tposs_of_subterm)
           tposs_of_head_and_args
     in
-      []::flat tposs_of_comb
+      [] :: flat tposs_of_comb
     end
   | tposs_of _ = [[]]
 
@@ -133,18 +162,18 @@ fun green_tposs_of (t as (_$_)) =
                 tposs_of_head_and_args
           in
             (* drop the heads (sub)positions *)
-            []::flat (drop 1 tposs_of_comb)
+            [] :: flat (drop 1 tposs_of_comb)
           end
       else [[]]
   | green_tposs_of _ = [[]] (* [\<epsilon>] *)
 
 (* t|\<^sub>p *)
 fun subterm_at_tpos t [] = t
-  | subterm_at_tpos (Abs(_,_,u)) (0::p) = subterm_at_tpos u p
+  | subterm_at_tpos (Abs(_,_,u)) (0 :: p) = subterm_at_tpos u p
   (* FIXME: when you forget to bind the t (via as) there is no warning and when
   you call the function from somewhere else, where a t has been declared it uses
   that. Scoping broken?? *)
-  | subterm_at_tpos (t as (_$_)) (i::p) = subterm_at_tpos (nth (uncurry cons (strip_comb t)) i) p
+  | subterm_at_tpos (t as (_$_)) (i :: p) = subterm_at_tpos (nth (uncurry cons (strip_comb t)) i) p
   | subterm_at_tpos _ _ = error ""
 
 fun term_at_lpos (l, _, _) Left = l
@@ -152,12 +181,17 @@ fun term_at_lpos (l, _, _) Left = l
 
 fun subterm_at_full_pos c (tp, lp, cp) = subterm_at_tpos (term_at_lpos (nth c cp) lp) tp
 
+fun green_full_poss_of c =
+  cposs_of c
+  |> maps (fn cp => [Left, Right] |> map (fn lp => (subterm_at_full_pos c ([], lp, cp), lp, cp)))
+  |> maps (fn (t, lp, cp) => map (fn tp => (tp, lp, cp)) (green_tposs_of t))
+
 fun head_tail_pair [] = error ""
-  | head_tail_pair (x::xs) = (x, xs)
+  | head_tail_pair (x :: xs) = (x, xs)
 
 fun map_at_tpos [] f t = f t
-  | map_at_tpos (0::p) f (Abs(x,T,u)) = Abs(x,T,map_at_tpos p f u)
-  | map_at_tpos (i::p) f (t as (_$_)) =
+  | map_at_tpos (0 :: p) f (Abs(x,T,u)) = Abs(x,T,map_at_tpos p f u)
+  | map_at_tpos (i :: p) f (t as (_$_)) =
       t |> strip_comb |> uncurry cons |> nth_map i (map_at_tpos p f) |> head_tail_pair |> list_comb
   | map_at_tpos _ _ _ = error ""
 
@@ -177,7 +211,7 @@ fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (ac
       in
         if not (can_have_green_args head)
           (* the whole combination is still green, but it's head and all of the arguments aren't *)
-          then fold (f lvl) (head::args) acc
+          then fold (f lvl) (head :: args) acc
           (* all of the arguments are green (recurse) but the head isn't (pass to f) *)
           else fold (fold_non_greens_lvl f lvl) args acc |> f lvl head
       end
@@ -233,7 +267,7 @@ fun occurs_deeply_in_term x (t as (_ $ _)) =
     | _ =>
         if is_quantifier head andalso is_Abs (the_single args)
           then let val Abs(_,_,v) = the_single args in occurs_deeply_in_term x v end
-          else exists (occurs_deeply_in_term x) (head::args)
+          else exists (occurs_deeply_in_term x) (head :: args)
   end
   (* we know this abstraction will not be directly below a quantifier *)
   | occurs_deeply_in_term x (Abs(_,_,v)) = occurs_in_term x v
@@ -342,16 +376,16 @@ represents \<longleftrightarrow> as HOL.eq) *)
 fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
-      then [mk_lit_eq_bool s b::mk_lit_eq_bool t b::c]
-      else [mk_lit_eq_bool s b::c, mk_lit_eq_bool t b::c]
+      then [mk_lit_eq_bool s b :: mk_lit_eq_bool t b :: c]
+      else [mk_lit_eq_bool s b :: c, mk_lit_eq_bool t b :: c]
   | outer_clausify b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
-      then [mk_lit_eq_bool s b::c, mk_lit_eq_bool t b::c]
-      else [mk_lit_eq_bool s b::mk_lit_eq_bool t b::c]
+      then [mk_lit_eq_bool s b :: c, mk_lit_eq_bool t b :: c]
+      else [mk_lit_eq_bool s b :: mk_lit_eq_bool t b :: c]
   | outer_clausify b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in mk_lit_eq_bool *)
       outer_clausify b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
-  | outer_clausify b s c = [mk_lit_eq_bool s b::c]
+  | outer_clausify b s c = [mk_lit_eq_bool s b :: c]
 
 (*** Rules ***)
 (* rule implementation checklist:
@@ -390,7 +424,7 @@ fun simp_bool_outer_claus c i =
     outer_clausify b s c'
   end
 
-fun find_simp_bool_outer_clause c = error "unimplemented"
+fun find_simp_bool_outer_clause c = error "find_simp_bool_outer_clause unimplemented"
 
 (* EqOuterClaus and NeqOuterClaus inferences *)
 fun infer_eq_neq_outer_claus c i =
@@ -401,12 +435,12 @@ fun infer_eq_neq_outer_claus c i =
       then error "not boolean equation"
     else if b
       then (* EqOuterClaus *)
-        [ mk_lit_eq_bool s false::mk_lit_eq_bool t true::c
-        , mk_lit_eq_bool s true::mk_lit_eq_bool t false::c
+        [ mk_lit_eq_bool s false :: mk_lit_eq_bool t true :: c
+        , mk_lit_eq_bool s true :: mk_lit_eq_bool t false :: c
         ]
       else (* NeqOuterClaus *)
-        [ mk_lit_eq_bool s false::mk_lit_eq_bool t false::c
-        , mk_lit_eq_bool s true::mk_lit_eq_bool t true::c
+        [ mk_lit_eq_bool s false :: mk_lit_eq_bool t false :: c
+        , mk_lit_eq_bool s true :: mk_lit_eq_bool t true :: c
         ]
   end
 
@@ -420,20 +454,26 @@ fun prefix_Vars_TVars prefix =
   end
 
 (* Sup inference *)
-fun infer_sup (ctxt : Context.generic) (d : clause) (i : cpos) (c : clause) (j : full_pos) =
+fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
   let
-    (* FIXME: better renaming strategy: collect Vars from one term in a Vars structure (term_item.ML),
-    traverse the other creating an environment mapping names already used to fresh names
+    (* FIXME: better renaming strategy: collect Vars from one term in a Vars structure
+    (term_item.ML), traverse the other creating an environment mapping names already used to fresh
+    names
     ALSO: Only make t and u (and compose environments afterwards? Envir.merge?)
     OR: try to use Envir.empty max_idx (augment clauses with max_idx?) and Envir.genvar
+    SEE: COMP_INCR maybe?
     NOTE: how to handle TVars? *)
     val d = map (map_lit (prefix_Vars_TVars "L")) d
     val c = map (map_lit (prefix_Vars_TVars "R")) c
     (* FIXME: pick the correct one (t or t') *)
-    val (t, t', true) = nth d i
+    val (_, _, is_pos_eq) = nth d cp
+    val t = subterm_at_full_pos d ([], lp, cp)
+    val t' = subterm_at_full_pos d ([], swap_lpos lp, cp)
     val u = subterm_at_full_pos c j
   in
-    if might_be_fluid u
+    if not is_pos_eq
+      then []
+    else if might_be_fluid u
       then error "u might be fluid"
     else if is_Var u andalso occurs_deeply u c
       then error "u occurs deeply in c"
@@ -441,14 +481,15 @@ fun infer_sup (ctxt : Context.generic) (d : clause) (i : cpos) (c : clause) (j :
       (* FIXME: Is smash_unifiers the one we want? How lossy is this? *)
       (* FIXME: Later, try to keep around flex-flex pairs for a while? *)
       let
-        val unifiers = Unify.smash_unifiers ctxt [(t, u)] Envir.init
+        val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] Envir.init
         (* FIXME: print warning message when discarding unifiers *)
         val (unifiers, _) = Seq.chop 4 unifiers
         fun build_conclusion unifier =
           let
-            val d' = nth_drop i d
+            val d' = nth_drop cp d
             val ct' = map_at_full_pos j (K t') c
           in
+            writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier));
             map (map_lit (norm_beta_eta_qeta_env unifier)) (d' @ ct')
           end
       in
@@ -456,67 +497,138 @@ fun infer_sup (ctxt : Context.generic) (d : clause) (i : cpos) (c : clause) (j :
       end
   end
 
-
-
-
-(* \<not> (s \<approx> \<top>) = s \<approx> \<bottom> *)
-
-(*
-(a \<and> b) \<or> c = [a \<or> c, b \<or> c]
-(a \<rightarrow> b) \<or> c = \<not>a \<or> b \<or> c
-*)
-
-
-fun select_given_clause cs = nth cs 0
-
-fun simplify active given_clause =
+(* ERes inference *)
+fun infer_eres (ctxt : Proof.context) ((c, cp) : (clause * cpos)) =
   let
+    val (u, u', is_pos_eq) = nth c cp
+    val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] Envir.init
+    (* FIXME: print warning message when discarding unifiers *)
+    val (unifiers, _) = Seq.chop 4 unifiers
+    fun build_conclusion unifier =
+      let
+        val c' = nth_drop cp c
+      in
+        writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier));
+        map (map_lit (norm_beta_eta_qeta_env unifier)) c'
+      end
+  in
+    if is_pos_eq
+      then []
+      else map build_conclusion unifiers
+  end
+
+(* Passive_Set *)
+
+fun size_of_clause clause =
+  fold (fn (l, r, _) => fn acc => acc + size_of_term l + size_of_term r) clause 0
+
+val size_ord = make_ord (fn (c, d) => size_of_clause c <= size_of_clause d)
+
+structure Passive_Set = Heap(type elem = clause val ord = size_ord)
+
+fun list_of_passive_set passive =
+  if Passive_Set.is_empty passive
+    then []
+    else Passive_Set.min_elem passive ||> list_of_passive_set |> uncurry cons
+
+fun passive_set_of_list clauses = fold Passive_Set.insert clauses Passive_Set.empty
+
+fun add_new_clauses passive clauses = fold Passive_Set.insert clauses passive
+
+fun select_given_clause cs = Passive_Set.min_elem cs
+
+(* FIXME: do simplification *)
+(* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
+fun simplify ctxt active given_clause =
+  if exists (curry (op =) given_clause) active then [] else [given_clause]
+  (* let
     val idxs = find_simp_bool_outer_clause given_clause
     val outer_clausified = flat (map (simp_bool_outer_claus given_clause) idxs)
   in
     outer_clausified
-  end
+  end *)
 
-fun infer_clauses active given_clause =
-  error "unimplemented"
+fun infer_clauses ctxt active given_clause =
+  let
+    (* the equality literals that are being eliminated *)
+    val eqs_given : (clause * (lpos * cpos)) list =
+      map (pair given_clause) (cartesian_product [Left, Right] (cposs_of given_clause))
+    val eqs_active : (clause * (lpos * cpos)) list =
+      maps (fn c => map (pair c) (cartesian_product [Left, Right] (cposs_of c))) active
+    (* what we're superposing into *)
+    val targets_given : (clause * full_pos) list =
+      map (pair given_clause) (green_full_poss_of given_clause)
+    val targets_active : (clause * full_pos) list =
+      maps (fn c => map (pair c) (green_full_poss_of c)) active
+    val eq_target_pairs =
+      cartesian_product eqs_given targets_active @ cartesian_product eqs_active targets_given
+  in
+    maps (uncurry (infer_sup ctxt)) eq_target_pairs
+    (* ERes has already been performed for the active clauses *)
+    @ maps (infer_eres ctxt) (map (pair given_clause) (0 upto (length given_clause - 1)))
+  end
 
 (* Question: Are clauses and literals multisets? *)
 
-fun given_clause_loop passive active =
+datatype loopstate = Timeout | Unsat | Next of Passive_Set.T * clause list
+
+fun given_clause_step ctxt countdown passive active =
+  if countdown <= 0 then Timeout else
   let
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
     inferences are possible and empty clause has not been derived). Later: no non-redundant
     inferences *)
-    val given_clause = select_given_clause passive
-  in
+    val (given_clause, passive) = select_given_clause passive
+    (* tracing *)
+    fun trace_msg_clauses msg clauses =
+      Jeha_Common.trace_msg ctxt
+        (fn () => msg ^ Jeha_Common.pretty_terms ctxt (map term_of_clause clauses))
+    val _ = trace_msg_clauses "passive: " (list_of_passive_set passive)
+    val _ = trace_msg_clauses "active: " active
+    val _ = trace_msg_clauses "given_clause " [given_clause]
     (* simplify given_clause with active set *)
-    let
-      val (given_clause, simplifications) =
-        case simplify active given_clause of
-          (* no simplifications possible *)
-          [] => (given_clause, [])
-          (* select first simplification as given_clause *)
-        | c::cs => (c, cs)
-    in
+  in
+    case simplify ctxt active given_clause of
+      (* given_clause redundant w.r.t. active set *)
+      [] => Next (passive, active)
+      (* select first simplification as given_clause *)
+    | given_clause :: simplifications => 
       (* if given_clause simplifies to (or is) [] then UNSAT *)
-      if exists (curry (op =) []) (given_clause::simplifications)
-        then NONE
+      if exists (curry (op =) []) (given_clause :: simplifications)
+        then Unsat
         else
           let
             (* following zipperposition (src/prover/saturate.ml) add all simplifications except one
             (the current given_clause) to the passive set *)
-            val passive = simplifications @ passive
+            val passive = add_new_clauses passive simplifications
             (* perform all possible inferences between given_clause and active set *)
-            val new_clauses = infer_clauses active given_clause
+            val new_clauses = infer_clauses ctxt active given_clause
             (* add inferred clauses to passive set *)
-            val passive = passive @ new_clauses
+            val passive = add_new_clauses passive new_clauses
           in
-          (* add given_clause to active and continue *)
-          given_clause_loop (passive @ new_clauses) active
+            (* add given_clause to active and continue *)
+            Next (passive, (given_clause :: active))
           end
-    end
   end
 
+fun given_clause_loop ctxt countdown passive active =
+  case given_clause_step ctxt countdown passive active of
+    Timeout => "TIMEOUT"
+  | Unsat => "UNSAT"
+  | Next (passive, active) => given_clause_loop ctxt (countdown - 1) passive active
+
+fun refutable ctxt axioms conjecture =
+  let
+    val _ = Jeha_Common.trace_msg ctxt
+      (fn () => "conjecture: " ^ Jeha_Common.pretty_term ctxt (Thm.prop_of conjecture))
+    val axioms = map (Object_Logic.atomize_term ctxt o Thm.prop_of) axioms
+    val neg_conjecture = HOLogic.mk_not (Object_Logic.atomize_term ctxt (Thm.prop_of conjecture))
+    val clauses = map clause_of (neg_conjecture :: axioms)
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map term_of_clause clauses))
+    val result = given_clause_loop ctxt 20 (passive_set_of_list clauses) []
+  in
+    if result = "UNSAT" then true else false
+  end
 
 (*
 Question:
