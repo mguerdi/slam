@@ -262,8 +262,7 @@ fun is_not_ground t =
 applications are not considered fluid (as in \<lambda>Sup and zipperposition) *)
 fun might_be_fluid (t as (Abs _)) = is_not_ground t
   (* need to check if head of application is a variable *)
-  | might_be_fluid (s $ t) = might_be_fluid s
-  | might_be_fluid (Var _ $ _) = true
+  | might_be_fluid (t as (_ $ _)) = (case strip_comb t of (Var _, _) => true | _ => false)
   | might_be_fluid _ = false
 
 fun occurs_in_term x = exists_subterm (curry (op =) x)
