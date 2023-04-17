@@ -87,6 +87,7 @@ ML \<open>
 ML_file \<open>jeha_common.ML\<close>
 ML_file \<open>jeha.ML\<close>
 ML_file \<open>jeha_tactic.ML\<close>
+ML_file \<open>jeha_order.ML\<close>
 
 ML \<open>
   @{term_pat ?x}
@@ -143,14 +144,31 @@ ML \<open>
 
 declare [[jeha_trace = true]]
 
+ML \<open>
+  fun pretty_thm_no_vars ctxt thm =
+    let
+      val ctxt' = Config.put show_question_marks false ctxt
+    in
+      pretty_term ctxt' (Thm.prop_of thm)
+    end
+
+  fun my_print_tac ctxt thm =
+    let
+      val _ = writeln "tracing"
+      val _ = tracing (pretty_thm_no_vars ctxt thm)
+    in
+      Seq.single thm
+    end
+\<close>
+
 (* lemma
   shows "x \<Longrightarrow> x"
-  by jeha
-end *)
+apply(tactic \<open>my_print_tac @{context}\<close>)
+apply(tactic \<open>assume_tac @{context} 0\<close>) *)
 
-lemma test:
-  shows "\<forall>x y z. (x = y) \<longrightarrow> (y = z) \<longrightarrow> (x = z)"
-  by auto
+(* lemma test:
+  shows "(x = y) \<longrightarrow> (y = z) \<longrightarrow> (x = z)"
+  apply(tactic \<open>my_print_tac @{context}\<close>) *)
 
 ML \<open>
   (* val eq_trans = Thm.prop_of @{thm test}
@@ -159,6 +177,10 @@ ML \<open>
   val clauses = map Jeha.clause_of [@{term "x = y"}, @{term "y = z"}, @{term "x \<noteq> z"}]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha.term_of_clause clauses))
   val result = Jeha.given_clause_loop @{context} 12 (Jeha.passive_set_of_list clauses) []
+\<close>
+
+ML \<open>
+  (* Jeha_Order.kbo false (@{term "x"}, @{term "x"}) *)
 \<close>
 
 (*
