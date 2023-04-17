@@ -21,6 +21,8 @@ sig
   val term_of_clause : clause -> term
   val is_quantifier : term -> bool
   val quantified_typ : term -> typ
+  val strip_comb_fun_types_args : term -> term * typ list * term list
+  val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
   type tpos = int list
   type full_pos = tpos * lpos * cpos
   val green_full_poss_of : clause -> full_pos list
@@ -31,6 +33,7 @@ sig
   (* preprocessing *)
   val fold_non_greens_lvl : (int -> term -> 'a -> 'a) -> int -> term -> 'a -> 'a
   val fold_non_greens : (term -> 'a -> 'a) -> term -> 'a -> 'a
+  val might_be_fluid : term -> bool
   val norm_quantifier_poly_eq : term -> term
   (* normalization *)
   val norm_beta_eta_qeta : term -> term
@@ -122,6 +125,20 @@ fun quantified_typ (t as Const (_, T_to_bool_to_bool)) =
     then domain_type (domain_type (T_to_bool_to_bool))
     else error "not a quantifier"
   | quantified_typ _ = error ""
+
+fun strip_comb_fun_types_args1 (boundTs, t) =
+  let
+    val (f, ts) = strip_comb t
+    (* FIXME: Can we assume the output of fastype_of1 to be `[...] ---> ...` or can there be issues with
+    type aliases etc.? *)
+    val types = fastype_of1 (boundTs, f) |> binder_types |> take (length ts)
+  in
+    (f, types, ts)
+  end
+
+(* Translates Isabelle/HOL application (f $ u\<^sub>1) $ u\<^sub>2) \<dots> to o\<lambda>Sup application f \<open>\<tau>\<^sub>1, \<tau>\<^sub>2\<close> u\<^sub>1 u\<^sub>2 \<dots> with
+explicit type args. *)
+fun strip_comb_fun_types_args t = strip_comb_fun_types_args1 ([], t)
 
 (* Term position, mostly for documentation / testing purposes. See long comment at bottom. *)
 type tpos = int list;
@@ -241,8 +258,12 @@ fun is_not_ground t =
       false
   end
 
+(* FIXME: are Bound-headed applications fluid? See comment in o\<lambda>Sup Definition 24. Even if so, they
+are not fluid in KBO because db symbols are part of FO signature. *)
 (* overapproximation of fluid terms *)
 fun might_be_fluid (t as (Abs _)) = is_not_ground t
+  (* need to check if head of application is a variable *)
+  | might_be_fluid (s $ t) = might_be_fluid s
   | might_be_fluid (Var _ $ _) = true
   | might_be_fluid _ = false
 
@@ -524,6 +545,7 @@ fun size_of_clause clause =
 
 val size_ord = make_ord (fn (c, d) => size_of_clause c <= size_of_clause d)
 
+(* FIXME: Heap recomputes size (maybe `type elem = int * clause`?) *)
 structure Passive_Set = Heap(type elem = clause val ord = size_ord)
 
 fun list_of_passive_set passive =
