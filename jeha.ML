@@ -258,9 +258,8 @@ fun is_not_ground t =
       false
   end
 
-(* FIXME: are Bound-headed applications fluid? See comment in o\<lambda>Sup Definition 24. Even if so, they
-are not fluid in KBO because db symbols are part of FO signature. *)
-(* overapproximation of fluid terms *)
+(* Overapproximation of fluid terms. Though not explicitely stated in the o\<lambda>Sup paper, Bound-headed
+applications are not considered fluid (as in \<lambda>Sup and zipperposition) *)
 fun might_be_fluid (t as (Abs _)) = is_not_ground t
   (* need to check if head of application is a variable *)
   | might_be_fluid (s $ t) = might_be_fluid s
