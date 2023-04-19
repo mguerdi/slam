@@ -83,29 +83,32 @@ ML \<open>
   ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_term Theory.get_pure);
 \<close>
 
+declare [[ML_debugger = true]]
+declare [[ML_exception_trace = true]]
+declare [[ML_exception_debugger = true]]
 
-ML_file \<open>jeha_common.ML\<close>
-ML_file \<open>jeha.ML\<close>
-ML_file \<open>jeha_tactic.ML\<close>
-ML_file \<open>jeha_order.ML\<close>
+ML_file_debug \<open>jeha_common.ML\<close>
+ML_file_debug \<open>jeha_lang.ML\<close>
+ML_file_debug \<open>jeha_order.ML\<close>
+ML_file_debug \<open>jeha.ML\<close>
+ML_file_debug \<open>jeha_tactic.ML\<close>
 
 ML \<open>
-  @{term_pat ?x}
 \<close>
 
 ML \<open>
   fun pretty_green_nongreen_subterms ctxt term =
     let
-      val tposs = Jeha.green_tposs_of term;
-      val green_subterms = map (Jeha.subterm_at_tpos term) tposs;
-      val non_green_subterms = Jeha.fold_non_greens cons term [];
+      val tposs = Jeha_Lang.green_tposs_of term;
+      val green_subterms = map (Jeha_Lang.subterm_at_tpos term) tposs;
+      val non_green_subterms = Jeha_Lang.fold_non_greens cons term [];
     in
       "term:\t\t" ^ pretty_term ctxt term ^ "\ngreens:\t\t" ^ pretty_terms ctxt green_subterms ^
       "\nnongreens:\t" ^ pretty_terms @{context} non_green_subterms
     end;
   writeln (pretty_green_nongreen_subterms @{context} @{term_pat "f (g (\<not> p)) (\<forall> x . q) (?y a) (\<lambda> x . h b)"});
   fun pretty_normed_unnormed ctxt term =
-    let val normed = Jeha.norm_quantifier_poly_eq term in
+    let val normed = Jeha_Lang.norm_quantifier_poly_eq term in
     "Q\<^sub>\<approx>: " ^ pretty_term ctxt term ^ "  \<mapsto>  " ^ pretty_term ctxt normed end;
   val no_rewrite_tests = [@{term "\<lambda> y . \<exists> x . g x y (z y) (f x)"}];
   val rewrite_tests = [@{term "\<exists> x . x a"}, Const (@{const_name "HOL.Ex"}, @{typ "('a \<Rightarrow> bool) \<Rightarrow> bool"}), @{term "\<forall> x . f (\<lambda> y . x)"}];
@@ -124,22 +127,22 @@ ML \<open>
 ML \<open>
   (* part of Example 25 from o\<lambda>Sup paper (WORKS) *)
   val (a, b, w) = (@{term "a::'a"}, @{term "b::'a"}, @{term_pat "?w::'a \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> 'a"});
-  val cs = Jeha.infer_sup @{context} ([(w $ a $ b $ b, w $ b $ a $ b, true)], (Jeha.Left, 0)) ([(a, b, false)], ([], Jeha.Right, 0));
-  writeln (pretty_terms @{context} (map Jeha.term_of_clause cs));
+  val cs = Jeha.infer_sup @{context} ([(w $ a $ b $ b, w $ b $ a $ b, true)], (Jeha_Lang.Left, 0)) ([(a, b, false)], ([], Jeha_Lang.Right, 0));
+  writeln (pretty_terms @{context} (map Jeha_Lang.term_of_clause cs));
   (* part of Example 27 from the o\<lambda>Sup paper (WORKS) *)
   val (a, b, h, g) = (@{term "a::'a"}, @{term "b::'a"}, @{term "h::'b \<Rightarrow> 'c"}, @{term "g::bool \<Rightarrow> 'c"})
   val (x2, x3) = (@{term_pat "?x2 :: 'a \<Rightarrow> 'd"}, @{term_pat "?x3 :: 'a \<Rightarrow> 'd"});
   (* val d = [((h $ (g $ (HOLogic.mk_eq (x2 $ a, x3 $ a)))), h $ (g $ @{term True}), false), (@{term False}, @{term True}, true), (x2 $ b, x3 $ b, true)];
   val d_term = Jeha.term_of_clause d; *)
-  val d = Jeha.clause_of @{term_pat "h(g(?x2 a = ?x3 a)) \<noteq> h(g(True)) \<or> False = True \<or> ?x2 b = ?x3 b"};
+  val d = Jeha_Lang.clause_of @{term_pat "h(g(?x2 a = ?x3 a)) \<noteq> h(g(True)) \<or> False = True \<or> ?x2 b = ?x3 b"};
   (* writeln ("D_anti: " ^ pretty_term @{context} d_anti);
-  writeln ("D_anti_clause: " ^ pretty_term @{context} (Jeha.term_of_clause (Jeha.clause_of d_anti))); *)
-  writeln ("D: " ^ pretty_term @{context} (Jeha.term_of_clause d));
+  writeln ("D_anti_clause: " ^ pretty_term @{context} (Jeha_Lang.term_of_clause (Jeha_Lang.clause_of d_anti))); *)
+  writeln ("D: " ^ pretty_term @{context} (Jeha_Lang.term_of_clause d));
   val c = [(a, b, false)];
-  writeln ("C: " ^ pretty_term @{context} (Jeha.term_of_clause c));
-  val cs = Jeha.infer_sup @{context} (d, (Jeha.Left, 2)) (c, ([], Jeha.Right, 0));
-  val cs_terms = map Jeha.term_of_clause cs;
-  writeln (pretty_terms (verbose_of @{context}) (map Jeha.term_of_clause cs));
+  writeln ("C: " ^ pretty_term @{context} (Jeha_Lang.term_of_clause c));
+  val cs = Jeha.infer_sup @{context} (d, (Jeha_Lang.Left, 2)) (c, ([], Jeha_Lang.Right, 0));
+  val cs_terms = map Jeha_Lang.term_of_clause cs;
+  writeln (pretty_terms (verbose_of @{context}) (map Jeha_Lang.term_of_clause cs));
 \<close>
 
 declare [[jeha_trace = true]]
@@ -174,13 +177,18 @@ ML \<open>
   (* val eq_trans = Thm.prop_of @{thm test}
   val (axioms, conjecture) = Logic.strip_prems (2, [], eq_trans)
   val clauses = HOLogic.mk_not (Object_Logic.atomize_term @{context} conjecture) :: map (Object_Logic.atomize_term @{context}) axioms *)
-  val clauses = map Jeha.clause_of [@{term "x = y"}, @{term "y = z"}, @{term "x \<noteq> z"}]
-  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha.term_of_clause clauses))
+  val clauses = map Jeha_Lang.clause_of [@{term "x = y"}, @{term "y = z"}, @{term "x \<noteq> z"}]
+  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
+  val whatisthis = false andalso false orelse true
+  val andthiswhat = true orelse false andalso false
   val result = Jeha.given_clause_loop @{context} 12 (Jeha.passive_set_of_list clauses) []
 \<close>
 
 ML \<open>
-  (* Jeha_Order.kbo false (@{term "x"}, @{term "x"}) *)
+  val x_ord_x = Jeha_Order.kbo (@{term_pat "?x"}, @{term_pat "?x"})
+  val x_ord_y = Jeha_Order.kbo (@{term_pat "?x"}, @{term_pat "?y"})
+  val c_ord_c = Jeha_Order.kbo (@{term "x"}, @{term "x"})
+  val o4 = Jeha_Order.kbo (@{term "\<forall>x. P x"}, @{term "P True"})
 \<close>
 
 (*
