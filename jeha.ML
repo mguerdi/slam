@@ -99,8 +99,12 @@ fun contains_syntactic_complementaries [] = false
 
 fun is_trivial c = contains_syntactic_equation c orelse contains_syntactic_complementaries c
 
+fun is_redundant ctxt active c =
+  (* forward subsumption: does any active claus subsume c? *)
+  exists (fn ac => Jeha_Subsumption.subsumes ctxt (ac, c)) active
+
 (* Deletion of duplicated literals (DD) (Schulz) *)
-fun simp_delete_duplicated_lits c =
+fun simp_delete_duplicated_lits ctxt c =
   let
     fun impl_simp_delete_duplicated_lits [] = []
       | impl_simp_delete_duplicated_lits (l :: ls) = l :: filter (not o (curry aconv_lit l)) ls
@@ -108,19 +112,25 @@ fun simp_delete_duplicated_lits c =
   in
     if length c' = length c
       then NONE
-      else SOME c'
+      else
+        (Jeha_Common.trace_msg ctxt (fn () =>
+          "deleted duplicated literals in " ^ Jeha_Common.pretty_term ctxt (term_of_clause c));
+        SOME c')
   end
 
 (* Deletion of resolved literals (DR) (Schulz) *)
-fun simp_delete_resolved_lits c =
+fun simp_delete_resolved_lits ctxt c =
   let
     val impl_simp_delete_resolved_lits =
-      filter (fn (s, t, is_positive) => not is_positive andalso s aconv t)
+      filter (fn (s, t, is_positive) => not (not is_positive andalso s aconv t))
     val c' = impl_simp_delete_resolved_lits c
   in
     if length c' = length c
       then NONE
-      else SOME c'
+      else
+        (Jeha_Common.trace_msg ctxt (fn () =>
+          "deleted resolved literals in " ^ Jeha_Common.pretty_term ctxt (term_of_clause c));
+        SOME c')
   end
 
 fun is_pos_unit [(_, _, true)] = true
@@ -138,9 +148,14 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     val target_clause = map (map_lit (prefix_Vars_TVars "R")) target_clause
     val (from, to) = apply2 (term_at_lpos (the_single unit_clause)) (lp, swap_lpos lp) (* Schulz: (s, t) *)
     val target_term = subterm_at_full_pos target_clause j (* Schulz: u *)
+    (* FIXME: matching instead of unification if possible, solves the smashing problem. *)
     val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [(from, target_term)] Envir.init
     fun build_conclusion unifier =
       let
+        val msg =  "   rewriting " ^ Jeha_Common.pretty_term ctxt target_term
+          ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
+          ^ " with " ^ Jeha_Common.pretty_term ctxt from
+          ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
         val (from, to) = apply2 (norm_beta_eta_env unifier) (from, to)
       in
         if SOME GREATER = Jeha_Order.kbo (from, to) then NONE else (* Schulz: \<sigma>(s) > \<sigma>(t) *)
@@ -150,7 +165,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
         let
           val rewritten_clause = map_at_full_pos j (K to) target_clause
         in
-          writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier));
+          Jeha_Common.trace_msg ctxt (fn () => msg);
+          (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
           SOME (map (map_lit norm_beta_eta) rewritten_clause)
         end
       end
@@ -231,7 +247,6 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
     NOTE: how to handle TVars? *)
     val d = map (map_lit (prefix_Vars_TVars "L")) d
     val c = map (map_lit (prefix_Vars_TVars "R")) c
-    (* FIXME: pick the correct one (t or t') *)
     val (_, _, is_pos_eq) = nth d cp
     val t = subterm_at_full_pos d ([], lp, cp)
     val t' = subterm_at_full_pos d ([], swap_lpos lp, cp)
@@ -255,7 +270,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
             val d' = nth_drop cp d
             val ct' = map_at_full_pos j (K t') c
           in
-            writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier));
+            (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
             map (map_lit (norm_beta_eta_env unifier)) (d' @ ct')
           end
       in
@@ -274,7 +289,7 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (clause * cpos)) =
       let
         val c' = nth_drop cp c
       in
-        writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier));
+        (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
         map (map_lit (norm_beta_eta_env unifier)) c'
       end
   in
@@ -306,7 +321,6 @@ fun add_new_clauses passive clauses = fold Passive_Set.insert clauses passive
 
 fun select_given_clause cs = Passive_Set.min_elem cs
 
-(* FIXME: do simplification *)
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
 fun forward_simplify ctxt active given_clause =
   let
@@ -321,23 +335,37 @@ fun forward_simplify ctxt active given_clause =
         val first_rewrite =
           rule_unit_target_triples
           |> map_filter (fn (rule, (unit, target)) => rule ctxt unit target) 
-          |> (fn cs => case cs of (c :: _) => SOME c | _ => NONE)
+          |> (fn rewrites => case rewrites of (rewritten_c :: _) => SOME rewritten_c | _ => NONE)
       in 
         first_rewrite
         (* if no rewrite has happened yet, try (DD) or (DR) *)
-        |> (fn c' => if is_some c' then c' else simp_delete_duplicated_lits c) 
-        |> (fn c' => if is_some c' then c' else simp_delete_resolved_lits c)
+        |> (fn c' => if is_some c' then c' else simp_delete_duplicated_lits ctxt c) 
+        |> (fn c' => if is_some c' then c' else simp_delete_resolved_lits ctxt c)
       end
     (* rewrite until not possible anymore *)
     (* FIXME: can this lead to a fixed-point (and not terminate)? *)
     fun full_rewrite c =
+      let val _ = Jeha_Common.trace_msg ctxt (fn () => "rewrite step of " ^ Jeha_Common.pretty_term ctxt (term_of_clause c) ^ ":") in
       case first_successful_rewrite c of
-        SOME c' => full_rewrite c'
-      | NONE => c
+        SOME c' =>
+          full_rewrite c'
+      | NONE =>
+          let val _ = Jeha_Common.trace_msg ctxt (fn () => "done rewriting " ^ Jeha_Common.pretty_term ctxt (term_of_clause c) ^ ".") in
+          c
+          end
+      end
+    val given_clause = full_rewrite given_clause
   in
     (* FIXME: Implement Positive simplify-reflect and Negative simplify-reflect *)
-    (* FIXME: triviality check *)
-    [full_rewrite given_clause]
+    if
+      is_redundant ctxt active given_clause
+      (* FIXME: this is not specified in the E paper, so should we perform inferences with tautologies?? *)
+      orelse is_trivial given_clause
+        then
+          let val _ = Jeha_Common.trace_msg ctxt (fn () => "discarding redundant or trivial given_clause") in
+          []
+          end
+        else [given_clause]
   end
   (* let
     val idxs = find_simp_bool_outer_clause given_clause
@@ -373,15 +401,18 @@ datatype loopstate = Timeout | Unsat | Next of Passive_Set.T * clause list
 fun given_clause_step ctxt countdown passive active =
   if countdown <= 0 then Timeout else
   let
-    (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
-    inferences are possible and empty clause has not been derived). Later: no non-redundant
-    inferences *)
-    val (given_clause, passive) = select_given_clause passive
     (* tracing *)
     fun trace_msg_clauses msg clauses =
       Jeha_Common.trace_msg ctxt
         (fn () => msg ^ Jeha_Common.pretty_terms ctxt (map term_of_clause clauses))
     val _ = trace_msg_clauses "passive: " (list_of_passive_set passive)
+
+    (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
+    inferences are possible and empty clause has not been derived). Later: no non-redundant
+    inferences *)
+    val (given_clause, passive) = select_given_clause passive
+
+    (* tracing *)
     val _ = trace_msg_clauses "active: " active
     val _ = trace_msg_clauses "given_clause " [given_clause]
     (* simplify given_clause with active set *)

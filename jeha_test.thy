@@ -90,6 +90,7 @@ declare [[ML_exception_debugger = true]]
 ML_file_debug \<open>jeha_common.ML\<close>
 ML_file_debug \<open>jeha_lang.ML\<close>
 ML_file_debug \<open>jeha_order.ML\<close>
+ML_file_debug \<open>jeha_subsumption.ML\<close>
 ML_file_debug \<open>jeha.ML\<close>
 ML_file_debug \<open>jeha_tactic.ML\<close>
 
@@ -166,12 +167,23 @@ ML \<open>
 
 (* lemma
   shows "x \<Longrightarrow> x"
+(* by jeha *)
+(* Question: why is this being called twice? *)
 apply(tactic \<open>my_print_tac @{context}\<close>)
-apply(tactic \<open>assume_tac @{context} 0\<close>) *)
+(*
+apply(tactic \<open>assume_tac @{context} 1\<close>)
+*)
+*)
 
-(* lemma test:
+(*
+lemma test:
   shows "(x = y) \<longrightarrow> (y = z) \<longrightarrow> (x = z)"
-  apply(tactic \<open>my_print_tac @{context}\<close>) *)
+apply(tactic \<open>my_print_tac @{context}\<close>)
+*)
+
+ML \<open>
+  (* val this_is_a_type = @{term "TYPE "} *)
+\<close>
 
 ML \<open>
   (* val eq_trans = Thm.prop_of @{thm test}

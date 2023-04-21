@@ -117,8 +117,6 @@ fun quantified_typ (t as Const (_, T_to_bool_to_bool)) =
 fun strip_comb_fun_types_args1 (boundTs, t) =
   let
     val (f, ts) = strip_comb t
-    (* FIXME: Can we assume the output of fastype_of1 to be `[...] ---> ...` or can there be issues with
-    type aliases etc.? *)
     val types = fastype_of1 (boundTs, f) |> binder_types |> take (length ts)
   in
     (f, types, ts)
@@ -357,7 +355,6 @@ fun norm_beta_eta_env env = Envir.eta_contract o Envir.norm_term env
 
 val norm_beta_eta = norm_beta_eta_env Envir.init
 
-(* FIXME: move to preprocessing module *)
 (* Q t \<mapsto> Q (\<lambda>x. t x) *)
 fun ensure_lambda_under_q (t $ Abs (x, T, u)) = t $ Abs (x, T, ensure_lambda_under_q u)
   | ensure_lambda_under_q (t $ u) =
@@ -370,7 +367,6 @@ fun ensure_lambda_under_q (t $ Abs (x, T, u)) = t $ Abs (x, T, ensure_lambda_und
   | ensure_lambda_under_q t = t
 
 (* apply substitution and normalize (compare Envir.beta_eta_contract) *)
-(* FIXME: move to preproc *)
 fun norm_beta_eta_qeta_env env = ensure_lambda_under_q o norm_beta_eta_env env
 
 (* applies \<beta> and \<eta> reduction and the rewrite rule

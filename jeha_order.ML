@@ -1,7 +1,5 @@
 (* Transfinite Higher Order Knuth Bendix Ordering *)
 
-(* FIXME: this is a reference implementation, optmize *)
-
 signature JEHA_ORDER =
 sig
   type partial_order = order option
@@ -216,6 +214,7 @@ fun fo_head_weight below_lam Lam = fo_lambda_weight
   | fo_head_weight below_lam (Fun (f, _)) =
       if Jeha_Lang.is_quantifier f then quantifier_weight below_lam else const_weight
 
+(* FIXME: just prec *)
 fun ho_prec_ord (Bound i, Bound j) = int_ord (i, j)
   | ho_prec_ord (Bound _, _) = GREATER
   | ho_prec_ord (Const (@{const_name HOL.All}, _), Const (@{const_name HOL.All}, _)) = EQUAL

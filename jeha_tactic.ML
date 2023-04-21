@@ -16,19 +16,16 @@ exception JEHA_UNIMPLEMENTED
 (* METIS: type jeha_options (string list option * string option) * thm list *)
 type jeha_options = string list
 
-fun jeha_tac_unused options ctxt ths i st0 =
+fun jeha_tac options ctxt ths i st0 =
   let
     val _ = Jeha_Common.trace_msg ctxt (fn () => "st0: " ^ @{make_string} st0)
-    val unused = Unsynchronized.ref []
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "jeha called with theorems\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths))
     val seq =
       if Jeha.refutable ctxt ths st0 then Skip_Proof.cheat_tac ctxt i st0 else Seq.empty
   in
-    (!unused, seq)
+    seq
   end
-
-fun jeha_tac options ctxt ths i = snd o jeha_tac_unused options ctxt ths i
 
 (* FIXME: only pass schematic facts to jeha_tac? see metis_tactic.ML *)
 fun jeha_method (options, ths) ctxt facts =
