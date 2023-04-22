@@ -97,12 +97,6 @@ fun contains_syntactic_complementaries [] = false
 
 (* FIXME: implement semantic tautology deletion? *)
 
-fun is_trivial c = contains_syntactic_equation c orelse contains_syntactic_complementaries c
-
-fun is_redundant ctxt active c =
-  (* forward subsumption: does any active claus subsume c? *)
-  exists (fn ac => Jeha_Subsumption.subsumes ctxt (ac, c)) active
-
 (* Deletion of duplicated literals (DD) (Schulz) *)
 fun simp_delete_duplicated_lits ctxt c =
   let
@@ -148,30 +142,35 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     val target_clause = map (map_lit (prefix_Vars_TVars "R")) target_clause
     val (from, to) = apply2 (term_at_lpos (the_single unit_clause)) (lp, swap_lpos lp) (* Schulz: (s, t) *)
     val target_term = subterm_at_full_pos target_clause j (* Schulz: u *)
-    (* FIXME: matching instead of unification if possible, solves the smashing problem. *)
-    val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [(from, target_term)] Envir.init
-    fun build_conclusion unifier =
+    val matchers = Unify.matchers (Context.Proof ctxt) [(from, target_term)]
+    fun build_conclusion matcher =
       let
         val msg =  "   rewriting " ^ Jeha_Common.pretty_term ctxt target_term
           ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
           ^ " with " ^ Jeha_Common.pretty_term ctxt from
           ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
-        val (from, to) = apply2 (norm_beta_eta_env unifier) (from, to)
+        val (from, to) =
+          apply2
+            (norm_beta_eta_qeta o (Envir.subst_term (Envir.type_env matcher, Envir.term_env matcher)))
+            (from, to)
       in
-        if SOME GREATER = Jeha_Order.kbo (from, to) then NONE else (* Schulz: \<sigma>(s) > \<sigma>(t) *)
-        (* FIXME: understand and implement the restrictions on RP form Schulz's paper *)
-        (* FIXME: check that the rewriting clause is smaller than the rewritten clause, see o\<lambda>Sup,
-        p.25 *)
-        let
-          val rewritten_clause = map_at_full_pos j (K to) target_clause
-        in
-          Jeha_Common.trace_msg ctxt (fn () => msg);
-          (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-          SOME (map (map_lit norm_beta_eta) rewritten_clause)
-        end
+        if SOME GREATER = Jeha_Order.kbo (from, to) (* Schulz: \<sigma>(s) > \<sigma>(t) *)
+          then
+            (* FIXME: understand and implement the restrictions on RP form Schulz's paper *)
+            (* FIXME: check that the rewriting clause is smaller than the rewritten clause, see o\<lambda>Sup,
+            p.25 *)
+            let
+              val rewritten_clause = map_at_full_pos j (K to) target_clause
+            in
+              Jeha_Common.trace_msg ctxt (fn () => msg);
+              writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher)));
+              SOME (map (map_lit norm_beta_eta_qeta) rewritten_clause)
+            end
+          else
+            NONE
       end
   in
-    unifiers
+    matchers
     (* FIXME: print warning message when discarding unifiers? *)
     |> Seq.take 4
     |> Seq.map_filter build_conclusion
@@ -184,6 +183,111 @@ val simp_rewrite_positive_lits = impl_simp_rewrite_lits true
 
 (* Rewriting of positive literals (RN) simplification (Schulz) *)
 val simp_rewrite_negative_lits = impl_simp_rewrite_lits false
+
+(* given terms s, t, find a common position p s.t. s, t only disagree at p *)
+(* FIXME: rename to find_single_blue_disagreement and change appropriately *)
+(* FIXME: how to deal with types??? Right now we're only considering variables instantiated by the
+unifier. Does well-typedness of the literal tell us enough to make this work? *)
+fun find_single_green_disagreement ctxt term_pair : tpos =
+  (* 1. Find a unifier.
+     2. Find the position of all variables affected by the unifier.
+     3. Their longest common prefix is the single disagreement *)
+  let
+    (* FIXME: maybe it's possible to easily deal with flex-flex pairs here *)
+    val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [term_pair] Envir.init
+  in
+    case Seq.pull unifiers of
+      NONE => [] (* \<epsilon> *)
+    | SOME (env, _) => 
+        (* FIXME: Check that this works with triangular form unifiers. I would guess not because
+        later variables refer to r.h.s. of previous instantiations. *)
+        let
+          val affected_vars = Vartab.keys (Envir.term_env env)
+          fun term_poss_of_affected_vars t =
+            (* consider all positions in the term *)
+            green_tposs_of t
+            (* filter out the ones that don't point to affected variables *)
+            |> filter (fn tp =>
+                case subterm_at_tpos t tp of
+                  Var (x, _) => exists (curry (op =) x) affected_vars
+                | _ => false)
+          val common_suffix : tpos list -> tpos =
+            (* reverse term positions (suffix <-> prefix) *)
+            map rev
+            #> (fn rev_tps => fold (fst oo (curry (chop_common_prefix (op =)))) rev_tps [])
+            #> rev
+        in
+          term_pair
+          |> apply2 term_poss_of_affected_vars
+          |> (op @)
+          |> common_suffix
+        end
+  end
+
+(* implementation of positive simplify-reflect and equality subsumption *)
+fun literal_can_match_single_disagreement ctxt lit target_lit =
+  let
+    val (lhs, rhs, true) = lit (* Schulz: s, t *)
+    val (target_lhs, target_rhs, _) = target_lit (* Schulz: u[], u[]*)
+    (* Schulz: p *)
+    val single_disagreement_position = find_single_green_disagreement ctxt (target_lhs, target_rhs)
+    val (target_term_lhs, target_term_rhs) = (* u|\<^sub>p *)
+      (subterm_at_tpos target_lhs single_disagreement_position,
+      subterm_at_tpos target_rhs single_disagreement_position)
+    (* FIXME: does matching need renaming or not? *)
+    val exists_matcher =
+      (Unify.matchers (Context.Proof ctxt) ([(lhs, target_lhs), (rhs, target_rhs)]),
+      Unify.matchers (Context.Proof ctxt) ([(lhs, target_rhs), (rhs, target_lhs)]))
+      |> Seq.interleave
+      |> Seq.pull
+      |> is_some
+  in
+    exists_matcher
+  end
+
+(* Positive simplify-reflect (PS) simplification (Schulz)
+      s = t    u\<langle>\<sigma>(s)\<rangle>\<^sub>p \<noteq> u\<langle>\<sigma>(t)\<rangle>\<^sub>p \<or> R
+      --------------------------------
+      s = t              R
+*)
+fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
+  if not (is_pos_unit unit_clause) then NONE else
+  (* check that to be deleted literal is indeed negative *)
+  if not (true = #3 (nth target_clause target_cp)) then NONE else
+  let
+    val lit = the_single unit_clause (* Schulz: s, t *)
+    val target_lit = nth target_clause target_cp (* Schulz: u[], u[]*)
+    val exists_matcher = literal_can_match_single_disagreement ctxt lit target_lit
+  in
+    if exists_matcher
+      then SOME (nth_drop target_cp target_clause)
+      else NONE
+  end
+
+(* Equality subsumption (ES) redundancy check (Schulz) *)
+fun equality_subsumes ctxt (unit_clause, target_clause) =
+  if not (is_pos_unit unit_clause) then false else
+  let
+    val lit = the_single unit_clause (* Schulz: s, t *)
+    val positive_lits = filter #3 target_clause
+    val exists_matcher = exists (literal_can_match_single_disagreement ctxt lit) positive_lits
+    val _ = if exists_matcher then Jeha_Common.trace_msg ctxt (fn () =>
+      "equality subsumed by " ^ Jeha_Common.pretty_term ctxt (term_of_clause unit_clause)) else ()
+  in
+    exists_matcher
+  end
+
+fun is_trivial c =
+  contains_syntactic_equation c orelse contains_syntactic_complementaries c
+
+fun is_redundant ctxt active c =
+  let fun trace_subsumed unit subsumed = let val _ = if subsumed then Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ Jeha_Common.pretty_term ctxt (term_of_clause unit)) else () in subsumed end in
+  (* forward subsumption: does any active claus subsume c? *)
+  exists
+    (fn ac => equality_subsumes ctxt (ac, c)
+      orelse trace_subsumed ac (Jeha_Subsumption.subsumes ctxt (ac, c)))
+    active
+  end
 
 (** Clausification **)
 
@@ -271,7 +375,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
             val ct' = map_at_full_pos j (K t') c
           in
             (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-            map (map_lit (norm_beta_eta_env unifier)) (d' @ ct')
+            map (map_lit (norm_beta_eta_qeta_env unifier)) (d' @ ct')
           end
       in
         map build_conclusion unifiers
@@ -290,7 +394,7 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (clause * cpos)) =
         val c' = nth_drop cp c
       in
         (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-        map (map_lit (norm_beta_eta_env unifier)) c'
+        map (map_lit (norm_beta_eta_qeta_env unifier)) c'
       end
   in
     if is_pos_eq
@@ -324,8 +428,9 @@ fun select_given_clause cs = Passive_Set.min_elem cs
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
 fun forward_simplify ctxt active given_clause =
   let
+    val active_units = filter (fn c => length c = 1) active
     val active_units_all_orientations : (clause * lpos) list =
-      cartesian_product (filter (fn c => length c = 1) active) [Left, Right]
+      cartesian_product active_units [Left, Right]
     val rules = [simp_rewrite_negative_lits, simp_rewrite_positive_lits]
     fun first_successful_rewrite c =
       let
@@ -336,6 +441,13 @@ fun forward_simplify ctxt active given_clause =
           rule_unit_target_triples
           |> map_filter (fn (rule, (unit, target)) => rule ctxt unit target) 
           |> (fn rewrites => case rewrites of (rewritten_c :: _) => SOME rewritten_c | _ => NONE)
+        val first_rewrite =
+          case first_rewrite of
+            SOME c' => SOME c'
+          | NONE =>
+              cartesian_product active_units (map (pair c) (0 upto (length c - 1)))
+              |> map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
+              |> (fn rewrites => case rewrites of (rewritten_c :: _) => SOME rewritten_c | _ => NONE)
       in 
         first_rewrite
         (* if no rewrite has happened yet, try (DD) or (DR) *)
@@ -344,19 +456,20 @@ fun forward_simplify ctxt active given_clause =
       end
     (* rewrite until not possible anymore *)
     (* FIXME: can this lead to a fixed-point (and not terminate)? *)
-    fun full_rewrite c =
+    fun full_rewrite c countdown =
+      if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
       let val _ = Jeha_Common.trace_msg ctxt (fn () => "rewrite step of " ^ Jeha_Common.pretty_term ctxt (term_of_clause c) ^ ":") in
       case first_successful_rewrite c of
         SOME c' =>
-          full_rewrite c'
+          full_rewrite c' (countdown - 1)
       | NONE =>
           let val _ = Jeha_Common.trace_msg ctxt (fn () => "done rewriting " ^ Jeha_Common.pretty_term ctxt (term_of_clause c) ^ ".") in
           c
           end
       end
-    val given_clause = full_rewrite given_clause
+    val given_clause = full_rewrite given_clause 3
   in
-    (* FIXME: Implement Positive simplify-reflect and Negative simplify-reflect *)
+    (* FIXME: Implement Negative simplify-reflect *)
     if
       is_redundant ctxt active given_clause
       (* FIXME: this is not specified in the E paper, so should we perform inferences with tautologies?? *)

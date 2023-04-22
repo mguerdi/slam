@@ -38,8 +38,8 @@ sig
   val occurs_deeply : term -> clause -> bool
   val norm_quantifier_poly_eq : term -> term
   (* normalization *)
-  val norm_beta_eta_env : Envir.env -> term -> term
-  val norm_beta_eta : term -> term
+  val norm_beta_eta_qeta_env : Envir.env -> term -> term
+  val norm_beta_eta_qeta : term -> term
 end;
 
 structure Jeha_Lang : JEHA_LANG =

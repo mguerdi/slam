@@ -182,7 +182,15 @@ apply(tactic \<open>my_print_tac @{context}\<close>)
 *)
 
 ML \<open>
-  (* val this_is_a_type = @{term "TYPE "} *)
+  (* lazyness seems to work just fine... *)
+  val number_seq = Seq.of_list [1, 2, 3, 4]
+  val printing_seq = Seq.map (writeln o @{make_string}) number_seq
+  val SOME (_, printed_one)  = let val _ = writeln "pull:" in Seq.pull printing_seq end
+  val printed_two = writeln "pull again:"; Seq.pull printed_one;
+  val first_three = Seq.take 3 printing_seq
+  val _ = writeln "pull from first three:"; Seq.pull first_three;
+  val even_printing_seq = Seq.map (writeln o @{make_string}) (Seq.map_filter (fn n => if n mod 2 = 0 then SOME n else NONE) number_seq)
+  val _ = writeln "pull even:"; Seq.pull even_printing_seq;
 \<close>
 
 ML \<open>
@@ -191,9 +199,54 @@ ML \<open>
   val clauses = HOLogic.mk_not (Object_Logic.atomize_term @{context} conjecture) :: map (Object_Logic.atomize_term @{context}) axioms *)
   val clauses = map Jeha_Lang.clause_of [@{term "x = y"}, @{term "y = z"}, @{term "x \<noteq> z"}]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
-  val whatisthis = false andalso false orelse true
-  val andthiswhat = true orelse false andalso false
   val result = Jeha.given_clause_loop @{context} 12 (Jeha.passive_set_of_list clauses) []
+\<close>
+
+ML \<open>
+  val f = @{term "f :: 'a \<Rightarrow> 'a"}
+  val var_x = Var (("x", 0), @{typ "'a"})
+  val f_is_id = HOLogic.mk_eq (f $ var_x, var_x)
+  val clauses = map Jeha_Lang.clause_of [f_is_id, @{term "f (f y) \<noteq> y"}]
+  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
+  val result = Jeha.given_clause_loop @{context} 5 (Jeha.passive_set_of_list clauses) []
+\<close>
+
+ML \<open>
+  val zero = @{term "z :: 'a"}
+  val s = @{term "s :: 'a \<Rightarrow> 'a"}
+  val plus = @{term "p :: 'a \<Rightarrow> 'a \<Rightarrow> 'a"}
+  val var_x = Var (("x", 0), @{typ "'a"})
+  val var_y = Var (("y", 0), @{typ "'a"})
+  val zero_right_neutral = HOLogic.mk_eq (plus $ var_x $ zero, var_x)
+  val plus_def = HOLogic.mk_eq (plus $ var_x $ (s $ var_y), s $ (plus $ var_x $ var_y))
+  val two_neq_one_plus_one = @{term "s (s z) \<noteq> p (s z) (s z)"}
+  val clauses = map Jeha_Lang.clause_of [zero_right_neutral, plus_def, two_neq_one_plus_one]
+  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
+  (* FIXME: looks like some rewriting steps are missing pretty early on *)
+  val result = Jeha.given_clause_loop @{context} 12 (Jeha.passive_set_of_list clauses) []
+\<close>
+
+(* Baader, Nipkow Example 7.1.1 (central groupoids) *)
+ML \<open>
+  val t = @{term "t :: 'a \<Rightarrow> 'a \<Rightarrow> 'a"}
+  val var_x = Var (("x", 0), @{typ "'a"})
+  val var_y = Var (("y", 0), @{typ "'a"})
+  val var_z = Var (("z", 0), @{typ "'a"})
+  val eq = HOLogic.mk_eq (t $ (t $ var_x $ var_y) $ (t $ var_y $ var_z), var_y)
+  (* one of the rules in the completed rewrite system *)
+  val xxyz_neq_xy = HOLogic.mk_not (HOLogic.mk_eq (t $ var_x $ (t $ (t $ var_x $ var_y) $ var_z), t $ var_x $ var_y))
+  val clauses = map Jeha_Lang.clause_of [eq, xxyz_neq_xy]
+  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
+  val result = Jeha.given_clause_loop @{context} 5 (Jeha.passive_set_of_list clauses) []
+\<close>
+
+ML \<open>
+  val c1 = @{term "P a :: bool"}
+  val c2 = @{term "a = b"}
+  val c3 = @{term "\<not> P b"}
+  val clauses = map Jeha_Lang.clause_of [c1, c2, c3]
+  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
+  val result = Jeha.given_clause_loop @{context} 10 (Jeha.passive_set_of_list clauses) []
 \<close>
 
 ML \<open>
