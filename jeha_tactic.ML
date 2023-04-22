@@ -19,17 +19,31 @@ type jeha_options = string list
 fun jeha_tac options ctxt ths i st0 =
   let
     val _ = Jeha_Common.trace_msg ctxt (fn () => "st0: " ^ @{make_string} st0)
-    val _ = Jeha_Common.trace_msg ctxt (fn () =>
-      "jeha called with theorems\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths))
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Thm.prop_of st0: " ^ @{make_string} (Thm.prop_of st0))
     val seq =
-      if Jeha.refutable ctxt ths st0 then Skip_Proof.cheat_tac ctxt i st0 else Seq.empty
+      case Thm.prop_of st0 of
+        (* FIXME: this handles the TERM _ call from Isar, but why do we need to do this?? *)
+        (Const ("Pure.prop", _) $ (Const ("Pure.term", _) $ _)) => Seq.single st0
+      | _ =>
+        let
+          val _ = Jeha_Common.trace_msg ctxt (fn () =>
+            "jeha called with theorems\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths))
+        in
+          (* if Jeha.refutable ctxt ths st0 then ALLGOALS (Skip_Proof.cheat_tac ctxt) st0 else Seq.empty *)
+          (* FIXME: why are we doing this??? *)
+          Subgoal.FOCUS (fn { context, concl, ...} => (fn st =>
+            if Jeha.refutable context ths (Thm.term_of concl)
+              then ALLGOALS (Skip_Proof.cheat_tac context) st
+              else Seq.empty)
+          ) ctxt i st0
+        end
   in
     seq
   end
 
 (* FIXME: only pass schematic facts to jeha_tac? see metis_tactic.ML *)
 fun jeha_method (options, ths) ctxt facts =
-    HEADGOAL (CHANGED_PROP o jeha_tac options ctxt (facts @ ths))
+    HEADGOAL (jeha_tac options ctxt (facts @ ths))
 
 (* utilities *)
 

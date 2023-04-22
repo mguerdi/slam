@@ -164,8 +164,8 @@ ML \<open>
       Seq.single thm
     end
 \<close>
-
-(* lemma
+(*
+lemma
   shows "x \<Longrightarrow> x"
 (* by jeha *)
 (* Question: why is this being called twice? *)
@@ -175,11 +175,15 @@ apply(tactic \<open>assume_tac @{context} 1\<close>)
 *)
 *)
 
-(*
+ML \<open>
+  @{prop "TERM 1"}
+\<close>
+
 lemma test:
   shows "(x = y) \<longrightarrow> (y = z) \<longrightarrow> (x = z)"
-apply(tactic \<open>my_print_tac @{context}\<close>)
-*)
+  by jeha
+(* apply(tactic \<open>my_print_tac @{context}\<close>) *)
+
 
 ML \<open>
   (* lazyness seems to work just fine... *)
