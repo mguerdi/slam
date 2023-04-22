@@ -145,7 +145,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     val matchers = Unify.matchers (Context.Proof ctxt) [(from, target_term)]
     fun build_conclusion matcher =
       let
-        val msg =  "   rewriting " ^ Jeha_Common.pretty_term ctxt target_term
+        val msg =  "   " ^ (if positive then "(RP)" else "(RN)")
+          ^ " rewriting " ^ Jeha_Common.pretty_term ctxt target_term
           ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
           ^ " with " ^ Jeha_Common.pretty_term ctxt from
           ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
@@ -428,31 +429,28 @@ fun select_given_clause cs = Passive_Set.min_elem cs
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
 fun forward_simplify ctxt active given_clause =
   let
-    val active_units = filter (fn c => length c = 1) active
-    val active_units_all_orientations : (clause * lpos) list =
-      cartesian_product active_units [Left, Right]
-    val rules = [simp_rewrite_negative_lits, simp_rewrite_positive_lits]
+    val active_units = Seq.filter (fn c => length c = 1) (Seq.of_list active)
+    val active_units_all_orientations : (clause * lpos) Seq.seq =
+      seq_cartesian_product active_units (Seq.of_list [Left, Right])
+    val rn_rp_rules = Seq.of_list [simp_rewrite_negative_lits, simp_rewrite_positive_lits]
     fun first_successful_rewrite c =
       let
-        val green_targets : (clause * full_pos) list = map (pair c) (green_full_poss_of c)
-        val unit_target_pairs = cartesian_product active_units_all_orientations green_targets
-        val rule_unit_target_triples = cartesian_product rules unit_target_pairs
-        val first_rewrite =
-          rule_unit_target_triples
-          |> map_filter (fn (rule, (unit, target)) => rule ctxt unit target) 
-          |> (fn rewrites => case rewrites of (rewritten_c :: _) => SOME rewritten_c | _ => NONE)
-        val first_rewrite =
-          case first_rewrite of
-            SOME c' => SOME c'
-          | NONE =>
-              cartesian_product active_units (map (pair c) (0 upto (length c - 1)))
-              |> map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
-              |> (fn rewrites => case rewrites of (rewritten_c :: _) => SOME rewritten_c | _ => NONE)
+        val green_targets : (clause * full_pos) Seq.seq = Seq.map (pair c) (Seq.of_list (green_full_poss_of c))
+        val unit_target_pairs = seq_cartesian_product active_units_all_orientations green_targets
+        (* successful rewrites of c (NONE filtered out) *)
+        val rn_rp_rewrites : clause Seq.seq =
+          seq_cartesian_product rn_rp_rules unit_target_pairs
+          |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target) 
+        val ps_rewrites : clause Seq.seq =
+          seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length c - 1))))
+          |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
+        val dd_dr_rewrites : clause Seq.seq =
+            Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
       in 
-        first_rewrite
-        (* if no rewrite has happened yet, try (DD) or (DR) *)
-        |> (fn c' => if is_some c' then c' else simp_delete_duplicated_lits ctxt c) 
-        |> (fn c' => if is_some c' then c' else simp_delete_resolved_lits ctxt c)
+        (* following Schulz: RN, RP, PS, FIXME: NS, DD, DR *)
+        Seq.append rn_rp_rewrites (Seq.append ps_rewrites dd_dr_rewrites)
+        |> Seq.pull
+        |> map_some #1
       end
     (* rewrite until not possible anymore *)
     (* FIXME: can this lead to a fixed-point (and not terminate)? *)
@@ -467,9 +465,8 @@ fun forward_simplify ctxt active given_clause =
           c
           end
       end
-    val given_clause = full_rewrite given_clause 3
+    val given_clause = full_rewrite given_clause 10
   in
-    (* FIXME: Implement Negative simplify-reflect *)
     if
       is_redundant ctxt active given_clause
       (* FIXME: this is not specified in the E paper, so should we perform inferences with tautologies?? *)
