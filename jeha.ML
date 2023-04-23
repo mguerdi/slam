@@ -151,10 +151,18 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
           ^ " with " ^ Jeha_Common.pretty_term ctxt from
           ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
-        val (from, to) =
-          apply2
-            (norm_beta_eta_qeta o (Envir.subst_term (Envir.type_env matcher, Envir.term_env matcher)))
-            (from, to)
+        (* FIXME: is Envir.subst_term broken? We have to apply the type env first, and then the term
+        env (this time with empty type env) in two different steps otherwise, we get a var_clash,
+        saying a variable has two different types (probably the original one, and the one which is
+        substituted by the type env) *)
+        (* val (from, to) = apply2
+            (norm_beta_eta_qeta o Envir.subst_term (Envir.type_env matcher, Envir.term_env matcher))
+            (from, to) *)
+        val subst_term =
+          Envir.subst_term_types (Envir.type_env matcher)
+          #> Envir.subst_term (Vartab.empty, Envir.term_env matcher)
+        val norm_and_sub = norm_beta_eta_qeta o subst_term
+        val (from, to) = apply2 norm_and_sub (from, to)
       in
         if SOME GREATER = Jeha_Order.kbo (from, to) (* Schulz: \<sigma>(s) > \<sigma>(t) *)
           then
