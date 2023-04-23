@@ -31,8 +31,9 @@ fun jeha_tac options ctxt ths i st0 =
         in
           (* if Jeha.refutable ctxt ths st0 then ALLGOALS (Skip_Proof.cheat_tac ctxt) st0 else Seq.empty *)
           (* FIXME: why are we doing this??? *)
-          Subgoal.FOCUS (fn { context, concl, ...} => (fn st =>
-            if Jeha.refutable context ths (Thm.term_of concl)
+          Subgoal.FOCUS (fn { context, prems, asms, concl, ...} => (fn st =>
+            (* FIXME: asms and prems seems to be the same *)
+            if Jeha.refutable context (prems @ ths) asms (Thm.term_of concl)
               then ALLGOALS (Skip_Proof.cheat_tac context) st
               else Seq.empty)
           ) ctxt i st0

@@ -175,14 +175,69 @@ apply(tactic \<open>assume_tac @{context} 1\<close>)
 *)
 *)
 
-ML \<open>
-  @{prop "TERM 1"}
-\<close>
-
 lemma test:
-  shows "(x = y) \<longrightarrow> (y = z) \<longrightarrow> (x = z)"
+  shows "(x = y) \<Longrightarrow> (y = z) \<Longrightarrow> (x = z)"
   by jeha
 (* apply(tactic \<open>my_print_tac @{context}\<close>) *)
+
+lemma
+  shows "(1 :: nat) + 1 = 2"
+  by (jeha Num.nat_1_add_1)
+
+datatype 'a bt =
+    Lf
+  | Br 'a  "'a bt"  "'a bt"
+
+primrec n_nodes :: "'a bt \<Rightarrow> nat" where
+  "n_nodes Lf = 0"
+| "n_nodes (Br a t1 t2) = Suc (n_nodes t1 + n_nodes t2)"
+
+primrec n_leaves :: "'a bt => nat" where
+  "n_leaves Lf = Suc 0"
+| "n_leaves (Br a t1 t2) = n_leaves t1 + n_leaves t2"
+
+primrec depth :: "'a bt => nat" where
+  "depth Lf = 0"
+| "depth (Br a t1 t2) = Suc (max (depth t1) (depth t2))"
+
+primrec reflect :: "'a bt => 'a bt" where
+  "reflect Lf = Lf"
+| "reflect (Br a t1 t2) = Br a (reflect t2) (reflect t1)"
+
+primrec bt_map :: "('a => 'b) => ('a bt => 'b bt)" where
+  "bt_map f Lf = Lf"
+| "bt_map f (Br a t1 t2) = Br (f a) (bt_map f t1) (bt_map f t2)"
+
+primrec preorder :: "'a bt => 'a list" where
+  "preorder Lf = []"
+| "preorder (Br a t1 t2) = [a] @ (preorder t1) @ (preorder t2)"
+
+primrec inorder :: "'a bt => 'a list" where
+  "inorder Lf = []"
+| "inorder (Br a t1 t2) = (inorder t1) @ [a] @ (inorder t2)"
+
+primrec postorder :: "'a bt => 'a list" where
+  "postorder Lf = []"
+| "postorder (Br a t1 t2) = (postorder t1) @ (postorder t2) @ [a]"
+
+primrec append :: "'a bt => 'a bt => 'a bt" where
+  "append Lf t = t"
+| "append (Br a t1 t2) t = Br a (append t1 t) (append t2 t)"
+
+lemma n_leaves_reflect: "n_leaves (reflect t) = n_leaves t"
+proof (induct t)
+  case Lf thus ?case
+  proof -
+    let "?p\<^sub>1 x\<^sub>1" = "x\<^sub>1 \<noteq> n_leaves (reflect (Lf::'a bt))"
+    have "\<not> ?p\<^sub>1 (Suc 0)" by (jeha reflect.simps(1) n_leaves.simps(1))
+    hence "\<not> ?p\<^sub>1 (n_leaves (Lf::'a bt))" by (jeha n_leaves.simps(1))
+    thus "n_leaves (reflect (Lf::'a bt)) = n_leaves (Lf::'a bt)" by jeha
+  qed
+next
+  case (Br a t1 t2) thus ?case
+    by (jeha n_leaves.simps(2) add.commute reflect.simps(2))
+qed
+
 
 
 ML \<open>

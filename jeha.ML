@@ -28,7 +28,7 @@ sig
   type loopstate
   val given_clause_loop : Proof.context -> int -> Passive_Set.T -> clause list -> string
   val given_clause_step : Proof.context -> int -> Passive_Set.T -> clause list -> loopstate
-  val refutable : Proof.context -> thm list -> term -> bool
+  val refutable : Proof.context -> thm list -> cterm list -> term -> bool
 end
 
 structure Jeha : JEHA =
@@ -556,15 +556,21 @@ fun given_clause_loop ctxt countdown passive active =
   | Unsat => "UNSAT"
   | Next (passive, active) => given_clause_loop ctxt (countdown - 1) passive active
 
-fun refutable ctxt axioms conjecture =
+fun refutable ctxt prems asms conjecture =
   let
     val _ = Jeha_Common.trace_msg ctxt
       (fn () => "conjecture: " ^ Jeha_Common.pretty_term ctxt conjecture)
-    val axioms = map (Object_Logic.atomize_term ctxt o Thm.prop_of) axioms
+    val prems = map (Object_Logic.atomize_term ctxt o Thm.prop_of) prems
+    val _ = Jeha_Common.trace_msg ctxt
+      (fn () => "prems: " ^ Jeha_Common.pretty_terms ctxt prems)
+    val asms = map (Object_Logic.atomize_term ctxt o Thm.term_of) asms
+    val _ = Jeha_Common.trace_msg ctxt
+      (fn () => "asms: " ^ Jeha_Common.pretty_terms ctxt asms)
     val neg_conjecture = HOLogic.mk_not (Object_Logic.atomize_term ctxt conjecture)
-    val clauses = map clause_of (neg_conjecture :: axioms)
+    val clauses = map clause_of (neg_conjecture :: asms @ prems)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map term_of_clause clauses))
-    val result = given_clause_loop ctxt 20 (passive_set_of_list clauses) []
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
+    val result = Runtime.exn_trace (fn () => given_clause_loop ctxt 20 (passive_set_of_list clauses) [])
   in
     if result = "UNSAT" then true else false
   end
