@@ -26,7 +26,8 @@ sig
   structure Passive_Set : HEAP
   val passive_set_of_list : clause list -> Passive_Set.T
   type loopstate
-  exception PROVER of Proof.context * int * Passive_Set.T * clause list
+  (* original exception + prover state before the exception was raised *)
+  exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * clause list)
   val given_clause_loop : bool -> Proof.context -> int -> Passive_Set.T -> clause list -> string
   val given_clause_step : Proof.context -> int -> Passive_Set.T -> clause list -> loopstate
   val refutable : Proof.context -> thm list -> cterm list -> term -> bool
@@ -561,11 +562,11 @@ fun given_clause_step ctxt countdown passive active =
           end
   end
 
-exception PROVER of Proof.context * int * Passive_Set.T * clause list
+exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * clause list)
 
 fun given_clause_loop dump ctxt countdown passive active =
   case (if dump
-        then given_clause_step ctxt countdown passive active handle e => raise (PROVER (ctxt, countdown, passive, active))
+        then given_clause_step ctxt countdown passive active handle e => raise (JEHA_EXCEPTION (e, (ctxt, countdown, passive, active)))
         else given_clause_step ctxt countdown passive active) of
     Timeout => "TIMEOUT"
   | Unsat => "UNSAT"

@@ -37,9 +37,9 @@ fun jeha_tac options ctxt ths i st0 =
           Subgoal.FOCUS (fn { context, prems, asms, concl, ...} => (fn st =>
             (* FIXME: asms and prems seems to be the same *)
             if Jeha.refutable context (prems @ ths) asms (Thm.term_of concl)
-                handle Jeha.PROVER state =>
+                handle Jeha.JEHA_EXCEPTION (e, state) =>
                   let val _ = dump := state :: (!dump) in Jeha_Common.trace_msg ctxt (fn () =>
-                    "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Common.dump"); false
+                    "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Common.dump"); raise e
                   end
               then ALLGOALS (Skip_Proof.cheat_tac context) st
               else Seq.empty)
