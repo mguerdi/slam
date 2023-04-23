@@ -238,11 +238,13 @@ next
     by (jeha n_leaves.simps(2) add.commute reflect.simps(2))
 qed
 
+(*
 ML \<open>
   val dumped_state = !Jeha_Tactic.dump;
   val (ctxt, countdown, passive, active) = nth dumped_state 0
   val _ = Jeha.given_clause_loop false (Jeha_Common.verbose_of ctxt) countdown passive active
 \<close>
+*)
 
 ML \<open>
   (* lazyness seems to work just fine... *)
@@ -262,7 +264,7 @@ ML \<open>
   val clauses = HOLogic.mk_not (Object_Logic.atomize_term @{context} conjecture) :: map (Object_Logic.atomize_term @{context}) axioms *)
   val clauses = map Jeha_Lang.clause_of [@{term "x = y"}, @{term "y = z"}, @{term "x \<noteq> z"}]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
-  val result = Jeha.given_clause_loop @{context} 12 (Jeha.passive_set_of_list clauses) []
+  val result = Jeha.given_clause_loop false @{context} 12 (Jeha.passive_set_of_list clauses) []
 \<close>
 
 ML \<open>
@@ -271,7 +273,7 @@ ML \<open>
   val f_is_id = HOLogic.mk_eq (f $ var_x, var_x)
   val clauses = map Jeha_Lang.clause_of [f_is_id, @{term "f (f y) \<noteq> y"}]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
-  val result = Jeha.given_clause_loop @{context} 5 (Jeha.passive_set_of_list clauses) []
+  val result = Jeha.given_clause_loop false @{context} 5 (Jeha.passive_set_of_list clauses) []
 \<close>
 
 ML \<open>
@@ -286,7 +288,7 @@ ML \<open>
   val clauses = map Jeha_Lang.clause_of [zero_right_neutral, plus_def, two_neq_one_plus_one]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
   (* FIXME: looks like some rewriting steps are missing pretty early on *)
-  val result = Jeha.given_clause_loop @{context} 12 (Jeha.passive_set_of_list clauses) []
+  val result = Jeha.given_clause_loop false @{context} 12 (Jeha.passive_set_of_list clauses) []
 \<close>
 
 (* Baader, Nipkow Example 7.1.1 (central groupoids) *)
@@ -300,7 +302,7 @@ ML \<open>
   val xxyz_neq_xy = HOLogic.mk_not (HOLogic.mk_eq (t $ var_x $ (t $ (t $ var_x $ var_y) $ var_z), t $ var_x $ var_y))
   val clauses = map Jeha_Lang.clause_of [eq, xxyz_neq_xy]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
-  val result = Jeha.given_clause_loop @{context} 5 (Jeha.passive_set_of_list clauses) []
+  val result = Jeha.given_clause_loop false @{context} 5 (Jeha.passive_set_of_list clauses) []
 \<close>
 
 ML \<open>
@@ -309,7 +311,7 @@ ML \<open>
   val c3 = @{term "\<not> P b"}
   val clauses = map Jeha_Lang.clause_of [c1, c2, c3]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map Jeha_Lang.term_of_clause clauses))
-  val result = Jeha.given_clause_loop @{context} 10 (Jeha.passive_set_of_list clauses) []
+  val result = Jeha.given_clause_loop false @{context} 10 (Jeha.passive_set_of_list clauses) []
 \<close>
 
 ML \<open>
