@@ -238,7 +238,11 @@ next
     by (jeha n_leaves.simps(2) add.commute reflect.simps(2))
 qed
 
-
+ML \<open>
+  val dumped_state = !Jeha_Tactic.dump;
+  val (ctxt, countdown, passive, active) = nth dumped_state 0
+  val _ = Jeha.given_clause_loop false ctxt countdown passive active
+\<close>
 
 ML \<open>
   (* lazyness seems to work just fine... *)

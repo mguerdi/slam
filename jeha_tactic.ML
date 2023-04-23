@@ -5,6 +5,7 @@ sig
   val jeha_method : jeha_options * thm list -> Proof.context -> thm list -> tactic
   val jeha_tac : jeha_options -> Proof.context -> thm list -> int -> tactic
   val parse_jeha_options : jeha_options parser
+  val dump : ((Proof.context * int * Jeha.Passive_Set.T * clause list) list) Unsynchronized.ref
 end
 
 structure Jeha_Tactic : JEHA_TACTIC =
@@ -15,6 +16,8 @@ exception JEHA_UNIMPLEMENTED
 
 (* METIS: type jeha_options (string list option * string option) * thm list *)
 type jeha_options = string list
+
+val dump = Unsynchronized.ref []
 
 fun jeha_tac options ctxt ths i st0 =
   let
@@ -33,7 +36,7 @@ fun jeha_tac options ctxt ths i st0 =
           (* FIXME: why are we doing this??? *)
           Subgoal.FOCUS (fn { context, prems, asms, concl, ...} => (fn st =>
             (* FIXME: asms and prems seems to be the same *)
-            if Jeha.refutable context (prems @ ths) asms (Thm.term_of concl)
+            if Jeha.refutable context (prems @ ths) asms (Thm.term_of concl) handle Jeha.PROVER state => let val _ = dump := state :: (!dump) in true end
               then ALLGOALS (Skip_Proof.cheat_tac context) st
               else Seq.empty)
           ) ctxt i st0

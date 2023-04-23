@@ -26,7 +26,8 @@ sig
   structure Passive_Set : HEAP
   val passive_set_of_list : clause list -> Passive_Set.T
   type loopstate
-  val given_clause_loop : Proof.context -> int -> Passive_Set.T -> clause list -> string
+  exception PROVER of Proof.context * int * Passive_Set.T * clause list
+  val given_clause_loop : bool -> Proof.context -> int -> Passive_Set.T -> clause list -> string
   val given_clause_step : Proof.context -> int -> Passive_Set.T -> clause list -> loopstate
   val refutable : Proof.context -> thm list -> cterm list -> term -> bool
 end
@@ -508,6 +509,8 @@ fun infer_clauses ctxt active given_clause =
 
 datatype loopstate = Timeout | Unsat | Next of Passive_Set.T * clause list
 
+type prover_state = { context: Proof.context, countdown: int, passive: Passive_Set.T, active: clause list}
+
 fun given_clause_step ctxt countdown passive active =
   if countdown <= 0 then Timeout else
   let
@@ -527,7 +530,7 @@ fun given_clause_step ctxt countdown passive active =
     val _ = trace_msg_clauses "given_clause " [given_clause]
     (* simplify given_clause with active set *)
   in
-    case forward_simplify ctxt active given_clause of
+    case Runtime.exn_trace (fn () => forward_simplify ctxt active given_clause) of
       (* given_clause redundant w.r.t. active set *)
       [] => Next (passive, active)
       (* select first simplification as given_clause *)
@@ -550,11 +553,15 @@ fun given_clause_step ctxt countdown passive active =
           end
   end
 
-fun given_clause_loop ctxt countdown passive active =
-  case given_clause_step ctxt countdown passive active of
+exception PROVER of Proof.context * int * Passive_Set.T * clause list
+
+fun given_clause_loop dump ctxt countdown passive active =
+  case (if dump
+        then given_clause_step ctxt countdown passive active handle e => raise (PROVER (ctxt, countdown, passive, active))
+        else given_clause_step ctxt countdown passive active) of
     Timeout => "TIMEOUT"
   | Unsat => "UNSAT"
-  | Next (passive, active) => given_clause_loop ctxt (countdown - 1) passive active
+  | Next (passive, active) => given_clause_loop dump ctxt (countdown - 1) passive active
 
 fun refutable ctxt prems asms conjecture =
   let
@@ -570,7 +577,7 @@ fun refutable ctxt prems asms conjecture =
     val clauses = map clause_of (neg_conjecture :: asms @ prems)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map term_of_clause clauses))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
-    val result = Runtime.exn_trace (fn () => given_clause_loop ctxt 20 (passive_set_of_list clauses) [])
+    val result = given_clause_loop true ctxt 20 (passive_set_of_list clauses) []
   in
     if result = "UNSAT" then true else false
   end
