@@ -241,7 +241,7 @@ qed
 ML \<open>
   val dumped_state = !Jeha_Tactic.dump;
   val (ctxt, countdown, passive, active) = nth dumped_state 0
-  val _ = Jeha.given_clause_loop false ctxt countdown passive active
+  val _ = Jeha.given_clause_loop false (Jeha_Common.verbose_of ctxt) countdown passive active
 \<close>
 
 ML \<open>

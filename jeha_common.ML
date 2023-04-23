@@ -6,12 +6,16 @@ sig
   val verbose_of : Proof.context -> Proof.context
   val pretty_term : Proof.context -> term -> string
   val pretty_terms : Proof.context -> term list -> string
-  (* val pretty_tyenv : Proof.context -> Type.tyenv -> string *)
+  val pretty_tyenv : Proof.context -> Type.tyenv -> string
   val pretty_tenv : Proof.context -> Envir.tenv -> string
+  val I : 'a -> 'a
 end
 
 structure Jeha_Common : JEHA_COMMON =
 struct
+
+(* for tracing *)
+fun I x = x
 
 (* from metis_generate.ML *)
 val trace = Attrib.setup_config_bool \<^binding>\<open>jeha_trace\<close> (K false)
@@ -37,13 +41,13 @@ fun pretty_helper aux env = env
   |> map (fn (s1, s2) => Pretty.block [s1, Pretty.str " := ", s2])
   |> Pretty.enum "," "[" "]"
 
-(* fun pretty_tyenv ctxt tyenv =
+fun pretty_tyenv ctxt tyenv =
 let
   fun get_typs (v, (s, T)) = (TVar (v, s), T)
   val print = apply2 (Syntax.pretty_typ ctxt)
 in
   "tyenv:" ^ Pretty.string_of (pretty_helper (print o get_typs) tyenv)
-end *)
+end
 
 fun pretty_tenv ctxt tenv =
 let
