@@ -64,7 +64,7 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
       let val subsumed =
         let
           (* apply the substitution (only to the subsuming clause) *)
-          val ls = (map o map_lit o Envir.subst_term) (Envir.type_env env, Envir.term_env env) ls
+          val ls = (map o map_lit o norm_beta_eta_qeta_env) env ls
         in
           (* move on to next l in ls *)
           subsumes ctxt (ls, d_without_l')

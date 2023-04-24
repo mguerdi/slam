@@ -152,18 +152,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
           ^ " with " ^ Jeha_Common.pretty_term ctxt from
           ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
-        (* FIXME: is Envir.subst_term broken? We have to apply the type env first, and then the term
-        env (this time with empty type env) in two different steps otherwise, we get a var_clash,
-        saying a variable has two different types (probably the original one, and the one which is
-        substituted by the type env) *)
-        (* val (from, to) = apply2
-            (norm_beta_eta_qeta o Envir.subst_term (Envir.type_env matcher, Envir.term_env matcher))
-            (from, to) *)
-        val subst_term =
-          Envir.subst_term_types (Envir.type_env matcher)
-          #> Envir.subst_term (Vartab.empty, Envir.term_env matcher)
-        val norm_and_sub = norm_beta_eta_qeta o subst_term
-        val (from, to) = apply2 norm_and_sub (from, to)
+        (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
+        val (from, to) = apply2 (norm_beta_eta_qeta_env matcher) (from, to)
       in
         if SOME GREATER = Jeha_Order.kbo (from, to) (* Schulz: \<sigma>(s) > \<sigma>(t) *)
           then
@@ -264,14 +254,21 @@ fun literal_can_match_single_disagreement ctxt lit target_lit =
 fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   if not (is_pos_unit unit_clause) then NONE else
   (* check that to be deleted literal is indeed negative *)
-  if not (true = #3 (nth target_clause target_cp)) then NONE else
+  if not (false = #3 (nth target_clause target_cp)) then NONE else
   let
     val lit = the_single unit_clause (* Schulz: s, t *)
     val target_lit = nth target_clause target_cp (* Schulz: u[], u[]*)
     val exists_matcher = literal_can_match_single_disagreement ctxt lit target_lit
+    (* tracing *)
+    val msg =  "   " ^ "(PS)"
+      ^ " rewriting " ^ Jeha_Common.pretty_term ctxt (term_of_clause [target_lit])
+      ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
+      ^ " with " ^ Jeha_Common.pretty_term ctxt (term_of_clause [lit])
   in
     if exists_matcher
-      then SOME (nth_drop target_cp target_clause)
+      then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
+        SOME (nth_drop target_cp target_clause)
+      end
       else NONE
   end
 
@@ -586,9 +583,9 @@ fun refutable ctxt prems asms conjecture =
     val clauses = map clause_of (neg_conjecture :: asms @ prems)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map term_of_clause clauses))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
-    val result = given_clause_loop true ctxt 20 (passive_set_of_list clauses) []
+    val result = given_clause_loop true ctxt 50 (passive_set_of_list clauses) []
   in
-    if result = "UNSAT" then true else false
+    if result = "UNSAT" then true else error result
   end
 
 (*
