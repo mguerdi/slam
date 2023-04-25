@@ -75,7 +75,7 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
          else try_alternatives_with_backtracking ctxt alternatives ls
       end
 
-fun subsumes ctxt ({ literals = ls, id = _ }, { literals = ls', id = _ }) =
-  impl_subsumes ctxt (ls, ls')
+fun subsumes ctxt clause_pair =
+  impl_subsumes ctxt (apply2 JClause.literals clause_pair)
 
 end;

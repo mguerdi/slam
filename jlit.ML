@@ -3,6 +3,7 @@ sig
   type T
   (* left or right side of an equational literal *)
   datatype lpos = Left | Right
+  val is_positive : T -> bool
   val of_term : term -> T
   val lposs_of : T -> lpos list
   val map_lit : (term -> term) -> T -> T
@@ -21,6 +22,8 @@ struct
 
 type T = term * term * bool
 datatype lpos = Left | Right
+
+fun is_positive (_, _, b) = b
 
 fun map_lit f (s, t, b) = (f s, f t, b)
 

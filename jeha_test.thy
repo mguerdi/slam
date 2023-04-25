@@ -88,10 +88,10 @@ declare [[ML_exception_trace = true]]
 declare [[ML_exception_debugger = true]]
 
 ML_file_debug \<open>jeha_common.ML\<close>
+ML_file_debug \<open>clause_id.ML\<close>
 ML_file_debug \<open>jterm.ML\<close>
 ML_file_debug \<open>jlit.ML\<close>
 ML_file_debug \<open>jclause.ML\<close>
-ML_file_debug \<open>clause_id.ML\<close>
 ML_file_debug \<open>jeha_order.ML\<close>
 ML_file_debug \<open>jeha_subsumption.ML\<close>
 ML_file_debug \<open>jeha.ML\<close>

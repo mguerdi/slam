@@ -7,6 +7,13 @@ sig
   val literals : T -> JLit.T list
   val id : T -> int
   val map_literals : (JLit.T list -> JLit.T list) -> T -> T
+  val lit_at : cpos -> T -> JLit.T
+  val dummy : JLit.T list -> T
+  val refresh_id : T -> T
+  val add_literal : JLit.T -> T -> T
+  val combine : T -> T -> T
+  val delete_lit_at : cpos -> T -> T
+  val length : T -> int
   val of_term : term * int -> T
   val term_of : T -> term
   val pretty_clause : Proof.context -> T -> string
@@ -17,8 +24,6 @@ sig
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T
   val subterm_at_full_pos : T -> full_pos -> term
   val occurs_deeply : term -> T -> bool
-
-
 end;
 
 structure JClause : JCLAUSE =
@@ -33,6 +38,23 @@ val literals = #literals
 val id = #id
 
 fun map_literals f { literals, id } = { literals = f literals, id = id }
+
+fun lit_at cp clause = nth (literals clause) cp
+
+fun dummy literals = { literals = literals, id = ~1 }
+
+fun map_id f { literals, id } = { literals = literals, id = f id }
+
+val refresh_id = map_id (K (Clause_Id.new ()))
+
+fun add_literal l = refresh_id o map_literals (cons l)
+
+fun combine c d =
+  map_literals (curry (op @) (literals c)) d |> refresh_id
+
+fun delete_lit_at cp = refresh_id o map_literals (nth_drop cp)
+
+val length = List.length o literals
 
 (* converts boolean terms to lists of literals *)
 fun of_term (t, id) =
@@ -62,7 +84,7 @@ fun pretty_clauses ctxt cs =
   |> Pretty.block
   |> Pretty.string_of
 
-fun cposs_of { literals, ... } = 0 upto (length literals - 1)
+fun cposs_of c = 0 upto (length c - 1)
 
 fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = JTerm.subterm_at_tpos (JLit.term_at_lpos (nth literals cp) lp) tp
 
