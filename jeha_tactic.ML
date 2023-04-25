@@ -5,7 +5,7 @@ sig
   val jeha_method : jeha_options * thm list -> Proof.context -> thm list -> tactic
   val jeha_tac : jeha_options -> Proof.context -> thm list -> int -> tactic
   val parse_jeha_options : jeha_options parser
-  val dump : ((Proof.context * int * Jeha.Passive_Set.T * clause list) list) Unsynchronized.ref
+  val dump : ((Proof.context * int * Jeha.Passive_Set.T * JClause.T list) list) Unsynchronized.ref
 end
 
 structure Jeha_Tactic : JEHA_TACTIC =

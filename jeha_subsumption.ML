@@ -8,19 +8,18 @@ Find l\<^sub>j', \<sigma> s.t. l\<^sub>i\<sigma> = l\<^sub>j', remove l\<^sub>j'
 Repeat until either subsumed or for l\<^sub>i, no matching l' can be found.
 In the latter case backtrack to i <- i-1 and try the next l' for l\<^sub>i. *)
 
-open Jeha_Lang
-
-signature Jeha_Subsumption =
+signature JEHA_SUBSUMPTION =
 sig
-  val literal_matchers : Proof.context -> (literal * literal) -> Envir.env Seq.seq
+  val literal_matchers : Proof.context -> (JLit.T * JLit.T) -> Envir.env Seq.seq
   (* Extend environment to match second argument against third. *)
-  val literal_subsumes : Proof.context -> (literal * literal) -> Envir.env option
-  val subsumed_alternatives : Proof.context -> (literal * clause) -> (Envir.env * clause) Seq.seq
+  val literal_subsumes : Proof.context -> (JLit.T * JLit.T) -> Envir.env option
+  (* FIXME: This type signature is wrong but *)
+  val subsumed_alternatives : Proof.context -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
   (* Top level clause subsumption. *)
-  val subsumes : Proof.context -> (clause * clause) -> bool
+  val subsumes : Proof.context -> (JClause.T * JClause.T) -> bool
 end;
 
-structure Jeha_Subsumption =
+structure Jeha_Subsumption : JEHA_SUBSUMPTION =
 struct
 
 fun literal_matchers ctxt ((s, t, b), (s', t', b')) =
@@ -64,7 +63,7 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
       let val subsumed =
         let
           (* apply the substitution (only to the subsuming clause) *)
-          val ls = (map o map_lit o norm_beta_eta_qeta_env) env ls
+          val ls = (map o JLit.map_lit o JTerm.norm_beta_eta_qeta_env) env ls
         in
           (* move on to next l in ls *)
           impl_subsumes ctxt (ls, d_without_l')

@@ -1,146 +1,30 @@
-
-signature JEHA_LANG =
+signature JTERM =
 sig
-  (* basics *)
-  type literal = term * term * bool
-  type clause = { literals: literal list, id : int }
-  datatype lpos = Left | Right
-  type cpos = int
-  val generate_fresh_id : unit -> int
-  val lit_of : term -> literal
-  val map_lit : (term -> term) -> literal -> literal
-  val map_literals : (literal list -> literal list) -> clause -> clause
-  val aconv_lit : literal * literal -> bool
-  val swap_lit : literal -> literal
-  val swap_lpos : lpos -> lpos
-  val mk_lit_eq_bool : term -> bool -> literal
-  val clause_of : term * int -> clause
-  val term_of_clause : clause -> term
-  val pretty_clause : Proof.context -> clause -> string
-  val pretty_clauses : Proof.context -> clause list -> string
+  (* type T = term *)
+  type tpos = int list (* position of a subterm *)
   val is_quantifier : term -> bool
   val quantified_typ : term -> typ
   val strip_comb_fun_types_args : term -> term * typ list * term list
   val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
-  type tpos = int list
-  type full_pos = tpos * lpos * cpos
-  val cposs_of : clause -> cpos list
-  val green_full_poss_of : clause -> full_pos list
   val tposs_of : term -> tpos list
   val green_tposs_of : term -> tpos list
   val subterm_at_tpos : term -> tpos -> term
-  val term_at_lpos : literal -> lpos -> term
   val map_at_tpos : tpos -> (term -> term) -> term -> term
-  val map_at_lpos : lpos -> (term -> term) -> literal -> literal
-  val map_at_cpos : cpos -> (literal -> literal) -> clause -> clause
-  val map_at_full_pos : full_pos -> (term -> term) -> clause -> clause
-  val subterm_at_full_pos : clause -> full_pos -> term
   (* preprocessing *)
   val fold_non_greens_lvl : (int -> term -> 'a -> 'a) -> int -> term -> 'a -> 'a
   val fold_non_greens : (term -> 'a -> 'a) -> term -> 'a -> 'a
   val might_be_fluid : term -> bool
-  val occurs_deeply : term -> clause -> bool
+  val occurs_deeply_in_term : term -> term -> bool
   val norm_quantifier_poly_eq : term -> term
   (* normalization *)
   val norm_beta_eta_qeta_env : Envir.env -> term -> term
   val norm_beta_eta_qeta : term -> term
 end;
 
-structure Jeha_Lang : JEHA_LANG =
+structure JTerm : JTERM =
 struct
 
-(* equation or disequation *)
-type literal = term * term * bool;
-(* disjunction of literals *)
-type clause = { literals: literal list, id: int };
-(* left or right side of an equational literal *)
-datatype lpos = Left | Right;
-(* position of literal in a clause *)
-type cpos = int;
-
-local
-  val lock = Mutex.mutex ();
-in
-  fun critical e () = Multithreading.synchronized "jeha" lock e
-end;
-
-(* basically newId from metis.ML *)
-val generate_fresh_id  =
-  let
-    (* the next id that will be given out *)
-    val counter = Unsynchronized.ref 0
-    fun next_id _ =
-      let
-        val Unsynchronized.ref new_id = counter
-        val () = counter := new_id + 1
-      in
-        new_id
-      end
-  in
-    fn () => critical next_id ()
-  end
-
-fun map_literals f { literals, id } = { literals = f literals, id = id }
-
-fun swap_lit (s, t, b) = (t, s, b)
-
-fun swap_lpos Left = Right
-  | swap_lpos Right = Left
-
-fun map_lit f (s, t, b) = (f s, f t, b)
-
-fun aconv_lit ((s, t, b), (s', t', b')) =
-  b = b' andalso
-    (s aconv s' andalso t aconv t' orelse s aconv t' andalso t aconv t')
-
-(* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
-(* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
-(see similar comment in dest_eq_bool_lit) *)
-fun mk_lit_eq_bool (@{term Not} $ t) b = mk_lit_eq_bool t (not b)
-  | mk_lit_eq_bool t b = (t, if b then @{term True} else @{term False}, true)
-
-(* turn a boolean term into an equational literal *)
-fun lit_of t =
-  let
-    fun lit_of_aux b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
-      | lit_of_aux b (@{term Not} $ t) = lit_of_aux (not b) t
-      (* FIXME: Should we prefer equation to disequations when injecting booleans? *)
-      | lit_of_aux b t = (t, if b then @{term True} else @{term False}, true)
-  in
-    if not (fastype_of t = @{typ bool})
-      then error "can only turn boolean terms into clauses"
-      else lit_of_aux true t
-  end
-
-(* converts boolean terms to lists of literals *)
-fun clause_of (t, id) =
-  if not (fastype_of t = @{typ bool})
-    then error "can only turn boolean terms into clauses"
-    else { literals = HOLogic.disjuncts t |> map lit_of, id = id }
-
-fun term_of_lit (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
-
-fun term_of_clause { literals = [], ... } = @{term False}
-  | term_of_clause { literals = (c as (_ :: _)), ... } =
-      let
-        val (x :: xs) = rev c
-      in
-        fold (curry HOLogic.mk_disj) (map term_of_lit xs) (term_of_lit x)
-      end
-
-fun pretty_clause ctxt (c as { id, ... }) =
-  @{make_string} id ^ ":" ^ Jeha_Common.pretty_term ctxt (term_of_clause c)
-
-fun pretty_clauses ctxt cs =
-  cs
-  |> map (fn c =>
-      Pretty.block
-        [Pretty.str (@{make_string} (#id c) ^ ":")
-        , Syntax.pretty_term ctxt (term_of_clause c)
-        ])
-  |> Pretty.commas
-  |> Pretty.block
-  |> Pretty.string_of
+(* type T = term *)
 
 fun is_quantifier (Const (@{const_name HOL.All}, _)) = true
   | is_quantifier (Const (@{const_name HOL.Ex}, _)) = true
@@ -170,11 +54,6 @@ fun strip_comb_fun_types_args t = strip_comb_fun_types_args1 ([], t)
 
 (* Term position, mostly for documentation / testing purposes. See long comment at bottom. *)
 type tpos = int list;
-type full_pos = tpos * lpos * cpos
-
-fun cposs_of { literals, ... } = 0 upto (length literals - 1)
-
-fun lposs_of _ = [Left, Right]
 
 fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
   | tposs_of (t as (_$_)) =
@@ -221,16 +100,6 @@ fun subterm_at_tpos t [] = t
   | subterm_at_tpos (t as (_$_)) (i :: p) = subterm_at_tpos (nth (uncurry cons (strip_comb t)) i) p
   | subterm_at_tpos _ _ = error ""
 
-fun term_at_lpos (l, _, _) Left = l
-  | term_at_lpos (_, r, _) Right = r
-
-fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = subterm_at_tpos (term_at_lpos (nth literals cp) lp) tp
-
-fun green_full_poss_of c =
-  cposs_of c
-  |> maps (fn cp => [Left, Right] |> map (fn lp => (subterm_at_full_pos c ([], lp, cp), lp, cp)))
-  |> maps (fn (t, lp, cp) => map (fn tp => (tp, lp, cp)) (green_tposs_of t))
-
 fun head_tail_pair [] = error ""
   | head_tail_pair (x :: xs) = (x, xs)
 
@@ -239,13 +108,6 @@ fun map_at_tpos [] f t = f t
   | map_at_tpos (i :: p) f (t as (_$_)) =
       t |> strip_comb |> uncurry cons |> nth_map i (map_at_tpos p f) |> head_tail_pair |> list_comb
   | map_at_tpos _ _ _ = error ""
-
-fun map_at_lpos Left f (l, r, b) = (f l, r, b)
-  | map_at_lpos Right f (l, r, b) = (l, f r, b)
-
-val map_at_cpos = map_literals oo nth_map
-
-fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (map_at_lpos lp (map_at_tpos tp f)) c
 
 fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (acc : 'a) =
   case t of
@@ -320,11 +182,6 @@ fun occurs_deeply_in_term x (t as (_ $ _)) =
   | occurs_deeply_in_term x (Abs(_,_,v)) = occurs_in_term x v
   (* in particular: x does not occur deeply in x *)
   | occurs_deeply_in_term _ _ = false
-
-fun occurs_deeply_in_lit x (l, r, _) = occurs_deeply_in_term x l orelse occurs_deeply_in_term x r
-
-fun occurs_deeply (x as (Var _)) { literals, ... }= exists (occurs_deeply_in_lit x) literals
-  | occurs_deeply _ _ = error "only Vars can occur deeply"
 
 (* Q\<^sub>\<approx> normalizes, i.e. applies the rewrite rules
     \<forall> \<mapsto> \<lambda>y. y = (\<lambda>x. True)  (this is the polymorphic HOL.eq)

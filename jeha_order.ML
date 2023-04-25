@@ -62,20 +62,20 @@ fun type_weight (Type (_, Ts)) = const_weight +++ fold (curry (op +++)) (map typ
 fun term_weight _ (Var _) = var_weight
   | term_weight _ (Free _) = const_weight
   | term_weight below_lam (t as (Const _)) =
-      if Jeha_Lang.is_quantifier t then quantifier_weight below_lam else const_weight
+      if JTerm.is_quantifier t then quantifier_weight below_lam else const_weight
   | term_weight _ (Bound _) = bound_weight
   | term_weight below_lam t =
-      if Jeha_Lang.might_be_fluid t
+      if JTerm.might_be_fluid t
         then var_weight (* z\<^sub>t *)
         else case t of
           Abs (_, T, t) => fo_lambda_weight +++ type_weight T +++ term_weight true t
         | (_ $ _) =>
-            let val (f, Ts, us) = Jeha_Lang.strip_comb_fun_types_args t in 
+            let val (f, Ts, us) = JTerm.strip_comb_fun_types_args t in 
               (* weight of f, FIXME: pass (f, length (?)) to symbol weight function *)
               const_weight
               (* type args of FO fun. symbol *)
               +++ fold (curry (op +++)) (map type_weight Ts) zero_weight
-              +++ (if Jeha_Lang.is_quantifier f
+              +++ (if JTerm.is_quantifier f
                     (* descend directly into body of lambda *)
                     then
                       let val [(Abs (_, _, u))] = us in term_weight below_lam u end
@@ -142,16 +142,16 @@ fun add_term increment (t as (Var _)) = add_var increment t
   | add_term _ (Const _) = I
   | add_term _ (Bound 0) = I
   | add_term increment t =
-      if Jeha_Lang.might_be_fluid t
+      if JTerm.might_be_fluid t
         then add_var increment t
         else case t of
           (* FIXME: separate variable occurences below lambdas (if that is the correct reading of
           o\<lambda>Sup paper, p. 28. Maybe use (dummy $ Var x) to distinguish below lambdas. *)
           Abs (_, T, t) => add_type increment T #> add_term increment t
         | (_ $ _) =>
-            let val (f, Ts, us) = Jeha_Lang.strip_comb_fun_types_args t in 
+            let val (f, Ts, us) = JTerm.strip_comb_fun_types_args t in 
               fold (add_type increment) Ts #>
-                (if Jeha_Lang.is_quantifier f
+                (if JTerm.is_quantifier f
                   (* descend directly into body of lambda *)
                   then let val [(Abs (_, _, u))] = us in add_term increment u end
                   else fold (add_term increment) us)
@@ -192,16 +192,16 @@ fun to_fo_headed_term1 (boundTs, t as (Var _)) = (boundTs, FluidOrVar t)
   | to_fo_headed_term1 (boundTs, t as (Const _)) = (boundTs, App (Fun (t, 0), [] , []))
   | to_fo_headed_term1 (boundTs, t as (Bound _)) = (boundTs, App (Fun (t, 0), [], []))
   | to_fo_headed_term1 (boundTs, t) =
-      if Jeha_Lang.might_be_fluid t
+      if JTerm.might_be_fluid t
         then (boundTs, FluidOrVar t)
         else case t of
           (* FIXME: fresh variables under lambda? *)
           Abs (_, T, u) => (T::boundTs, App (Lam, [T], [u]))
         | (_ $ _) =>
             let
-              val (f, Ts, ts) = Jeha_Lang.strip_comb_fun_types_args1 (boundTs, t)
+              val (f, Ts, ts) = JTerm.strip_comb_fun_types_args1 (boundTs, t)
               val (boundTs, Ts, ts) =
-                if Jeha_Lang.is_quantifier f
+                if JTerm.is_quantifier f
                   (* the FO type argument of a quantifier is the binder type, not the type of the
                   lambda *)
                   then let val [Abs(_, T, u)] = ts in (T::boundTs, [T], [u]) end
@@ -212,7 +212,7 @@ fun to_fo_headed_term1 (boundTs, t as (Var _)) = (boundTs, FluidOrVar t)
 
 fun fo_head_weight below_lam Lam = fo_lambda_weight
   | fo_head_weight below_lam (Fun (f, _)) =
-      if Jeha_Lang.is_quantifier f then quantifier_weight below_lam else const_weight
+      if JTerm.is_quantifier f then quantifier_weight below_lam else const_weight
 
 (* FIXME: just prec *)
 fun ho_prec_ord (Bound i, Bound j) = int_ord (i, j)
@@ -353,14 +353,14 @@ fun to_fo_term1 (_, t as (Var _)) = FluidOrVar t
   | to_fo_term1 (_, t as (Const _)) = App (Fun (t, 0), [])
   | to_fo_term1 (_, t as (Bound _)) = App (Fun (t, 0), [])
   | to_fo_term1 (boundTs, t) =
-      if Jeha_Lang.might_be_fluid t
+      if JTerm.might_be_fluid t
         then FluidOrVar t
         else case t of
           (* FIXME: fresh variables under lambda *)
           Abs (_, T, u) => App (Lam, [Type T, to_fo_term1 (T::boundTs, u)])
         | (_ $ _) =>
             let
-              val (f, Ts, ts) = Jeha_Lang.strip_comb_fun_types_args1 (boundTs, t)
+              val (f, Ts, ts) = JTerm.strip_comb_fun_types_args1 (boundTs, t)
             in
               let
                 val (boundTs, ts) =
