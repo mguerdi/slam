@@ -101,7 +101,7 @@ ML \<open>
   fun pretty_green_nongreen_subterms ctxt term =
     let
       val tposs = JTerm.green_tposs_of term;
-      val green_subterms = map (JTerm.subterm_at_tpos term) tposs;
+      val green_subterms = map (JTerm.subterm_at term) tposs;
       val non_green_subterms = JTerm.fold_non_greens cons term [];
     in
       "term:\t\t" ^ pretty_term ctxt term ^ "\ngreens:\t\t" ^ pretty_terms ctxt green_subterms ^

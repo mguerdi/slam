@@ -67,7 +67,7 @@ fun term_of { literals = [], ... } = @{term False}
       let
         val (x :: xs) = rev c
       in
-        fold (curry HOLogic.mk_disj) (map JLit.term_of_lit xs) (JLit.term_of_lit x)
+        fold (curry HOLogic.mk_disj) (map JLit.term_of xs) (JLit.term_of x)
       end
 
 fun pretty_clause ctxt (c as { id, ... }) =
@@ -86,7 +86,7 @@ fun pretty_clauses ctxt cs =
 
 fun cposs_of c = 0 upto (length c - 1)
 
-fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = JTerm.subterm_at_tpos (JLit.term_at_lpos (nth literals cp) lp) tp
+fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = JTerm.subterm_at (JLit.term_at_lpos (nth literals cp) lp) tp
 
 fun green_full_poss_of c =
   cposs_of c
@@ -95,9 +95,9 @@ fun green_full_poss_of c =
 
 val map_at_cpos = map_literals oo nth_map
 
-fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (JLit.map_at_lpos lp (JTerm.map_at_tpos tp f)) c
+fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (JLit.map_at_lpos lp (JTerm.map_at tp f)) c
 
-fun occurs_deeply (x as (Var _)) { literals, ... }= exists (JLit.occurs_deeply_in_lit x) literals
+fun occurs_deeply (x as (Var _)) { literals, ... }= exists (JLit.occurs_deeply_in x) literals
   | occurs_deeply _ _ = error "only Vars can occur deeply"
 
 end;

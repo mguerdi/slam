@@ -56,22 +56,22 @@ represents \<longleftrightarrow> as HOL.eq) *)
 fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
-      then [fold JClause.add_literal [JLit.mk_lit_eq_bool s b, JLit.mk_lit_eq_bool t b] c]
+      then [fold JClause.add_literal [JLit.mk_pred s b, JLit.mk_pred t b] c]
       else
-        [ JClause.add_literal (JLit.mk_lit_eq_bool s b) c
-        , JClause.add_literal (JLit.mk_lit_eq_bool t b) c
+        [ JClause.add_literal (JLit.mk_pred s b) c
+        , JClause.add_literal (JLit.mk_pred t b) c
         ]
   | outer_clausify b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
       then
-        [ JClause.add_literal (JLit.mk_lit_eq_bool s b) c
-        , JClause.add_literal (JLit.mk_lit_eq_bool t b) c
+        [ JClause.add_literal (JLit.mk_pred s b) c
+        , JClause.add_literal (JLit.mk_pred t b) c
         ]
-      else [fold JClause.add_literal [JLit.mk_lit_eq_bool s b, JLit.mk_lit_eq_bool t b] c]
+      else [fold JClause.add_literal [JLit.mk_pred s b, JLit.mk_pred t b] c]
   | outer_clausify b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
-      (* rewrite as disjunction, additional not will be removed in JLit.mk_lit_eq_bool *)
+      (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
       outer_clausify b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
-  | outer_clausify b s c = [JClause.add_literal (JLit.mk_lit_eq_bool s b) c]
+  | outer_clausify b s c = [JClause.add_literal (JLit.mk_pred s b) c]
 
 (*** Rules ***)
 (* rule implementation checklist:
@@ -99,7 +99,7 @@ fun contains_syntactic_equation [] = false
 (* Syntactic tautology deletion 2 (TD2) (Schulz) *)
 fun contains_syntactic_complementaries [] = false
   | contains_syntactic_complementaries (l as (s, t, b) :: ls) =
-      exists (curry JLit.aconv_lit (s, t, not b)) ls orelse contains_syntactic_complementaries ls
+      exists (curry JLit.aconv (s, t, not b)) ls orelse contains_syntactic_complementaries ls
 
 (* FIXME: implement semantic tautology deletion? *)
 
@@ -107,7 +107,7 @@ fun contains_syntactic_complementaries [] = false
 fun simp_delete_duplicated_lits ctxt c =
   let
     fun impl_simp_delete_duplicated_lits [] = []
-      | impl_simp_delete_duplicated_lits (l :: ls) = l :: filter (not o (curry JLit.aconv_lit l)) ls
+      | impl_simp_delete_duplicated_lits (l :: ls) = l :: filter (not o (curry JLit.aconv l)) ls
     val c' = JClause.map_literals impl_simp_delete_duplicated_lits c
   in
     if JClause.length c' = JClause.length c
@@ -144,8 +144,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
   if not (positive = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
     (* make variables distinct *)
-    val unit_clause = JClause.map_literals (map (JLit.map_lit (prefix_Vars_TVars "L"))) unit_clause
-    val target_clause = JClause.map_literals (map (JLit.map_lit (prefix_Vars_TVars "R"))) target_clause
+    val unit_clause = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "L"))) unit_clause
+    val target_clause = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "R"))) target_clause
     val (from, to) = apply2 (JLit.term_at_lpos (the_single (JClause.literals unit_clause))) (lp, JLit.swap_lpos lp) (* Schulz: (s, t) *)
     val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
     val matchers = Unify.matchers (Context.Proof ctxt) [(from, target_term)]
@@ -169,7 +169,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
             in
               Jeha_Common.trace_msg ctxt (fn () => msg);
               writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher)));
-              SOME (JClause.map_literals (map (JLit.map_lit JTerm.norm_beta_eta_qeta)) rewritten_clause)
+              SOME (JClause.map_literals (map (JLit.map JTerm.norm_beta_eta_qeta)) rewritten_clause)
             end
           else
             NONE
@@ -213,7 +213,7 @@ fun find_single_green_disagreement ctxt term_pair : JTerm.tpos =
             JTerm.green_tposs_of t
             (* filter out the ones that don't point to affected variables *)
             |> filter (fn tp =>
-                case JTerm.subterm_at_tpos t tp of
+                case JTerm.subterm_at t tp of
                   Var (x, _) => exists (curry (op =) x) affected_vars
                 | _ => false)
           val common_suffix : JTerm.tpos list -> JTerm.tpos =
@@ -237,8 +237,8 @@ fun literal_can_match_single_disagreement ctxt lit target_lit =
     (* Schulz: p *)
     val single_disagreement_position = find_single_green_disagreement ctxt (target_lhs, target_rhs)
     val (target_term_lhs, target_term_rhs) = (* u|\<^sub>p *)
-      (JTerm.subterm_at_tpos target_lhs single_disagreement_position,
-      JTerm.subterm_at_tpos target_rhs single_disagreement_position)
+      (JTerm.subterm_at target_lhs single_disagreement_position,
+      JTerm.subterm_at target_rhs single_disagreement_position)
     (* FIXME: does matching need renaming or not? *)
     val exists_matcher =
       (Unify.matchers (Context.Proof ctxt) ([(lhs, target_lhs), (rhs, target_rhs)]),
@@ -319,7 +319,7 @@ fun dest_eq_bool_lit (s, t, true) =
   else if is_boolean_const s
     then (t, s)
   else error "neither is HOL.True or HOL.False"
-  (* FIXME: allow disequations? (see similar comment above mk_lit_eq_bool) *)
+  (* FIXME: allow disequations? (see similar comment above mk_pred) *)
   | dest_eq_bool_lit _ = error "disequation"
 
 (* PosOuterClaus and NegOuterClaus simplficiations *)
@@ -342,12 +342,12 @@ fun infer_eq_neq_outer_claus c i =
       then error "not boolean equation"
     else if b
       then (* EqOuterClaus *)
-        [ fold JClause.add_literal [JLit.mk_lit_eq_bool s false, JLit.mk_lit_eq_bool t true] c
-        , fold JClause.add_literal [JLit.mk_lit_eq_bool s true, JLit.mk_lit_eq_bool t false] c
+        [ fold JClause.add_literal [JLit.mk_pred s false, JLit.mk_pred t true] c
+        , fold JClause.add_literal [JLit.mk_pred s true, JLit.mk_pred t false] c
         ]
       else (* NeqOuterClaus *)
-        [ fold JClause.add_literal [JLit.mk_lit_eq_bool s false, JLit.mk_lit_eq_bool t false] c
-        , fold JClause.add_literal [JLit.mk_lit_eq_bool s true, JLit.mk_lit_eq_bool t true] c
+        [ fold JClause.add_literal [JLit.mk_pred s false, JLit.mk_pred t false] c
+        , fold JClause.add_literal [JLit.mk_pred s true, JLit.mk_pred t true] c
         ]
   end
 
@@ -361,8 +361,8 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
     OR: try to use Envir.empty max_idx (augment clauses with max_idx?) and Envir.genvar
     SEE: COMP_INCR maybe?
     NOTE: how to handle TVars? *)
-    val d = JClause.map_literals (map (JLit.map_lit (prefix_Vars_TVars "L"))) d
-    val c = JClause.map_literals (map (JLit.map_lit (prefix_Vars_TVars "R"))) c
+    val d = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "L"))) d
+    val c = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "R"))) c
     val (_, _, is_pos_eq) = JClause.lit_at cp d
     val t = JClause.subterm_at_full_pos d ([], lp, cp)
     val t' = JClause.subterm_at_full_pos d ([], JLit.swap_lpos lp, cp)
@@ -388,7 +388,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
           in
             (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
             JClause.combine d' ct'
-            |> JClause.map_literals (map (JLit.map_lit (JTerm.norm_beta_eta_qeta_env unifier)))
+            |> JClause.map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env unifier)))
             |> JClause.refresh_id
           end
       in
@@ -408,7 +408,7 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
         val c' = JClause.delete_lit_at cp c
       in
         (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-        JClause.map_literals (map (JLit.map_lit (JTerm.norm_beta_eta_qeta_env unifier))) c'
+        JClause.map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env unifier))) c'
         |> JClause.refresh_id
       end
   in

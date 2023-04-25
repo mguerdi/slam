@@ -8,13 +8,13 @@ sig
   val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
   val tposs_of : term -> tpos list
   val green_tposs_of : term -> tpos list
-  val subterm_at_tpos : term -> tpos -> term
-  val map_at_tpos : tpos -> (term -> term) -> term -> term
+  val subterm_at : term -> tpos -> term
+  val map_at : tpos -> (term -> term) -> term -> term
   (* preprocessing *)
   val fold_non_greens_lvl : (int -> term -> 'a -> 'a) -> int -> term -> 'a -> 'a
   val fold_non_greens : (term -> 'a -> 'a) -> term -> 'a -> 'a
   val might_be_fluid : term -> bool
-  val occurs_deeply_in_term : term -> term -> bool
+  val occurs_deeply_in : term -> term -> bool
   val norm_quantifier_poly_eq : term -> term
   (* normalization *)
   val norm_beta_eta_qeta_env : Envir.env -> term -> term
@@ -92,22 +92,22 @@ fun green_tposs_of (t as (_$_)) =
   | green_tposs_of _ = [[]] (* [\<epsilon>] *)
 
 (* t|\<^sub>p *)
-fun subterm_at_tpos t [] = t
-  | subterm_at_tpos (Abs(_,_,u)) (0 :: p) = subterm_at_tpos u p
+fun subterm_at t [] = t
+  | subterm_at (Abs(_,_,u)) (0 :: p) = subterm_at u p
   (* FIXME: when you forget to bind the t (via as) there is no warning and when
   you call the function from somewhere else, where a t has been declared it uses
   that. Scoping broken?? *)
-  | subterm_at_tpos (t as (_$_)) (i :: p) = subterm_at_tpos (nth (uncurry cons (strip_comb t)) i) p
-  | subterm_at_tpos _ _ = error ""
+  | subterm_at (t as (_$_)) (i :: p) = subterm_at (nth (uncurry cons (strip_comb t)) i) p
+  | subterm_at _ _ = error ""
 
 fun head_tail_pair [] = error ""
   | head_tail_pair (x :: xs) = (x, xs)
 
-fun map_at_tpos [] f t = f t
-  | map_at_tpos (0 :: p) f (Abs(x,T,u)) = Abs(x,T,map_at_tpos p f u)
-  | map_at_tpos (i :: p) f (t as (_$_)) =
-      t |> strip_comb |> uncurry cons |> nth_map i (map_at_tpos p f) |> head_tail_pair |> list_comb
-  | map_at_tpos _ _ _ = error ""
+fun map_at [] f t = f t
+  | map_at (0 :: p) f (Abs(x,T,u)) = Abs(x,T,map_at p f u)
+  | map_at (i :: p) f (t as (_$_)) =
+      t |> strip_comb |> uncurry cons |> nth_map i (map_at p f) |> head_tail_pair |> list_comb
+  | map_at _ _ _ = error ""
 
 fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (acc : 'a) =
   case t of
@@ -155,7 +155,7 @@ fun might_be_fluid (t as (Abs _)) = is_not_ground t
   | might_be_fluid (t as (_ $ _)) = (case strip_comb t of (Var _, _) => true | _ => false)
   | might_be_fluid _ = false
 
-fun occurs_in_term x = exists_subterm (curry (op =) x)
+fun occurs_in x = exists_subterm (curry (op =) x)
 
 (* FIXME: Check that this is the correct reading of Definition 23.
 
@@ -167,21 +167,21 @@ s u\<^sub>n       iff. x occurs deeply in s or x occurs deeply in any u\<^sub>i
 (\<lambda>z.v)     iff. x occurs in v
 
 Idea: recurse until condition is encountered which makes every occurence deep. *)
-fun occurs_deeply_in_term x (t as (_ $ _)) =
+fun occurs_deeply_in x (t as (_ $ _)) =
   let
     val (head, args) = strip_comb t
   in
     case head of
-      Var _ => exists (occurs_in_term x) args
+      Var _ => exists (occurs_in x) args
     | _ =>
         if is_quantifier head andalso is_Abs (the_single args)
-          then let val Abs(_,_,v) = the_single args in occurs_deeply_in_term x v end
-          else exists (occurs_deeply_in_term x) (head :: args)
+          then let val Abs(_,_,v) = the_single args in occurs_deeply_in x v end
+          else exists (occurs_deeply_in x) (head :: args)
   end
   (* we know this abstraction will not be directly below a quantifier *)
-  | occurs_deeply_in_term x (Abs(_,_,v)) = occurs_in_term x v
+  | occurs_deeply_in x (Abs(_,_,v)) = occurs_in x v
   (* in particular: x does not occur deeply in x *)
-  | occurs_deeply_in_term _ _ = false
+  | occurs_deeply_in _ _ = false
 
 (* Q\<^sub>\<approx> normalizes, i.e. applies the rewrite rules
     \<forall> \<mapsto> \<lambda>y. y = (\<lambda>x. True)  (this is the polymorphic HOL.eq)

@@ -6,15 +6,16 @@ sig
   val is_positive : T -> bool
   val of_term : term -> T
   val lposs_of : T -> lpos list
-  val map_lit : (term -> term) -> T -> T
-  val aconv_lit : T * T -> bool
-  val swap_lit : T -> T
+  val map : (term -> term) -> T -> T
+  val aconv : T * T -> bool
+  val swap : T -> T
   val swap_lpos : lpos -> lpos
-  val mk_lit_eq_bool : term -> bool -> T
-  val term_of_lit : T -> term
+  (* make predicate literal, by equating the term to the boolean *)
+  val mk_pred : term -> bool -> T
+  val term_of : T -> term
   val term_at_lpos : T -> lpos -> term
   val map_at_lpos : lpos -> (term -> term) -> T -> T
-  val occurs_deeply_in_lit : term -> T -> bool
+  val occurs_deeply_in : term -> T -> bool
 end;
 
 structure JLit : JLIT =
@@ -25,7 +26,7 @@ datatype lpos = Left | Right
 
 fun is_positive (_, _, b) = b
 
-fun map_lit f (s, t, b) = (f s, f t, b)
+fun map f (s, t, b) = (f s, f t, b)
 
 fun lposs_of _ = [Left, Right]
 
@@ -42,11 +43,11 @@ fun of_term t =
       else lit_of_aux true t
   end
 
-fun aconv_lit ((s, t, b), (s', t', b')) =
+fun aconv ((s, t, b), (s', t', b')) =
   b = b' andalso
-    (s aconv s' andalso t aconv t' orelse s aconv t' andalso t aconv t')
+    (Term.aconv (s, s') andalso Term.aconv (t, t') orelse Term.aconv (s, t') andalso Term.aconv (t, t'))
 
-fun swap_lit (s, t, b) = (t, s, b)
+fun swap (s, t, b) = (t, s, b)
 
 fun swap_lpos Left = Right
   | swap_lpos Right = Left
@@ -54,10 +55,10 @@ fun swap_lpos Left = Right
 (* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
 (* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
 (see similar comment in dest_eq_bool_lit) *)
-fun mk_lit_eq_bool (@{term Not} $ t) b = mk_lit_eq_bool t (not b)
-  | mk_lit_eq_bool t b = (t, if b then @{term True} else @{term False}, true)
+fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
+  | mk_pred t b = (t, if b then @{term True} else @{term False}, true)
 
-fun term_of_lit (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
+fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 
 fun term_at_lpos (l, _, _) Left = l
   | term_at_lpos (_, r, _) Right = r
@@ -65,6 +66,6 @@ fun term_at_lpos (l, _, _) Left = l
 fun map_at_lpos Left f (l, r, b) = (f l, r, b)
   | map_at_lpos Right f (l, r, b) = (l, f r, b)
 
-fun occurs_deeply_in_lit x (l, r, _) = JTerm.occurs_deeply_in_term x l orelse JTerm.occurs_deeply_in_term x r
+fun occurs_deeply_in x (l, r, _) = JTerm.occurs_deeply_in x l orelse JTerm.occurs_deeply_in x r
 
 end;
