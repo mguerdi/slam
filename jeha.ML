@@ -58,16 +58,16 @@ represents \<longleftrightarrow> as HOL.eq) *)
 fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
-      then [mk_lit_eq_bool s b :: mk_lit_eq_bool t b :: c]
-      else [mk_lit_eq_bool s b :: c, mk_lit_eq_bool t b :: c]
+      then [{ literals = mk_lit_eq_bool s b :: mk_lit_eq_bool t b :: #literals c, id = generate_fresh_id () }]
+      else [{ literals = mk_lit_eq_bool s b :: #literals c, id = generate_fresh_id () }, { literals = mk_lit_eq_bool t b :: #literals c, id = generate_fresh_id () }]
   | outer_clausify b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
-      then [mk_lit_eq_bool s b :: c, mk_lit_eq_bool t b :: c]
-      else [mk_lit_eq_bool s b :: mk_lit_eq_bool t b :: c]
+      then [{ literals = mk_lit_eq_bool s b :: #literals c, id = generate_fresh_id () }, { literals = mk_lit_eq_bool t b :: #literals c, id = generate_fresh_id () }]
+      else [{ literals = mk_lit_eq_bool s b :: mk_lit_eq_bool t b :: #literals c, id = generate_fresh_id () }]
   | outer_clausify b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in mk_lit_eq_bool *)
       outer_clausify b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
-  | outer_clausify b s c = [mk_lit_eq_bool s b :: c]
+  | outer_clausify b s c = [{ literals = mk_lit_eq_bool s b :: #literals c, id = generate_fresh_id () }]
 
 (*** Rules ***)
 (* rule implementation checklist:
@@ -100,36 +100,36 @@ fun contains_syntactic_complementaries [] = false
 (* FIXME: implement semantic tautology deletion? *)
 
 (* Deletion of duplicated literals (DD) (Schulz) *)
-fun simp_delete_duplicated_lits ctxt c =
+fun simp_delete_duplicated_lits ctxt (c as { literals, id }) =
   let
     fun impl_simp_delete_duplicated_lits [] = []
       | impl_simp_delete_duplicated_lits (l :: ls) = l :: filter (not o (curry aconv_lit l)) ls
-    val c' = impl_simp_delete_duplicated_lits c
+    val literals' = impl_simp_delete_duplicated_lits literals
   in
-    if length c' = length c
+    if length literals' = length literals
       then NONE
       else
         (Jeha_Common.trace_msg ctxt (fn () =>
-          "deleted duplicated literals in " ^ Jeha_Common.pretty_term ctxt (term_of_clause c));
-        SOME c')
+          "deleted duplicated literals in " ^ pretty_clause ctxt c);
+        SOME { literals = literals', id = generate_fresh_id () })
   end
 
 (* Deletion of resolved literals (DR) (Schulz) *)
-fun simp_delete_resolved_lits ctxt c =
+fun simp_delete_resolved_lits ctxt (c as { literals, id }) =
   let
     val impl_simp_delete_resolved_lits =
       filter (fn (s, t, is_positive) => not (not is_positive andalso s aconv t))
-    val c' = impl_simp_delete_resolved_lits c
+    val literals' = impl_simp_delete_resolved_lits literals
   in
-    if length c' = length c
+    if length literals' = length literals
       then NONE
       else
         (Jeha_Common.trace_msg ctxt (fn () =>
-          "deleted resolved literals in " ^ Jeha_Common.pretty_term ctxt (term_of_clause c));
-        SOME c')
+          "deleted resolved literals in " ^ pretty_clause ctxt c);
+        SOME { literals = literals', id = generate_fresh_id  () })
   end
 
-fun is_pos_unit [(_, _, true)] = true
+fun is_pos_unit { literals = [(_, _, true)], ... } = true
   | is_pos_unit _ = false
 
 (* Rewriting of positive (RP) or negative literals (RN) simplification (Schulz) *)
@@ -137,19 +137,19 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
   (* check unit_clause *)
   if not (is_pos_unit unit_clause) then NONE else
   (* check that to be rewritten literal is indeed positive / negative *)
-  if not (positive = #3 (nth target_clause target_cp)) then NONE else
+  if not (positive = #3 (nth (#literals target_clause) target_cp)) then NONE else
   let
     (* make variables distinct *)
-    val unit_clause = map (map_lit (prefix_Vars_TVars "L")) unit_clause
-    val target_clause = map (map_lit (prefix_Vars_TVars "R")) target_clause
-    val (from, to) = apply2 (term_at_lpos (the_single unit_clause)) (lp, swap_lpos lp) (* Schulz: (s, t) *)
+    val unit_clause = map_literals (map (map_lit (prefix_Vars_TVars "L"))) unit_clause
+    val target_clause = map_literals (map (map_lit (prefix_Vars_TVars "R"))) target_clause
+    val (from, to) = apply2 (term_at_lpos (the_single (#literals unit_clause))) (lp, swap_lpos lp) (* Schulz: (s, t) *)
     val target_term = subterm_at_full_pos target_clause j (* Schulz: u *)
     val matchers = Unify.matchers (Context.Proof ctxt) [(from, target_term)]
     fun build_conclusion matcher =
       let
         val msg =  "   " ^ (if positive then "(RP)" else "(RN)")
           ^ " rewriting " ^ Jeha_Common.pretty_term ctxt target_term
-          ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
+          ^ " in " ^ pretty_clause ctxt target_clause
           ^ " with " ^ Jeha_Common.pretty_term ctxt from
           ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
         (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
@@ -165,7 +165,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
             in
               Jeha_Common.trace_msg ctxt (fn () => msg);
               writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher)));
-              SOME (map (map_lit norm_beta_eta_qeta) rewritten_clause)
+              SOME (map_literals (map (map_lit norm_beta_eta_qeta)) rewritten_clause)
             end
           else
             NONE
@@ -254,20 +254,20 @@ fun literal_can_match_single_disagreement ctxt lit target_lit =
 fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   if not (is_pos_unit unit_clause) then NONE else
   (* check that to be deleted literal is indeed negative *)
-  if not (false = #3 (nth target_clause target_cp)) then NONE else
+  if not (false = #3 (nth (#literals target_clause) target_cp)) then NONE else
   let
-    val lit = the_single unit_clause (* Schulz: s, t *)
-    val target_lit = nth target_clause target_cp (* Schulz: u[], u[]*)
+    val lit = the_single (#literals unit_clause) (* Schulz: s, t *)
+    val target_lit = nth (#literals target_clause) target_cp (* Schulz: u[], u[]*)
     val exists_matcher = literal_can_match_single_disagreement ctxt lit target_lit
     (* tracing *)
     val msg =  "   " ^ "(PS)"
-      ^ " rewriting " ^ Jeha_Common.pretty_term ctxt (term_of_clause [target_lit])
-      ^ " in " ^ Jeha_Common.pretty_term ctxt (term_of_clause target_clause)
-      ^ " with " ^ Jeha_Common.pretty_term ctxt (term_of_clause [lit])
+      ^ " rewriting " ^ pretty_clause ctxt { literals = [target_lit], id = ~1 }
+      ^ " in " ^ pretty_clause ctxt target_clause
+      ^ " with " ^ pretty_clause ctxt { literals = [lit], id = ~1 }
   in
     if exists_matcher
       then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
-        SOME (nth_drop target_cp target_clause)
+        SOME (map_literals (nth_drop target_cp) target_clause)
       end
       else NONE
   end
@@ -276,20 +276,20 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
 fun equality_subsumes ctxt (unit_clause, target_clause) =
   if not (is_pos_unit unit_clause) then false else
   let
-    val lit = the_single unit_clause (* Schulz: s, t *)
-    val positive_lits = filter #3 target_clause
+    val lit = the_single (#literals unit_clause) (* Schulz: s, t *)
+    val positive_lits = filter #3 (#literals target_clause)
     val exists_matcher = exists (literal_can_match_single_disagreement ctxt lit) positive_lits
     val _ = if exists_matcher then Jeha_Common.trace_msg ctxt (fn () =>
-      "equality subsumed by " ^ Jeha_Common.pretty_term ctxt (term_of_clause unit_clause)) else ()
+      "equality subsumed by " ^ pretty_clause ctxt unit_clause) else ()
   in
     exists_matcher
   end
 
 fun is_trivial c =
-  contains_syntactic_equation c orelse contains_syntactic_complementaries c
+  contains_syntactic_equation (#literals c) orelse contains_syntactic_complementaries (#literals c)
 
 fun is_redundant ctxt active c =
-  let fun trace_subsumed unit subsumed = let val _ = if subsumed then Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ Jeha_Common.pretty_term ctxt (term_of_clause unit)) else () in subsumed end in
+  let fun trace_subsumed unit subsumed = let val _ = if subsumed then Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ pretty_clause ctxt unit) else () in subsumed end in
   (* forward subsumption: does any active claus subsume c? *)
   exists
     (fn ac => equality_subsumes ctxt (ac, c)
@@ -321,8 +321,8 @@ fun dest_eq_bool_lit (s, t, true) =
 (* PosOuterClaus and NegOuterClaus simplficiations *)
 fun simp_bool_outer_claus c i =
   let
-    val (s, b) = nth c i |> dest_eq_bool_lit ||> ml_bool_of
-    val c' = nth_drop i c
+    val (s, b) = nth (#literals c) i |> dest_eq_bool_lit ||> ml_bool_of
+    val c' = map_literals (nth_drop i) c
   in
     outer_clausify b s c'
   end
@@ -332,18 +332,18 @@ fun find_simp_bool_outer_clause c = error "find_simp_bool_outer_clause unimpleme
 (* EqOuterClaus and NeqOuterClaus inferences *)
 fun infer_eq_neq_outer_claus c i =
   let
-    val (s, t, b) = nth c i
+    val (s, t, b) = nth (#literals c) i
   in
     if not (fastype_of s = @{typ bool} andalso fastype_of t = @{typ bool})
       then error "not boolean equation"
     else if b
       then (* EqOuterClaus *)
-        [ mk_lit_eq_bool s false :: mk_lit_eq_bool t true :: c
-        , mk_lit_eq_bool s true :: mk_lit_eq_bool t false :: c
+        [ { literals = mk_lit_eq_bool s false :: mk_lit_eq_bool t true :: #literals c, id = generate_fresh_id () }
+        , { literals = mk_lit_eq_bool s true :: mk_lit_eq_bool t false :: #literals c, id = generate_fresh_id () }
         ]
       else (* NeqOuterClaus *)
-        [ mk_lit_eq_bool s false :: mk_lit_eq_bool t false :: c
-        , mk_lit_eq_bool s true :: mk_lit_eq_bool t true :: c
+        [ { literals = mk_lit_eq_bool s false :: mk_lit_eq_bool t false :: #literals c, id = generate_fresh_id () }
+        , { literals = mk_lit_eq_bool s true :: mk_lit_eq_bool t true :: #literals c, id = generate_fresh_id () }
         ]
   end
 
@@ -357,9 +357,9 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
     OR: try to use Envir.empty max_idx (augment clauses with max_idx?) and Envir.genvar
     SEE: COMP_INCR maybe?
     NOTE: how to handle TVars? *)
-    val d = map (map_lit (prefix_Vars_TVars "L")) d
-    val c = map (map_lit (prefix_Vars_TVars "R")) c
-    val (_, _, is_pos_eq) = nth d cp
+    val d = map_literals (map (map_lit (prefix_Vars_TVars "L"))) d
+    val c = map_literals (map (map_lit (prefix_Vars_TVars "R"))) c
+    val (_, _, is_pos_eq) = nth (#literals d) cp
     val t = subterm_at_full_pos d ([], lp, cp)
     val t' = subterm_at_full_pos d ([], swap_lpos lp, cp)
     val u = subterm_at_full_pos c j
@@ -379,11 +379,14 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
         val (unifiers, _) = Seq.chop 4 unifiers
         fun build_conclusion unifier =
           let
-            val d' = nth_drop cp d
+            val d' = map_literals (nth_drop cp) d
             val ct' = map_at_full_pos j (K t') c
           in
             (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-            map (map_lit (norm_beta_eta_qeta_env unifier)) (d' @ ct')
+            { literals =
+                map (map_lit (norm_beta_eta_qeta_env unifier)) (#literals d' @ #literals ct')
+            , id = generate_fresh_id ()
+            }
           end
       in
         map build_conclusion unifiers
@@ -393,16 +396,18 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
 (* ERes inference *)
 fun infer_eres (ctxt : Proof.context) ((c, cp) : (clause * cpos)) =
   let
-    val (u, u', is_pos_eq) = nth c cp
+    val (u, u', is_pos_eq) = nth (#literals c) cp
     val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] Envir.init
     (* FIXME: print warning message when discarding unifiers *)
     val (unifiers, _) = Seq.chop 4 unifiers
     fun build_conclusion unifier =
       let
-        val c' = nth_drop cp c
+        val c' = map_literals (nth_drop cp) c
       in
         (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-        map (map_lit (norm_beta_eta_qeta_env unifier)) c'
+        { literals = map (map_lit (norm_beta_eta_qeta_env unifier)) (# literals c')
+        , id = generate_fresh_id ()
+        }
       end
   in
     if is_pos_eq
@@ -414,8 +419,8 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (clause * cpos)) =
 
 (* Passive_Set *)
 
-fun size_of_clause clause =
-  fold (fn (l, r, _) => fn acc => acc + size_of_term l + size_of_term r) clause 0
+fun size_of_clause { literals, ... } =
+  fold (fn (l, r, _) => fn acc => acc + size_of_term l + size_of_term r) literals 0
 
 val size_ord = make_ord (fn (c, d) => size_of_clause c <= size_of_clause d)
 
@@ -436,7 +441,7 @@ fun select_given_clause cs = Passive_Set.min_elem cs
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
 fun forward_simplify ctxt active given_clause =
   let
-    val active_units = Seq.filter (fn c => length c = 1) (Seq.of_list active)
+    val active_units = Seq.filter (fn { literals, ... } => length literals = 1) (Seq.of_list active)
     val active_units_all_orientations : (clause * lpos) Seq.seq =
       seq_cartesian_product active_units (Seq.of_list [Left, Right])
     val rn_rp_rules = Seq.of_list [simp_rewrite_negative_lits, simp_rewrite_positive_lits]
@@ -449,7 +454,7 @@ fun forward_simplify ctxt active given_clause =
           seq_cartesian_product rn_rp_rules unit_target_pairs
           |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target) 
         val ps_rewrites : clause Seq.seq =
-          seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length c - 1))))
+          seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (#literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
         val dd_dr_rewrites : clause Seq.seq =
             Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
@@ -463,12 +468,12 @@ fun forward_simplify ctxt active given_clause =
     (* FIXME: can this lead to a fixed-point (and not terminate)? *)
     fun full_rewrite c countdown =
       if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
-      let val _ = Jeha_Common.trace_msg ctxt (fn () => "rewrite step of " ^ Jeha_Common.pretty_term ctxt (term_of_clause c) ^ ":") in
+      let val _ = Jeha_Common.trace_msg ctxt (fn () => "rewrite step of " ^ pretty_clause ctxt c ^ ":") in
       case first_successful_rewrite c of
         SOME c' =>
           full_rewrite c' (countdown - 1)
       | NONE =>
-          let val _ = Jeha_Common.trace_msg ctxt (fn () => "done rewriting " ^ Jeha_Common.pretty_term ctxt (term_of_clause c) ^ ".") in
+          let val _ = Jeha_Common.trace_msg ctxt (fn () => "done rewriting " ^ pretty_clause ctxt c ^ ".") in
           c
           end
       end
@@ -508,7 +513,7 @@ fun infer_clauses ctxt active given_clause =
   in
     maps (uncurry (infer_sup ctxt)) eq_target_pairs
     (* ERes has already been performed for the active clauses *)
-    @ maps (infer_eres ctxt) (map (pair given_clause) (0 upto (length given_clause - 1)))
+    @ maps (infer_eres ctxt) (map (pair given_clause) (0 upto (length (#literals given_clause) - 1)))
   end
 
 (* Question: Are clauses and literals multisets? *)
@@ -523,7 +528,7 @@ fun given_clause_step ctxt countdown passive active =
     (* tracing *)
     fun trace_msg_clauses msg clauses =
       Jeha_Common.trace_msg ctxt
-        (fn () => msg ^ Jeha_Common.pretty_terms ctxt (map term_of_clause clauses))
+        (fn () => msg ^ pretty_clauses ctxt clauses)
     val _ = trace_msg_clauses "passive: " (list_of_passive_set passive)
 
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
@@ -542,7 +547,7 @@ fun given_clause_step ctxt countdown passive active =
       (* select first simplification as given_clause *)
     | given_clause :: simplifications => 
       (* if given_clause simplifies to (or is) [] then UNSAT *)
-      if exists (curry (op =) []) (given_clause :: simplifications)
+      if exists (curry (op =) [] o #literals) (given_clause :: simplifications)
         then Unsat
         else
           let
@@ -580,10 +585,10 @@ fun refutable ctxt prems asms conjecture =
     val _ = Jeha_Common.trace_msg ctxt
       (fn () => "asms: " ^ Jeha_Common.pretty_terms ctxt asms)
     val neg_conjecture = HOLogic.mk_not (Object_Logic.atomize_term ctxt conjecture)
-    val clauses = map clause_of (neg_conjecture :: asms @ prems)
+    val clauses = map_index (fn (_, t) => clause_of (t, generate_fresh_id ())) (neg_conjecture :: asms @ prems)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map term_of_clause clauses))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
-    val result = given_clause_loop true ctxt 50 (passive_set_of_list clauses) []
+    val result = given_clause_loop true ctxt 20 (passive_set_of_list clauses) []
   in
     if result = "UNSAT" then true else error result
   end

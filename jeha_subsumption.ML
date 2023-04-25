@@ -52,9 +52,9 @@ fun subsumed_alternatives ctxt (l, []) = Seq.empty
       end
 
 (* read: "c subsumes d" *)
-fun subsumes ctxt ([], d) = true
+fun impl_subsumes ctxt ([], d) = true
   (* TODO: distinct variables? might not be necessary with Unify.matchers, check! *)
-  | subsumes ctxt (l :: ls, d) =
+  | impl_subsumes ctxt (l :: ls, d) =
       try_alternatives_with_backtracking ctxt (subsumed_alternatives ctxt (l, d)) ls
 
 and try_alternatives_with_backtracking ctxt alternatives ls =
@@ -67,7 +67,7 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
           val ls = (map o map_lit o norm_beta_eta_qeta_env) env ls
         in
           (* move on to next l in ls *)
-          subsumes ctxt (ls, d_without_l')
+          impl_subsumes ctxt (ls, d_without_l')
         end
       in
         if subsumed
@@ -75,5 +75,8 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
          (* backtrack, try the next l' *)
          else try_alternatives_with_backtracking ctxt alternatives ls
       end
+
+fun subsumes ctxt ({ literals = ls, id = _ }, { literals = ls', id = _ }) =
+  impl_subsumes ctxt (ls, ls')
 
 end;
