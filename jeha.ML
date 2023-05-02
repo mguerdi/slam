@@ -115,7 +115,7 @@ fun simp_delete_duplicated_lits ctxt c =
       else
         (Jeha_Common.trace_msg ctxt (fn () =>
           "deleted duplicated literals in " ^ JClause.pretty_clause ctxt c);
-        SOME (JClause.refresh_id c'))
+        SOME (JClause.refresh_id () c'))
   end
 
 (* Deletion of resolved literals (DR) (Schulz) *)
@@ -130,7 +130,7 @@ fun simp_delete_resolved_lits ctxt c =
       else
         (Jeha_Common.trace_msg ctxt (fn () =>
           "deleted resolved literals in " ^ JClause.pretty_clause ctxt c);
-        SOME (JClause.refresh_id c'))
+        SOME (JClause.refresh_id () c'))
   end
 
 fun is_pos_unit { literals = [(_, _, true)], ... } = true
@@ -389,7 +389,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
             (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
             JClause.combine d' ct'
             |> JClause.map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env unifier)))
-            |> JClause.refresh_id
+            |> JClause.refresh_id ()
           end
       in
         map build_conclusion unifiers
@@ -409,7 +409,7 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
       in
         (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
         JClause.map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env unifier))) c'
-        |> JClause.refresh_id
+        |> JClause.refresh_id ()
       end
   in
     if is_pos_eq
@@ -590,7 +590,7 @@ fun refutable ctxt prems asms conjecture =
     val clauses = map_index (fn (_, t) => JClause.of_term (t, Clause_Id.new ())) (neg_conjecture :: asms @ prems)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map JClause.term_of clauses))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
-    val result = given_clause_loop true ctxt 20 (passive_set_of_list clauses) []
+    val result = given_clause_loop true ctxt 40 (passive_set_of_list clauses) []
   in
     if result = "UNSAT" then true else error result
   end
