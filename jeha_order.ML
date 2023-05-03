@@ -141,56 +141,48 @@ datatype fo_head =
   (mismatch between FO and HO quantifier because its Abs is stripped away). *)
   | Fun of term * int
 
-(* top level is FO *)
-(* The first order tree has no concept of binders (i.e. the fo_head Lam is not a binder, just a
-function symbol), types of Bound variables are stored in an auxilliary list boundTs : typ list. *)
-datatype fo_headed_term =
+datatype fo_term = 
     FluidOrVar of term
-  | App of fo_head * term list
+  | App of fo_head * fo_term list
 
 (* encodes types as terms *)
-fun type_to_term (T as (TVar _)) = Term.dummy_pattern T
-  | type_to_term (T as (TFree _)) = Term.dummy_pattern T
-  | type_to_term (Type (name, Ts)) =
-      Term.list_comb (
+fun type_to_fo_term (T as (TVar _)) = FluidOrVar (Term.dummy_pattern T)
+  | type_to_fo_term (T as (TFree _)) = App (Fun (Term.dummy_pattern T, 0), [])
+  | type_to_fo_term (Type (name, Ts)) =
+      App (
         (* Note: malformed type *)
-        Term.dummy_pattern (Type (name, [])),
-        map type_to_term Ts
+        Fun (Term.dummy_pattern (Type (name, [])), length Ts),
+        map type_to_fo_term Ts
       )
 
 (* Instead of equipping function symbols with their type arguments, we just equip them with their
 type as their first argument, Abstractions and Quantifiers are handled as in the paper but note that
 KBO only compares arguments, if the function symbols are equal. *)
-fun to_fo_headed_term1 (boundTs, t as (Var _)) = (boundTs, FluidOrVar t)
-  | to_fo_headed_term1 (boundTs, t as (Free (_, T))) = (boundTs, App (Fun (t, 0), [type_to_term T]))
-  | to_fo_headed_term1 (boundTs, t as (Const ("Pure.dummy_pattern", TVar _))) =
-      (boundTs, FluidOrVar t)
-  | to_fo_headed_term1 (boundTs, t as (Const ("Pure.dummy_pattern", TFree _))) =
-      (boundTs, App (Fun (t, 0), []))
-  | to_fo_headed_term1 (boundTs, t as (Const ("Pure.dummy_pattern", Type (_, [])))) =
-      (boundTs, App (Fun (t, 0), []))
-  | to_fo_headed_term1 (boundTs, t as (Const ("Pure.dummy_pattern", Type (_, (_::_))))) =
-      error "Type should not have args"
-  | to_fo_headed_term1 (boundTs, t as (Const (_, T))) = (boundTs, App (Fun (t, 0), [type_to_term T]))
-  | to_fo_headed_term1 (boundTs, t as (Bound i)) = (boundTs, App (Fun (t, 0), [type_to_term (nth boundTs i)]))
-  | to_fo_headed_term1 (boundTs, t) =
+fun to_fo_term boundTs (t as (Var _)) = FluidOrVar t
+  | to_fo_term boundTs (t as (Free (_, T))) = App (Fun (t, 0), [type_to_fo_term T])
+  | to_fo_term boundTs (t as (Const (_, T))) = App (Fun (t, 0), [type_to_fo_term T])
+  | to_fo_term boundTs (t as (Bound i)) = App (Fun (t, 0), [type_to_fo_term (nth boundTs i)])
+  | to_fo_term boundTs t =
       if JTerm.might_be_fluid t
-        then (boundTs, FluidOrVar t)
+        then FluidOrVar t
         else case t of
           (* FIXME: fresh variables under lambda? *)
-          Abs (_, T, u) => (T::boundTs, App (Lam, [type_to_term T, u]))
+          Abs (_, T, u) => App (Lam, [type_to_fo_term T, to_fo_term (T::boundTs) u])
         | (_ $ _) =>
             let
               val (f, ts) = strip_comb t
               val T = fastype_of1 (boundTs, f)
-              val (boundTs, T_and_ts) =
+              val T_and_ts =
                 if JTerm.is_quantifier f
                   (* The FO type argument of a quantifier is the binder type, not the type of the
                   quantifier, similarly the fo term argument is the lambdas body, not the lambda. *)
-                  then let val [Abs(_, T, u)] = ts in (T::boundTs, [type_to_term T, u]) end
-                  else (boundTs, type_to_term T :: ts)
+                  then
+                    let val [Abs(_, T, u)] = ts in
+                      [type_to_fo_term T, to_fo_term (T::boundTs) u]
+                    end
+                  else (type_to_fo_term T :: map (to_fo_term boundTs) ts)
             in
-              (boundTs, App (Fun (f, length ts), T_and_ts))
+              App (Fun (f, length ts), T_and_ts)
             end
 
 fun fo_head_weight below_lam Lam = fo_lambda_weight
@@ -250,49 +242,45 @@ fun prec_ord (Lam, Lam) = EQUAL
 (* Modify variable balance, weight balance, check if var y occurs in term. *)
 (* mfyVWBc : bool -> typ list -> var_balance -> weight -> fo_headed_term -> term -> bool
               -> var_balance * weight * bool *)
-fun mfyVWBc below_lam boundTs vb wb (FluidOrVar x) y increment =
+fun mfyVWBc below_lam vb wb (FluidOrVar x) y increment =
       ( add_var increment x vb
       , if increment then wb +++ var_weight else wb --- var_weight
       , x aconv y )
-  | mfyVWBc below_lam boundTs vb wb (App (f, ss)) y increment =
+  | mfyVWBc below_lam vb wb (App (f, ss)) y increment =
       let
         val (vb, wb, res) =
-          mfyVWBc_tl (below_lam orelse f = Lam) boundTs vb wb ss y increment
+          mfyVWBc_tl (below_lam orelse f = Lam) vb wb ss y increment
         val wf = fo_head_weight below_lam f
       in
         (vb, if increment then wb +++ wf else wb --- wf, res)
       end
     (* FIXME: don't ignore types *)
-and mfyVWBc_tl below_lam boundTs vb wb [] y increment = (vb, wb, false)
-  | mfyVWBc_tl below_lam boundTs vb wb (s :: ss) y increment =
+and mfyVWBc_tl below_lam vb wb [] y increment = (vb, wb, false)
+  | mfyVWBc_tl below_lam vb wb (s :: ss) y increment =
       let
-        val (vb, wb, res) = let val (boundTs, s) = to_fo_headed_term1 (boundTs, s) in
-          mfyVWBc below_lam boundTs vb wb s y increment
-        end
+        val (vb, wb, res) = mfyVWBc below_lam vb wb s y increment
       in
         if not res
-          then mfyVWBc_tl below_lam boundTs vb wb ss y increment
+          then mfyVWBc_tl below_lam vb wb ss y increment
           else
-            let val (vb, wb) = mfyVWB_tl below_lam boundTs vb wb ss increment in
+            let val (vb, wb) = mfyVWB_tl below_lam vb wb ss increment in
               (vb, wb, true)
             end
       end
     (* FIXME: don't ignore types *)
-and mfyVWB_tl below_lam boundTs vb wb [] increment = (vb, wb)
-  | mfyVWB_tl below_lam boundTs vb wb (s :: ss) increment =
+and mfyVWB_tl below_lam vb wb [] increment = (vb, wb)
+  | mfyVWB_tl below_lam vb wb (s :: ss) increment =
       let
-        val (vb, wb) = let val (boundTs, s) = to_fo_headed_term1 (boundTs, s) in
-           mfyVWB below_lam boundTs vb wb s increment
-        end
+        val (vb, wb) = mfyVWB below_lam vb wb s increment
       in
-        mfyVWB_tl below_lam boundTs vb wb ss increment
+        mfyVWB_tl below_lam vb wb ss increment
       end
-and mfyVWB below_lam boundTs vb wb (FluidOrVar x) increment =
+and mfyVWB below_lam vb wb (FluidOrVar x) increment =
       (add_var increment x vb, if increment then wb +++ var_weight else wb --- var_weight)
     (* FIXME: don't ignore types *)
-  | mfyVWB below_lam boundTs vb wb (App (f, ss)) increment =
+  | mfyVWB below_lam vb wb (App (f, ss)) increment =
       let
-        val (vb, wb) = mfyVWB_tl (below_lam orelse f = Lam) boundTs vb wb ss increment
+        val (vb, wb) = mfyVWB_tl (below_lam orelse f = Lam) vb wb ss increment
         val wf = fo_head_weight below_lam f
       in
         (vb, if increment then wb +++ wf else wb --- wf)
@@ -301,7 +289,7 @@ and mfyVWB below_lam boundTs vb wb (FluidOrVar x) increment =
 (* FIXME: need two boundTs everywhere? *)
 (* tckbo : bool -> typ list -> var_balance -> weight -> fo_headed_term * fo_headed_term
             -> var_balance * weight * partial_order *)
-fun tckbo below_lam boundTs vb wb (FluidOrVar x) (FluidOrVar y) =
+fun tckbo below_lam vb wb (FluidOrVar x) (FluidOrVar y) =
       let
         val vb = add_var true x vb
         val vb = add_var false y vb
@@ -309,26 +297,26 @@ fun tckbo below_lam boundTs vb wb (FluidOrVar x) (FluidOrVar y) =
       in
         (vb, wb, res)
       end
-  | tckbo below_lam boundTs vb wb (FluidOrVar x) (t as App (g, ts)) =
+  | tckbo below_lam vb wb (FluidOrVar x) (t as App (g, ts)) =
       let
-        val (vb, wb, contained) = mfyVWBc below_lam boundTs vb wb t x false
+        val (vb, wb, contained) = mfyVWBc below_lam vb wb t x false
         val res = if contained then SOME LESS else NONE
         val vb = add_var true x vb
       in
         (vb, wb +++ var_weight, res)
       end
   (* FIXME: redundant because symmetric to case above *)
-  | tckbo below_lam boundTs vb wb (s as App (f, ss)) (FluidOrVar y) =
+  | tckbo below_lam vb wb (s as App (f, ss)) (FluidOrVar y) =
       let
-        val (vb, wb, contained) = mfyVWBc below_lam boundTs vb wb s y true
+        val (vb, wb, contained) = mfyVWBc below_lam vb wb s y true
         val res = if contained then SOME GREATER else NONE
         val vb = add_var false y vb
       in
         (vb, wb --- var_weight, res)
       end
-  | tckbo below_lam boundTs vb wb (App (f, ss)) (App (g, ts)) =
+  | tckbo below_lam vb wb (App (f, ss)) (App (g, ts)) =
       let
-        val (vb, wb, lex) = tckbo' below_lam boundTs vb wb f g ss ts
+        val (vb, wb, lex) = tckbo' below_lam vb wb f g ss ts
         val wb = wb +++ fo_head_weight below_lam f --- fo_head_weight below_lam g
         val nNeg = no_neg_balances vb
         val nPos = no_pos_balances vb
@@ -352,51 +340,34 @@ fun tckbo below_lam boundTs vb wb (FluidOrVar x) (FluidOrVar y) =
       end
 (* tckbo' : bool -> typ list -> var_balance -> weight -> term -> term -> *)
 (* FIXME: don't ignore types *)
-and tckbo' below_lam boundTs vb wb f g ss ts =
+and tckbo' below_lam vb wb f g ss ts =
       if is_equal (prec_ord (f, g))
-        then tckbolex (below_lam orelse f = Lam) boundTs vb wb ss ts
+        then tckbolex (below_lam orelse f = Lam) vb wb ss ts
         else
           let
-            val (vb, wb) = mfyVWB_tl (below_lam orelse f = Lam) boundTs vb wb ss true
-            val (vb, wb) = mfyVWB_tl (below_lam orelse g = Lam) boundTs vb wb ts false
+            val (vb, wb) = mfyVWB_tl (below_lam orelse f = Lam) vb wb ss true
+            val (vb, wb) = mfyVWB_tl (below_lam orelse g = Lam) vb wb ts false
           in
             (vb, wb, NONE)
           end
     (* FIXME: don't ignore types *)
-and tckbolex below_lam boundTs vb wb [] [] = (vb, wb, SOME EQUAL)
-  | tckbolex below_lam boundTs vb wb (s :: ss) (t :: ts) =
-      let val (vb, wb, res) =
-        let
-          val (s_boundTs, s) = to_fo_headed_term1 (boundTs, s)
-          (* FIXME: now we'll have two, possibly disagreeing boundTs: *)
-          val (t_boundTs, t) = to_fo_headed_term1 (boundTs, t)
-          (* FIXME: hack *)
-          val boundTs = if length t_boundTs > length s_boundTs then t_boundTs else s_boundTs
-        in
-          tckbo below_lam boundTs vb wb s t
-        end
+and tckbolex below_lam vb wb [] [] = (vb, wb, SOME EQUAL)
+  | tckbolex below_lam vb wb (s :: ss) (t :: ts) =
+      let
+        val (vb, wb, res) = tckbo below_lam vb wb s t
       in
         if res = SOME EQUAL
-          then tckbolex below_lam boundTs vb wb ss ts
+          then tckbolex below_lam vb wb ss ts
           else
             let
-              val (vb, wb) = mfyVWB_tl below_lam boundTs vb wb ss true
-              val (vb, wb) = mfyVWB_tl below_lam boundTs vb wb ts false
+              val (vb, wb) = mfyVWB_tl below_lam vb wb ss true
+              val (vb, wb) = mfyVWB_tl below_lam vb wb ts false
             in
               (vb, wb, res)
             end
       end
 
-fun kbo (s, t) =
-  let
-    val (s_boundTs, s) = to_fo_headed_term1 ([], s)
-    (* FIXME: now we'll have two, possibly disagreeing boundTs: (doesn't matter right because we're ignoring types *)
-    val (t_boundTs, t) = to_fo_headed_term1 ([], t)
-    (* FIXME: hack *)
-    val boundTs = if [] = s_boundTs then t_boundTs else s_boundTs
-  in
-    #3 (tckbo false boundTs empty_var_balance zero_weight s t)
-  end
+val kbo = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term [])
 
 (* Baader and Nipkow - Term rewriting and all that, Lemma 2.5.6 *)
 fun mk_multiset_order_of_strict a_ord (m, n) =
@@ -448,7 +419,7 @@ fun lit_kbo (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
   (* same signs *)
   else mk_multiset_order_of_strict kbo ([s, t], [u, v])
 
-val clause_kbo =  mk_multiset_order_of_strict lit_kbo o apply2 JClause.literals
+val clause_kbo = mk_multiset_order_of_strict lit_kbo o apply2 JClause.literals
 
 (* Eligibility without selection functions:
 Definition 22 (Eligibility) A literal L is (strictly) \<ge>-eligible w.r.t. a substitution \<sigma> in C for
