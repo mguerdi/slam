@@ -162,14 +162,18 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
         if SOME GREATER = Jeha_Order.kbo (from, to) (* Schulz: \<sigma>(s) > \<sigma>(t) *)
           then
             (* FIXME: understand and implement the restrictions on RP form Schulz's paper *)
-            (* FIXME: check that the rewriting clause is smaller than the rewritten clause, see o\<lambda>Sup,
-            p.25 *)
             let
               val rewritten_clause = JClause.map_at_full_pos j (K to) target_clause
+              val rewriting_clause = JClause.dummy [(from, to, true)]
+              val rewriting_smaller_than_rewritten = (fn () =>
+                SOME LESS = Jeha_Order.clause_kbo (rewriting_clause, rewritten_clause))
             in
-              Jeha_Common.trace_msg ctxt (fn () => msg);
-              writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher)));
-              SOME (JClause.map_literals (map (JLit.map JTerm.norm_beta_eta_qeta)) rewritten_clause)
+              if not positive orelse rewriting_smaller_than_rewritten ()
+                then (
+                  Jeha_Common.trace_msg ctxt (fn () => msg);
+                  (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
+                  SOME (JClause.map_literals (map (JLit.map JTerm.norm_beta_eta_qeta)) rewritten_clause))
+                else NONE
             end
           else
             NONE
@@ -292,7 +296,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
     val exists_matcher = literal_can_match_single_disagreement ctxt lit target_lit
     (* tracing *)
     val msg =  "   " ^ "(PS)"
-      ^ " rewriting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
+      ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
       ^ " in " ^ JClause.pretty_clause ctxt target_clause
       ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [lit])
   in
@@ -395,12 +399,11 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
     val t' = JClause.subterm_at_full_pos d ([], JLit.swap_lpos lp, cp)
     val u = JClause.subterm_at_full_pos c j
   in
-    if not is_pos_eq
-      then []
-    else if JTerm.might_be_fluid u
-      then error "u might be fluid"
-    else if is_Var u andalso JClause.occurs_deeply u c
-      then error "u occurs deeply in c"
+    if
+      not is_pos_eq orelse
+      JTerm.might_be_fluid u orelse
+      (is_Var u andalso JClause.occurs_deeply u c)
+    then []
     else
       (* FIXME: Is smash_unifiers the one we want? How lossy is this? *)
       (* FIXME: Later, try to keep around flex-flex pairs for a while? *)
@@ -456,10 +459,10 @@ val size_ord = make_ord (fn (c, d) => size_of_clause c <= size_of_clause d)
 (* FIXME: Heap recomputes size (maybe `type elem = int * clause`?) *)
 structure Passive_Set = Heap(type elem = JClause.T val ord = size_ord)
 
-fun list_of_passive_set passive =
+fun seq_of_passive_set passive =
   if Passive_Set.is_empty passive
-    then []
-    else Passive_Set.min_elem passive ||> list_of_passive_set |> uncurry cons
+    then Seq.empty
+    else Passive_Set.min_elem passive ||> seq_of_passive_set |> uncurry Seq.cons
 
 fun passive_set_of_list clauses = fold Passive_Set.insert clauses Passive_Set.empty
 
@@ -567,7 +570,12 @@ fun given_clause_step ctxt countdown passive active =
     fun trace_msg_clauses msg clauses =
       Jeha_Common.trace_msg ctxt
         (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-    val _ = trace_msg_clauses "passive: " (list_of_passive_set passive)
+    val _ =
+      let val passive_seq = passive |> seq_of_passive_set in
+          trace_msg_clauses
+            ("passive [10/" ^ (passive_seq |> Seq.list_of |> length |> @{make_string}) ^ "]")
+            (passive_seq |> Seq.take 10 |> Seq.list_of)
+      end
 
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
     inferences are possible and empty clause has not been derived). Later: no non-redundant
@@ -608,7 +616,9 @@ exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * JClause
 
 fun given_clause_loop dump ctxt countdown passive active =
   case (if dump
-        then given_clause_step ctxt countdown passive active handle e => raise (JEHA_EXCEPTION (e, (ctxt, countdown, passive, active)))
+        then
+          given_clause_step ctxt countdown passive active
+            handle e => raise (JEHA_EXCEPTION (e, (ctxt, countdown, passive, active)))
         else given_clause_step ctxt countdown passive active) of
     Timeout => "TIMEOUT"
   | Unsat => "UNSAT"
