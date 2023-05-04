@@ -189,6 +189,33 @@ val simp_rewrite_positive_lits = impl_simp_rewrite_lits true
 (* Rewriting of positive literals (RN) simplification (Schulz) *)
 val simp_rewrite_negative_lits = impl_simp_rewrite_lits false
 
+(* Negative simplify-reflect (NS) simplification (Schulz) *)
+fun simp_negative_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
+  if is_pos_unit unit_clause then NONE else
+  (* check that to be deleted literal is indeed positive *)
+  if not (true = #3 (JClause.lit_at target_cp target_clause)) then NONE else
+  let
+    val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
+    val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
+    val lit_as_positive = let val (s, t, false) = lit in (s, t, true) end
+    val exists_matcher =
+      (target_lit, lit_as_positive)
+      |> Jeha_Subsumption.literal_matchers ctxt
+      |> Seq.pull
+      |> is_some
+    (* tracing *)
+    val msg =  "   " ^ "(NS)"
+      ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
+      ^ " in " ^ JClause.pretty_clause ctxt target_clause
+      ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [lit])
+  in
+    if exists_matcher
+      then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
+        SOME (JClause.delete_lit_at target_cp target_clause)
+      end
+      else NONE
+  end
+
 (* given terms s, t, find a common position p s.t. s, t only disagree at p *)
 (* FIXME: rename to find_single_blue_disagreement and change appropriately *)
 (* FIXME: how to deal with types??? Right now we're only considering variables instantiated by the
@@ -458,11 +485,18 @@ fun forward_simplify ctxt active given_clause =
         val ps_rewrites : JClause.T Seq.seq =
           seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
+        val ns_rewrites : JClause.T Seq.seq =
+          seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
+          |> Seq.map_filter (fn (unit, target) => simp_negative_simplify_reflect ctxt unit target)
         val dd_dr_rewrites : JClause.T Seq.seq =
             Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
       in 
         (* following Schulz: RN, RP, PS, FIXME: NS, DD, DR *)
-        Seq.append rn_rp_rewrites (Seq.append ps_rewrites dd_dr_rewrites)
+        Seq.empty
+        |> (Seq.append rn_rp_rewrites
+          o Seq.append ps_rewrites
+          o Seq.append ns_rewrites
+          o Seq.append dd_dr_rewrites)
         |> Seq.pull
         |> map_some #1
       end
