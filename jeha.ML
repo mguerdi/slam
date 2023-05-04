@@ -18,7 +18,7 @@ sig
   val infer_eq_neq_outer_claus : JClause.T -> JClause.cpos -> JClause.T list
   val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
   val infer_eres : Proof.context -> (JClause.T * JClause.cpos) -> JClause.T list
-  val forward_simplify : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
+  val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
   structure Passive_Set : HEAP
@@ -468,8 +468,10 @@ fun add_new_clauses passive clauses = fold Passive_Set.insert clauses passive
 fun select_given_clause cs = Passive_Set.min_elem cs
 
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
-fun forward_simplify ctxt active given_clause =
+fun forward_simplify ctxt cheap active given_clause =
   let
+    val do_trace = Config.get ctxt Jeha_Common.trace
+    val ctxt = Config.put Jeha_Common.trace (do_trace andalso not cheap) ctxt (* don't trace cheap simplify *)
     val active_units = Seq.filter (fn c => JClause.length c = 1) (Seq.of_list active)
     val active_units_all_orientations : (JClause.T * JLit.lpos) Seq.seq =
       seq_cartesian_product active_units (Seq.of_list [JLit.Left, JLit.Right])
@@ -494,8 +496,8 @@ fun forward_simplify ctxt active given_clause =
         (* following Schulz: RN, RP, PS, FIXME: NS, DD, DR *)
         Seq.empty
         |> (Seq.append rn_rp_rewrites
-          o Seq.append ps_rewrites
-          o Seq.append ns_rewrites
+          o Seq.append (if not cheap then ps_rewrites else Seq.empty)
+          o Seq.append (if not cheap then ns_rewrites else Seq.empty)
           o Seq.append dd_dr_rewrites)
         |> Seq.pull
         |> map_some #1
@@ -577,7 +579,7 @@ fun given_clause_step ctxt countdown passive active =
     val _ = trace_msg_clauses "given_clause " [given_clause]
     (* simplify given_clause with active set *)
   in
-    case Runtime.exn_trace (fn () => forward_simplify ctxt active given_clause) of
+    case forward_simplify ctxt false active given_clause of
       (* given_clause redundant w.r.t. active set *)
       [] => Next (passive, active)
       (* select first simplification as given_clause *)
@@ -592,8 +594,10 @@ fun given_clause_step ctxt countdown passive active =
             val passive = add_new_clauses passive simplifications
             (* perform all possible inferences between given_clause and active set *)
             val new_clauses = infer_clauses ctxt active given_clause
+            val new_clauses_cheap_simplified = maps (forward_simplify ctxt true active) new_clauses
+            val new_clauses_non_trivial = filter (not o is_trivial) new_clauses_cheap_simplified
             (* add inferred clauses to passive set *)
-            val passive = add_new_clauses passive new_clauses
+            val passive = add_new_clauses passive new_clauses_non_trivial
           in
             (* add given_clause to active and continue *)
             Next (passive, (given_clause :: active))
