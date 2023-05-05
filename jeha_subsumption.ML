@@ -26,8 +26,8 @@ fun literal_matchers ctxt ((s, t, b), (s', t', b')) =
   if b = b'
     then
       Seq.interleave
-        ((Unify.matchers (Context.Proof ctxt) [(s, s'), (t, t')]),
-        (Unify.matchers (Context.Proof ctxt) [(s, t'), (t, s')]))
+        ((Jeha_Unify.matchers (Context.Proof ctxt) [(s, s'), (t, t')]),
+        (Jeha_Unify.matchers (Context.Proof ctxt) [(s, t'), (t, s')]))
     else
       Seq.empty
 

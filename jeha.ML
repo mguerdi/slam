@@ -148,7 +148,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     val target_clause = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "R"))) target_clause
     val (from, to) = apply2 (JLit.term_at_lpos (the_single (JClause.literals unit_clause))) (lp, JLit.swap_lpos lp) (* Schulz: (s, t) *)
     val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
-    val matchers = Unify.matchers (Context.Proof ctxt) [(from, target_term)]
+    val matchers = Jeha_Unify.matchers (Context.Proof ctxt) [(from, target_term)]
     fun build_conclusion matcher =
       let
         val msg =  "   " ^ (if positive then "(RP)" else "(RN)")
@@ -230,7 +230,7 @@ fun find_single_green_disagreement ctxt term_pair : JTerm.tpos =
      3. Their longest common prefix is the single disagreement *)
   let
     (* FIXME: maybe it's possible to easily deal with flex-flex pairs here *)
-    val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [term_pair] Envir.init
+    val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [term_pair] Envir.init
   in
     case Seq.pull unifiers of
       NONE => [] (* \<epsilon> *)
@@ -272,8 +272,8 @@ fun literal_can_match_single_disagreement ctxt lit target_lit =
       JTerm.subterm_at target_rhs single_disagreement_position)
     (* FIXME: does matching need renaming or not? *)
     val exists_matcher =
-      (Unify.matchers (Context.Proof ctxt) ([(lhs, target_lhs), (rhs, target_rhs)]),
-      Unify.matchers (Context.Proof ctxt) ([(lhs, target_rhs), (rhs, target_lhs)]))
+      (Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_lhs), (rhs, target_rhs)]),
+      Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_rhs), (rhs, target_lhs)]))
       |> Seq.interleave
       |> Seq.pull
       |> is_some
@@ -408,7 +408,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
       (* FIXME: Is smash_unifiers the one we want? How lossy is this? *)
       (* FIXME: Later, try to keep around flex-flex pairs for a while? *)
       let
-        val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] Envir.init
+        val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] Envir.init
         (* FIXME: print warning message when discarding unifiers *)
         val (unifiers, _) = Seq.chop 4 unifiers
         fun build_conclusion unifier =
@@ -430,7 +430,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
 fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
   let
     val (u, u', is_pos_eq) = JClause.lit_at cp c
-    val unifiers = Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] Envir.init
+    val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] Envir.init
     (* FIXME: print warning message when discarding unifiers *)
     val (unifiers, _) = Seq.chop 4 unifiers
     fun build_conclusion unifier =
