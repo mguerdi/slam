@@ -247,16 +247,11 @@ fun find_single_green_disagreement ctxt term_pair : JTerm.tpos =
                 case JTerm.subterm_at t tp of
                   Var (x, _) => exists (curry (op =) x) affected_vars
                 | _ => false)
-          val common_suffix : JTerm.tpos list -> JTerm.tpos =
-            (* reverse term positions (suffix <-> prefix) *)
-            map rev
-            #> (fn rev_tps => fold (fst oo (curry (chop_common_prefix (op =)))) rev_tps [])
-            #> rev
         in
           term_pair
           |> apply2 term_poss_of_affected_vars
           |> (op @)
-          |> common_suffix
+          |> foldr1 (fst o chop_common_prefix (op =)) handle List.Empty => [] (* \<epsilon> *)
         end
   end
 
@@ -272,8 +267,8 @@ fun literal_can_match_single_disagreement ctxt lit target_lit =
       JTerm.subterm_at target_rhs single_disagreement_position)
     (* FIXME: does matching need renaming or not? *)
     val exists_matcher =
-      (Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_lhs), (rhs, target_rhs)]),
-      Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_rhs), (rhs, target_lhs)]))
+      (Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_term_lhs), (rhs, target_term_rhs)]),
+      Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_term_rhs), (rhs, target_term_lhs)]))
       |> Seq.interleave
       |> Seq.pull
       |> is_some
