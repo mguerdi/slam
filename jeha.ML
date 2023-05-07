@@ -532,6 +532,23 @@ fun forward_simplify ctxt cheap active given_clause =
     outer_clausified
   end *)
 
+fun map_filter_partition f [] = ([], [], [])
+  | map_filter_partition f (x :: xs) =
+      let
+        val (deleted, changed, unchanged) = map_filter_partition f xs
+      in
+        case f x of
+          [y] =>
+            (* FIXME: aconv w.r.t. Var and TVar? *)
+            if y = x
+              then (deleted, changed, y :: unchanged)
+              else (deleted, y :: changed, unchanged)
+        | [] => (x :: deleted, changed, unchanged)
+      end
+
+fun backward_simplify ctxt active given_clause =
+  map_filter_partition (forward_simplify (Config.put Jeha_Common.trace false ctxt) false [given_clause]) active
+
 fun infer_clauses ctxt active given_clause =
   let
     (* the equality literals that are being eliminated *)
@@ -562,6 +579,7 @@ fun given_clause_step ctxt countdown passive active =
   if countdown <= 0 then Timeout else
   let
     (* tracing *)
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "countdown = " ^ @{make_string} countdown)
     fun trace_msg_clauses msg clauses =
       Jeha_Common.trace_msg ctxt
         (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
@@ -580,8 +598,8 @@ fun given_clause_step ctxt countdown passive active =
     (* tracing *)
     val _ = trace_msg_clauses "active: " active
     val _ = trace_msg_clauses "given_clause " [given_clause]
-    (* simplify given_clause with active set *)
   in
+    (* simplify given_clause with active set *)
     case forward_simplify ctxt false active given_clause of
       (* given_clause redundant w.r.t. active set *)
       [] => Next (passive, active)
@@ -595,15 +613,29 @@ fun given_clause_step ctxt countdown passive active =
             (* following zipperposition (src/prover/saturate.ml) add all simplifications except one
             (the current given_clause) to the passive set *)
             val passive = add_new_clauses passive simplifications
-            (* perform all possible inferences between given_clause and active set *)
-            val new_clauses = infer_clauses ctxt active given_clause
-            val new_clauses_cheap_simplified = maps (forward_simplify ctxt true active) new_clauses
-            val new_clauses_non_trivial = filter (not o is_trivial) new_clauses_cheap_simplified
+            (* simplify actives with given clause *)
+            (* FIXME: remove direct descendants of redundant_actives and simplified_actives from
+            passive set, or: do what's described in the E 2.3 paper (deleting at activation time) *)
+            val (redundant_active, simplified_active, unsimplifiable_active) =
+              backward_simplify ctxt active given_clause
+            (* remove simplified and redundant actives, add given_cluase to active set *)
+            val active = given_clause :: unsimplifiable_active
+            (* perform all possible inferences between given_clause and active set NOTE: also
+            computes inferences between given_clause and itself! *)
+            val inferred_clauses = infer_clauses ctxt active given_clause
+            (* val _ = trace_msg_clauses "inferred: " inferred_clauses *)
+            (* clauses to be added to passive set *)
+            val new_clauses =
+              simplified_active @ inferred_clauses
+              (* cheap_simplify *)
+              |> maps (forward_simplify ctxt true active)
+              |> (fn cheap_simplified => (trace_msg_clauses "cheap_simplified: " cheap_simplified; cheap_simplified))
+              |> filter (not o is_trivial)
+            val _ = trace_msg_clauses "new_clauses: " new_clauses
             (* add inferred clauses to passive set *)
-            val passive = add_new_clauses passive new_clauses_non_trivial
+            val passive = add_new_clauses passive new_clauses
           in
-            (* add given_clause to active and continue *)
-            Next (passive, (given_clause :: active))
+            Next (passive, active)
           end
   end
 
