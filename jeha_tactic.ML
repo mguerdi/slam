@@ -40,8 +40,8 @@ fun jeha_tac options ctxt ths i st0 =
                 handle Jeha.JEHA_EXCEPTION (e, state) =>
                   (* FIXME: only dump if the "dump" option was passed to the tactic, change type of
                   dump to (Proof.context, ...) option *)
-                  let val _ = dump := state :: (!dump) in Jeha_Common.trace_msg ctxt (fn () =>
-                    "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Common.dump"); raise e
+                  let val _ = dump := state :: (!dump) in
+                    (writeln "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Common.dump"; raise e)
                   end
               then ALLGOALS (Skip_Proof.cheat_tac context) st
               else Seq.empty)

@@ -319,8 +319,11 @@ fun is_trivial c =
   contains_syntactic_equation (JClause.literals c) orelse contains_syntactic_complementaries (JClause.literals c)
 
 fun is_redundant ctxt active c =
-  let fun trace_subsumed unit subsumed = let val _ = if subsumed then Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit) else () in subsumed end in
-  (* forward subsumption: does any active claus subsume c? *)
+  let fun trace_subsumed unit subsumed =
+    subsumed andalso
+      (Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+  in
+  (* forward subsumption: does any active clause subsume c? *)
   exists
     (fn ac => equality_subsumes ctxt (ac, c)
       orelse trace_subsumed ac (Jeha_Subsumption.subsumes ctxt (ac, c)))
@@ -569,14 +572,12 @@ fun infer_clauses ctxt active given_clause =
     @ maps (infer_eres ctxt) (map (pair given_clause) (0 upto (length (JClause.literals given_clause) - 1)))
   end
 
-(* Question: Are clauses and literals multisets? *)
-
-datatype loopstate = Timeout | Unsat | Next of Passive_Set.T * JClause.T list
+datatype loopstate = Unsat | Next of Passive_Set.T * JClause.T list
 
 type prover_state = { context: Proof.context, countdown: int, passive: Passive_Set.T, active: JClause.T list}
 
 fun given_clause_step ctxt countdown passive active =
-  if countdown <= 0 then Timeout else
+  if countdown <= 0 then error "TIMEOUT" else
   let
     (* tracing *)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "countdown = " ^ @{make_string} countdown)
@@ -647,8 +648,7 @@ fun given_clause_loop dump ctxt countdown passive active =
           given_clause_step ctxt countdown passive active
             handle e => raise (JEHA_EXCEPTION (e, (ctxt, countdown, passive, active)))
         else given_clause_step ctxt countdown passive active) of
-    Timeout => "TIMEOUT"
-  | Unsat => "UNSAT"
+    Unsat => "UNSAT"
   | Next (passive, active) => given_clause_loop dump ctxt (countdown - 1) passive active
 
 fun refutable ctxt prems asms conjecture =
