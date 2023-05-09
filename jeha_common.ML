@@ -9,6 +9,7 @@ sig
   val pretty_tyenv : Proof.context -> Type.tyenv -> string
   val pretty_tenv : Proof.context -> Envir.tenv -> string
   val I : 'a -> 'a
+  val map_some : ('a -> 'b) -> 'a option -> 'b option
 end
 
 structure Jeha_Common : JEHA_COMMON =
@@ -56,5 +57,8 @@ let
 in
   "tenv:" ^ Pretty.string_of (pretty_helper (print o get_trms) tenv)
 end;
+
+fun map_some _ NONE = NONE
+  | map_some f (SOME x) = SOME (f x)
 
 end

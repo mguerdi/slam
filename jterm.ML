@@ -7,7 +7,9 @@ sig
   val strip_comb_fun_types_args : term -> term * typ list * term list
   val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
   val tposs_of : term -> tpos list
+  val disagreement_tpos_of2 : term * term -> tpos option
   val green_tposs_of : term -> tpos list
+  val is_green_tpos : tpos -> term -> bool
   val subterm_at : term -> tpos -> term
   val map_at : tpos -> (term -> term) -> term -> term
   (* preprocessing *)
@@ -68,6 +70,34 @@ fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
     end
   | tposs_of _ = [[]]
 
+(* NONE means no disagreement, the terms are the same *)
+fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Jeha_Common.map_some (cons 0) (disagreement_tpos_of2 (t, u))
+  | disagreement_tpos_of2 (t as (_$_), u as (_$_)) =
+    let
+      val (head_args_t, head_args_u) = (apply2 (uncurry cons o strip_comb)) (t, u)
+    in
+      if length head_args_t <> length head_args_u then SOME [] else
+      let
+        val disagreement_tpos_of2_head_and_args : tpos option list =
+          map disagreement_tpos_of2 (head_args_t ~~ head_args_u)
+        val disagreement_tpos_of2_comb =
+          (* prepend term position in the combination *)
+          map_index
+            (fn (idx, disagreement_tpos_of2_subterm) =>
+              Jeha_Common.map_some (cons idx) disagreement_tpos_of2_subterm)
+            disagreement_tpos_of2_head_and_args
+      in
+        case (map_filter I disagreement_tpos_of2_comb) of
+          (* no disagreements *)
+          [] => NONE
+          (* exactly one disagreement the between the heads / the args *)
+        | [tpos] => SOME tpos
+          (* the position of this combination is the disagreement *)
+        | _ => SOME []
+      end
+    end
+  | disagreement_tpos_of2 _ = SOME []
+
 (* The arguments of f are in green position iff. f \<in> \<Sigma>\<setminus>{\<forall>, \<exists>}, where Free _ variables are taken to
 be in \<Sigma>. *)
 fun can_have_green_args (t as (Const _)) = not (is_quantifier t)
@@ -99,6 +129,12 @@ fun subterm_at t [] = t
   that. Scoping broken?? *)
   | subterm_at (t as (_$_)) (i :: p) = subterm_at (nth (uncurry cons (strip_comb t)) i) p
   | subterm_at _ _ = error ""
+
+fun is_green_tpos [] _ = true
+  | is_green_tpos (0 :: _) _ = false
+  | is_green_tpos (i :: is) (t as (_$_)) =
+      can_have_green_args (head_of t) andalso is_green_tpos is (subterm_at t [i])
+  | is_green_tpos _ _ = false
 
 fun head_tail_pair [] = error ""
   | head_tail_pair (x :: xs) = (x, xs)

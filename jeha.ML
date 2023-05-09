@@ -248,62 +248,56 @@ fun simp_negative_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
       else NONE
   end
 
-(* given terms s, t, find a common position p s.t. s, t only disagree at p *)
+(* given terms s, t, the longest common position p s.t. s, t are equal except
+for their subtrees at p *)
 (* FIXME: rename to find_single_blue_disagreement and change appropriately *)
-(* FIXME: how to deal with types??? Right now we're only considering variables instantiated by the
-unifier. Does well-typedness of the literal tell us enough to make this work? *)
-fun find_single_green_disagreement ctxt term_pair : JTerm.tpos =
-  (* 1. Find a unifier.
-     2. Find the position of all variables affected by the unifier.
-     3. Their longest common prefix is the single disagreement *)
+(* FIXME: how to deal with types??? *)
+fun find_single_green_disagreement ctxt term_pair =
   let
-    (* FIXME: maybe it's possible to easily deal with flex-flex pairs here *)
-    val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [term_pair] Envir.init
+    val disagreement_pos = JTerm.disagreement_tpos_of2 term_pair
+    fun chop_end_until_green term tpos =
+      if JTerm.is_green_tpos tpos term
+        then tpos
+        else chop_end_until_green term (fst (split_last tpos))
+    val green_disagreement_pos =
+      map_some (chop_end_until_green (fst term_pair)) disagreement_pos
   in
-    case Seq.pull unifiers of
-      NONE => [] (* \<epsilon> *)
-    | SOME (env, _) => 
-        (* FIXME: Check that this works with triangular form unifiers. I would guess not because
-        later variables refer to r.h.s. of previous instantiations. *)
-        let
-          val affected_vars = Vartab.keys (Envir.term_env env)
-          fun term_poss_of_affected_vars t =
-            (* consider all positions in the term *)
-            JTerm.green_tposs_of t
-            (* filter out the ones that don't point to affected variables *)
-            |> filter (fn tp =>
-                case JTerm.subterm_at t tp of
-                  Var (x, _) => exists (curry (op =) x) affected_vars
-                | _ => false)
-        in
-          term_pair
-          |> apply2 term_poss_of_affected_vars
-          |> (op @)
-          |> foldr1 (fst o chop_common_prefix (op =)) handle List.Empty => [] (* \<epsilon> *)
-        end
+    green_disagreement_pos
   end
 
 (* implementation of positive simplify-reflect and equality subsumption *)
-fun literal_can_match_single_disagreement ctxt (unit_maxidx, unit_lit) (target_maxidx, target_lit) =
+fun literal_can_match_single_disagreement
+      ctxt (unit_maxidx, unit_lit) (target_maxidx, target_lit) =
   let
-    val unit_lit = JLit.map (Logic.incr_indexes ([], [], target_maxidx + 1)) unit_lit
+    val unit_lit =
+      unit_lit |> JLit.map (Logic.incr_indexes ([], [], target_maxidx + 1))
     val maxidx = unit_maxidx + target_maxidx + 1
     val (lhs, rhs, true) = unit_lit (* Schulz: s, t *)
     val (target_lhs, target_rhs, _) = target_lit (* Schulz: u[], u[]*)
-    (* Schulz: p *)
-    val single_disagreement_position = find_single_green_disagreement ctxt (target_lhs, target_rhs)
-    val (target_term_lhs, target_term_rhs) = (* u|\<^sub>p *)
-      (JTerm.subterm_at target_lhs single_disagreement_position,
-      JTerm.subterm_at target_rhs single_disagreement_position)
-    (* FIXME: does matching need renaming or not? *)
-    val exists_matcher =
-      (Jeha_Unify.matchers (Context.Proof ctxt) maxidx ([(lhs, target_term_lhs), (rhs, target_term_rhs)]),
-      Jeha_Unify.matchers (Context.Proof ctxt) maxidx ([(lhs, target_term_rhs), (rhs, target_term_lhs)]))
-      |> Seq.interleave
-      |> Seq.pull
-      |> is_some
+    (* Schulz: longest possbile p *)
+    val longest_prefix_of_disagreements =
+      find_single_green_disagreement ctxt (target_lhs, target_rhs)
+    fun can_match_disagreement_position prefix_of_disagreements =
+      let
+        val (target_term_lhs, target_term_rhs) = (* u|\<^sub>p *)
+          (JTerm.subterm_at target_lhs prefix_of_disagreements,
+          JTerm.subterm_at target_rhs prefix_of_disagreements)
+        val exists_matcher =
+          ( [(lhs, target_term_lhs), (rhs, target_term_rhs)]
+          , [(lhs, target_term_rhs), (rhs, target_term_lhs)] )
+          |> apply2 (Jeha_Unify.matchers (Context.Proof ctxt) maxidx)
+          |> Seq.interleave
+          |> Seq.pull
+          |> is_some
+      in
+        exists_matcher
+      end
   in
-    exists_matcher
+      case longest_prefix_of_disagreements of
+        NONE => false (* terms are equal, (TD1) or (DR) will take care of it *)
+      | SOME longest_prefix_of_disagreements =>
+          (* Schulz' p is any of the prefixes of the longest possible p *)
+          exists (can_match_disagreement_position) (prefixes longest_prefix_of_disagreements)
   end
 
 (* Positive simplify-reflect (PS) simplification (Schulz)
@@ -318,7 +312,9 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   let
     val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
-    val exists_matcher = literal_can_match_single_disagreement ctxt (JClause.maxidx unit_clause, lit) (JClause.maxidx target_clause, target_lit)
+    val exists_matcher =
+      literal_can_match_single_disagreement
+        ctxt (JClause.maxidx unit_clause, lit) (JClause.maxidx target_clause, target_lit)
     (* tracing *)
     val msg =  "   " ^ "(PS)"
       ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
@@ -511,7 +507,7 @@ fun forward_simplify ctxt cheap active given_clause =
         (* successful rewrites of c (NONE filtered out) *)
         val rn_rp_rewrites : JClause.T Seq.seq =
           seq_cartesian_product rn_rp_rules unit_target_pairs
-          |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target) 
+          |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target)
         val ps_rewrites : JClause.T Seq.seq =
           seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
@@ -520,7 +516,7 @@ fun forward_simplify ctxt cheap active given_clause =
           |> Seq.map_filter (fn (unit, target) => simp_negative_simplify_reflect ctxt unit target)
         val dd_dr_rewrites : JClause.T Seq.seq =
             Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
-      in 
+      in
         (* following Schulz: RN, RP, PS, FIXME: NS, DD, DR *)
         Seq.empty
         |> (Seq.append rn_rp_rewrites
@@ -632,7 +628,7 @@ fun given_clause_step ctxt countdown passive active =
       (* given_clause redundant w.r.t. active set *)
       [] => Next (passive, active)
       (* select first simplification as given_clause *)
-    | given_clause :: simplifications => 
+    | given_clause :: simplifications =>
       (* if given_clause simplifies to (or is) [] then UNSAT *)
       if exists (curry (op =) [] o JClause.literals) (given_clause :: simplifications)
         then Unsat
