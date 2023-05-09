@@ -80,15 +80,6 @@ fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   * 
 *)
 
-fun prefix_Vars_TVars prefix =
-  let 
-    fun prefix_if_Var prefix (Var ((s, i),T)) = Var ((prefix ^ s, i), T)
-      | prefix_if_Var _ u = u
-    fun prefix_if_TVar prefix = map_type_tvar (fn ((s, i), S) => TVar ((prefix ^ s, i), S))
-  in
-    map_aterms (prefix_if_Var prefix) o map_types (prefix_if_TVar prefix)
-  end
-
 (** Simplification **)
 
 (* Syntactic tautology deletion 1 (TD1) (Schulz) *)
@@ -106,9 +97,19 @@ fun contains_syntactic_complementaries [] = false
 (* Deletion of duplicated literals (DD) (Schulz) *)
 fun simp_delete_duplicated_lits ctxt c =
   let
-    fun impl_simp_delete_duplicated_lits [] = []
-      | impl_simp_delete_duplicated_lits (l :: ls) = l :: filter (not o (curry JLit.aconv l)) ls
-    val c' = JClause.map_literals impl_simp_delete_duplicated_lits c
+    (* positions of duplicates in the clause, critically in reverse order *)
+    val cposs_of_dups =
+      fold_index
+        (fn (i, l) => fn (dup_is, head_list) =>
+          if exists (curry JLit.aconv l) head_list
+            (* duplicate of l has already been seen *)
+            then (i::dup_is, head_list)
+            (* l is new, add it to the seen lits *)
+            else (dup_is, l::head_list))
+        (JClause.literals c)
+        ([], [])
+      |> fst
+    val c' = fold JClause.delete_lit_at cposs_of_dups c
   in
     if JClause.length c' = JClause.length c
       then NONE
@@ -121,9 +122,9 @@ fun simp_delete_duplicated_lits ctxt c =
 (* Deletion of resolved literals (DR) (Schulz) *)
 fun simp_delete_resolved_lits ctxt c =
   let
-    val impl_simp_delete_resolved_lits =
-      filter (fn (s, t, is_positive) => not (not is_positive andalso s aconv t))
-    val c' = JClause.map_literals impl_simp_delete_resolved_lits c
+    (* literal of the from s \<noteq> s *)
+    fun is_false_disequation (s, t, is_positive) = not is_positive andalso s aconv t
+    val c' = JClause.filter_out_lits is_false_disequation c
   in
     if JClause.length c' = JClause.length c
       then NONE
@@ -143,12 +144,15 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
   (* check that to be rewritten literal is indeed positive / negative *)
   if not (positive = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
-    (* make variables distinct *)
-    val unit_clause = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "L"))) unit_clause
-    val target_clause = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "R"))) target_clause
+    (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
+    val unit_clause = JClause.incr_indexes (JClause.maxidx target_clause + 1) unit_clause
     val (from, to) = apply2 (JLit.term_at_lpos (the_single (JClause.literals unit_clause))) (lp, JLit.swap_lpos lp) (* Schulz: (s, t) *)
     val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
-    val matchers = Jeha_Unify.matchers (Context.Proof ctxt) [(from, target_term)]
+    val matchers =
+      Jeha_Unify.matchers
+        (Context.Proof ctxt)
+        (JClause.maxidx_of2 (unit_clause, target_clause))
+        [(from, target_term)]
     fun build_conclusion matcher =
       let
         val msg =  "   " ^ (if positive then "(RP)" else "(RN)")
@@ -156,27 +160,49 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           ^ " in " ^ JClause.pretty_clause ctxt target_clause
           ^ " with " ^ Jeha_Common.pretty_term ctxt from
           ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
-        (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
         val (from, to) = apply2 (JTerm.norm_beta_eta_qeta_env matcher) (from, to)
       in
-        if SOME GREATER = Jeha_Order.kbo (from, to) (* Schulz: \<sigma>(s) > \<sigma>(t) *)
-          then
-            (* FIXME: understand and implement the restrictions on RP form Schulz's paper *)
-            let
-              val rewritten_clause = JClause.map_at_full_pos j (K to) target_clause
-              val rewriting_clause = JClause.dummy [(from, to, true)]
-              val rewriting_smaller_than_rewritten = (fn () =>
-                SOME LESS = Jeha_Order.clause_kbo (rewriting_clause, rewritten_clause))
-            in
-              if not positive orelse rewriting_smaller_than_rewritten ()
-                then (
-                  Jeha_Common.trace_msg ctxt (fn () => msg);
-                  (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
-                  SOME (JClause.map_literals (map (JLit.map JTerm.norm_beta_eta_qeta)) rewritten_clause))
-                else NONE
-            end
-          else
-            NONE
+        (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
+        (* Schulz: \<sigma>(s) > \<sigma>(t) *)
+        if SOME GREATER <> Jeha_Order.kbo (from, to)
+          then NONE
+        else
+        let
+          val rewritten_clause =
+            target_clause
+            |> JClause.map_at_full_pos j (K to)
+            |> JClause.norm_beta_eta_qeta
+            |> JClause.map_maxidx (K (Envir.maxidx_of matcher))
+          val rewriting_clause = JClause.dummy [(from, to, true)]
+          val rewriting_smaller_than_rewritten = (fn () =>
+            SOME LESS = Jeha_Order.clause_kbo (rewriting_clause, rewritten_clause))
+        in
+          (* FIXME: understand and implement the restrictions on RP form Schulz's paper *)
+          (* for RP the rewriting clause must be smaller than the rewritten clause *)
+          (* FIXME: is this what that sentence means? Relevant: zipperposition, superposition.ml:1886
+          in detail:
+          (* Context: c is the to be rewritten clause, t is the literal where the rewrite happens *)
+            (* - The rewriting clause is smaller than the rewritten clause *)
+          (* Quesiton: does (not toplevel) correspond to Schulz' p \<noteq> \<lambda>? *)
+            (not toplevel ||
+          (* Question: does this mean "rewritten literal is not strictly maximal?"
+          Is this what Schulz calls "not eligible for paramodulation"? *)
+            C.lits c |> CCArray.exists (fun lit -> Lit.Seq.terms lit |>
+              Iter.exists (fun s -> Comp.is_Gt_or_Geq (O.compare ord s t))) ||
+          (* Context: r' is the matching side of the equation (our `to`) with the matcher applied *)
+          (* Question: at this point the *)
+            C.lits c |> CCArray.exists (fun lit -> match Literal.View.as_eqn lit with
+                | Some (litl, litr, true) ->
+                  T.equal t litl && Comp.is_Gt_or_Geq (O.compare ord litr r') ||
+                  T.equal t litr && Comp.is_Gt_or_Geq (O.compare ord litl r')
+                | Some (litl, litr, false) -> T.equal t litl || T.equal t litr
+                | None -> false))
+          *)
+          if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
+          (Jeha_Common.trace_msg ctxt (fn () => msg);
+          (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
+          SOME (JClause.norm_beta_eta_qeta rewritten_clause))
+        end
       end
   in
     matchers
@@ -199,12 +225,14 @@ fun simp_negative_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   (* check that to be deleted literal is indeed positive *)
   if not (true = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
+    val unit_clause = JClause.incr_indexes (JClause.maxidx target_clause + 1) unit_clause
+    val maxidx = JClause.maxidx_of2 (unit_clause, target_clause)
     val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
     val lit_as_positive = let val (s, t, false) = lit in (s, t, true) end
     val exists_matcher =
       (target_lit, lit_as_positive)
-      |> Jeha_Subsumption.literal_matchers ctxt
+      |> Jeha_Subsumption.literal_matchers ctxt maxidx
       |> Seq.pull
       |> is_some
     (* tracing *)
@@ -256,9 +284,11 @@ fun find_single_green_disagreement ctxt term_pair : JTerm.tpos =
   end
 
 (* implementation of positive simplify-reflect and equality subsumption *)
-fun literal_can_match_single_disagreement ctxt lit target_lit =
+fun literal_can_match_single_disagreement ctxt (unit_maxidx, unit_lit) (target_maxidx, target_lit) =
   let
-    val (lhs, rhs, true) = lit (* Schulz: s, t *)
+    val unit_lit = JLit.map (Logic.incr_indexes ([], [], target_maxidx + 1)) unit_lit
+    val maxidx = unit_maxidx + target_maxidx + 1
+    val (lhs, rhs, true) = unit_lit (* Schulz: s, t *)
     val (target_lhs, target_rhs, _) = target_lit (* Schulz: u[], u[]*)
     (* Schulz: p *)
     val single_disagreement_position = find_single_green_disagreement ctxt (target_lhs, target_rhs)
@@ -267,8 +297,8 @@ fun literal_can_match_single_disagreement ctxt lit target_lit =
       JTerm.subterm_at target_rhs single_disagreement_position)
     (* FIXME: does matching need renaming or not? *)
     val exists_matcher =
-      (Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_term_lhs), (rhs, target_term_rhs)]),
-      Jeha_Unify.matchers (Context.Proof ctxt) ([(lhs, target_term_rhs), (rhs, target_term_lhs)]))
+      (Jeha_Unify.matchers (Context.Proof ctxt) maxidx ([(lhs, target_term_lhs), (rhs, target_term_rhs)]),
+      Jeha_Unify.matchers (Context.Proof ctxt) maxidx ([(lhs, target_term_rhs), (rhs, target_term_lhs)]))
       |> Seq.interleave
       |> Seq.pull
       |> is_some
@@ -288,12 +318,12 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   let
     val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
-    val exists_matcher = literal_can_match_single_disagreement ctxt lit target_lit
+    val exists_matcher = literal_can_match_single_disagreement ctxt (JClause.maxidx unit_clause, lit) (JClause.maxidx target_clause, target_lit)
     (* tracing *)
     val msg =  "   " ^ "(PS)"
       ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
       ^ " in " ^ JClause.pretty_clause ctxt target_clause
-      ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [lit])
+      ^ " with " ^ JClause.pretty_clause ctxt (unit_clause)
   in
     if exists_matcher
       then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
@@ -306,9 +336,9 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
 fun equality_subsumes ctxt (unit_clause, target_clause) =
   if not (is_pos_unit unit_clause) then false else
   let
-    val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
-    val positive_lits = filter #3 (JClause.literals target_clause)
-    val exists_matcher = exists (literal_can_match_single_disagreement ctxt lit) positive_lits
+    val unit_lit = (JClause.maxidx unit_clause, the_single (JClause.literals unit_clause)) (* Schulz: s, t *)
+    val positive_lits = map (pair (JClause.maxidx target_clause)) (filter #3 (JClause.literals target_clause))
+    val exists_matcher = exists (literal_can_match_single_disagreement ctxt unit_lit) positive_lits
     val _ = if exists_matcher then Jeha_Common.trace_msg ctxt (fn () =>
       "equality subsumed by " ^ JClause.pretty_clause ctxt unit_clause) else ()
   in
@@ -390,8 +420,8 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
     OR: try to use Envir.empty max_idx (augment clauses with max_idx?) and Envir.genvar
     SEE: COMP_INCR maybe?
     NOTE: how to handle TVars? *)
-    val d = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "L"))) d
-    val c = JClause.map_literals (map (JLit.map (prefix_Vars_TVars "R"))) c
+    val d = JClause.incr_indexes (JClause.maxidx c + 1) d
+    val env = Envir.empty (JClause.maxidx_of2 (c, d))
     val (_, _, is_pos_eq) = JClause.lit_at cp d
     val t = JClause.subterm_at_full_pos d ([], lp, cp)
     val t' = JClause.subterm_at_full_pos d ([], JLit.swap_lpos lp, cp)
@@ -406,7 +436,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
       (* FIXME: Is smash_unifiers the one we want? How lossy is this? *)
       (* FIXME: Later, try to keep around flex-flex pairs for a while? *)
       let
-        val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] Envir.init
+        val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
         (* FIXME: print warning message when discarding unifiers *)
         val (unifiers, _) = Seq.chop 4 unifiers
         fun build_conclusion unifier =
@@ -416,7 +446,7 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
           in
             (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
             JClause.combine d' ct'
-            |> JClause.map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env unifier)))
+            |> JClause.norm_beta_eta_qeta_env unifier
             |> JClause.refresh_id ()
           end
       in
@@ -428,17 +458,14 @@ fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
 fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
   let
     val (u, u', is_pos_eq) = JClause.lit_at cp c
-    val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] Envir.init
+    val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
     (* FIXME: print warning message when discarding unifiers *)
     val (unifiers, _) = Seq.chop 4 unifiers
     fun build_conclusion unifier =
-      let
-        val c' = JClause.delete_lit_at cp c
-      in
-        (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-        JClause.map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env unifier))) c'
-        |> JClause.refresh_id ()
-      end
+      c
+      |> JClause.delete_lit_at cp
+      |> JClause.norm_beta_eta_qeta_env unifier
+      |> JClause.refresh_id ()
   in
     if is_pos_eq
       then []
@@ -630,9 +657,9 @@ fun given_clause_step ctxt countdown passive active =
               simplified_active @ inferred_clauses
               (* cheap_simplify *)
               |> maps (forward_simplify ctxt true active)
-              |> (fn cheap_simplified => (trace_msg_clauses "cheap_simplified: " cheap_simplified; cheap_simplified))
+              (* |> (fn cheap_simplified => (trace_msg_clauses "cheap_simplified: " cheap_simplified; cheap_simplified)) *)
               |> filter (not o is_trivial)
-            val _ = trace_msg_clauses "new_clauses: " new_clauses
+            (* val _ = trace_msg_clauses "new_clauses: " new_clauses *)
             (* add inferred clauses to passive set *)
             val passive = add_new_clauses passive new_clauses
           in

@@ -16,6 +16,7 @@ sig
   val term_at_lpos : T -> lpos -> term
   val map_at_lpos : lpos -> (term -> term) -> T -> T
   val occurs_deeply_in : term -> T -> bool
+  val maxidx_of : T -> int
 end;
 
 structure JLit : JLIT =
@@ -67,5 +68,7 @@ fun map_at_lpos Left f (l, r, b) = (f l, r, b)
   | map_at_lpos Right f (l, r, b) = (l, f r, b)
 
 fun occurs_deeply_in x (l, r, _) = JTerm.occurs_deeply_in x l orelse JTerm.occurs_deeply_in x r
+
+fun maxidx_of (s, t, _) = Int.max (apply2 maxidx_of_term (s, t))
 
 end;

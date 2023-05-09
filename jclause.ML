@@ -6,14 +6,18 @@ sig
   type full_pos = JTerm.tpos * JLit.lpos * cpos
   val literals : T -> JLit.T list
   val id : T -> int
-  val map_literals : (JLit.T list -> JLit.T list) -> T -> T
+  val maxidx : T -> int
+  val maxidx_of2 : T * T -> int
+  val map_maxidx : (int -> int) -> T -> T
   val lit_at : cpos -> T -> JLit.T
   val dummy : JLit.T list -> T
   val refresh_id : unit -> T -> T
   val add_literal : JLit.T -> T -> T
   val combine : T -> T -> T
   val delete_lit_at : cpos -> T -> T
+  val filter_out_lits : (JLit.T -> bool) -> T -> T
   val length : T -> int
+  val of_literals : JLit.T list * int -> T
   val of_term : term * int -> T
   val term_of : T -> term
   val pretty_clause : Proof.context -> T -> string
@@ -24,12 +28,15 @@ sig
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T
   val subterm_at_full_pos : T -> full_pos -> term
   val occurs_deeply : term -> T -> bool
+  val norm_beta_eta_qeta_env : Envir.env -> T -> T
+  val norm_beta_eta_qeta : T -> T
+  val incr_indexes : int -> T -> T
 end;
 
 structure JClause : JCLAUSE =
 struct
 
-type T = { literals: JLit.T list, id : int }
+type T = { literals: JLit.T list, id : int , maxidx : int }
 type cpos = int
 type full_pos = JTerm.tpos * JLit.lpos * cpos
 
@@ -37,30 +44,70 @@ val literals = #literals
 
 val id = #id
 
-fun map_literals f { literals, id } = { literals = f literals, id = id }
+val maxidx = #maxidx
+
+val maxidx_of2 = Int.max o apply2 maxidx
+
+val empty = { literals = [], id = ~1, maxidx = ~1 }
+
+(* NOTE: invalidates maxidx *)
+fun map_literals f { literals, id, maxidx } =
+  { literals = f literals, id = id, maxidx = ~1 }
 
 fun lit_at cp clause = nth (literals clause) cp
 
-fun dummy literals = { literals = literals, id = ~1 }
+fun dummy literals =
+  map_literals (K literals) empty
 
-fun map_id f { literals, id } = { literals = literals, id = f id }
+fun map_id f { literals, id, maxidx } = { literals = literals, id = f id, maxidx = maxidx }
 
 fun refresh_id _ = map_id (K (Clause_Id.new ()))
 
-fun add_literal l = refresh_id () o map_literals (cons l)
+fun maxidx_of_literal_list ls =
+  fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
+
+fun map_maxidx f { literals, id, maxidx } = { literals = literals, id = id, maxidx = f maxidx }
+
+(* FIXME: use this for testing *)
+fun recalculate_maxidx clause =
+  map_maxidx ((K o maxidx_of_literal_list o literals) clause) clause
+
+fun add_literal l clause = 
+  clause
+  |> map_literals (cons l)
+  |> refresh_id ()
+  |> map_maxidx (K (Int.max (maxidx clause, JLit.maxidx_of l)))
 
 fun combine c d =
-  map_literals (curry (op @) (literals c)) d |> refresh_id ()
+  map_literals (curry (op @) (literals c)) d
+  |> refresh_id ()
+  |> map_maxidx (K (maxidx_of2 (c, d)))
 
-fun delete_lit_at cp = refresh_id () o map_literals (nth_drop cp)
+fun delete_lit_at cp clause =
+  clause
+  |> map_literals (nth_drop cp)
+  |> refresh_id ()
+  |> map_maxidx (K (maxidx clause))
+
+fun filter_out_lits f clause =
+  clause
+  |> map_literals (filter_out f)
+  |> map_maxidx (K (maxidx clause))
 
 val length = List.length o literals
+
+fun of_literals (ls, id) = 
+  empty |> map_id (K id) |> map_literals (K ls) |> recalculate_maxidx
 
 (* converts boolean terms to lists of literals *)
 fun of_term (t, id) =
   if not (fastype_of t = @{typ bool})
     then error "can only turn boolean terms into clauses"
-    else { literals = HOLogic.disjuncts t |> map JLit.of_term, id = id }
+    else
+      empty
+      |> map_id (K id)
+      |> map_literals (K (HOLogic.disjuncts t |> map JLit.of_term))
+      |> recalculate_maxidx
 
 fun term_of { literals = [], ... } = @{term False}
   | term_of { literals = (c as (_ :: _)), ... } =
@@ -93,11 +140,29 @@ fun green_full_poss_of c =
   |> maps (fn cp => [JLit.Left, JLit.Right] |> map (fn lp => (subterm_at_full_pos c ([], lp, cp), lp, cp)))
   |> maps (fn (t, lp, cp) => map (fn tp => (tp, lp, cp)) (JTerm.green_tposs_of t))
 
+(* NOTE: invalidates maxidx *)
 val map_at_cpos = map_literals oo nth_map
 
+(* NOTE: invalidates maxidx *)
 fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (JLit.map_at_lpos lp (JTerm.map_at tp f)) c
 
-fun occurs_deeply (x as (Var _)) { literals, ... }= exists (JLit.occurs_deeply_in x) literals
+fun occurs_deeply (x as (Var _)) { literals, ... } = exists (JLit.occurs_deeply_in x) literals
   | occurs_deeply _ _ = error "only Vars can occur deeply"
+
+fun norm_beta_eta_qeta_env env clause =
+  if Envir.maxidx_of env < maxidx clause
+    (* this indicates something went wrong *)
+    then error "maxidx of env should be greater or equal to maxidx of clause"
+    else
+      clause
+      |> map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env env)))
+      |> map_maxidx (K (Int.max (Envir.maxidx_of env, maxidx clause)))
+
+fun norm_beta_eta_qeta clause = norm_beta_eta_qeta_env (Envir.empty (maxidx clause)) clause
+
+fun incr_indexes increment clause =
+  clause
+  |> map_literals (map (JLit.map (Logic.incr_indexes ([], [], increment))))
+  |> map_maxidx (K (increment + maxidx clause))
 
 end;

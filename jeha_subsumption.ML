@@ -10,11 +10,11 @@ In the latter case backtrack to i <- i-1 and try the next l' for l\<^sub>i. *)
 
 signature JEHA_SUBSUMPTION =
 sig
-  val literal_matchers : Proof.context -> (JLit.T * JLit.T) -> Envir.env Seq.seq
+  val literal_matchers : Proof.context -> int -> (JLit.T * JLit.T) -> Envir.env Seq.seq
   (* Extend environment to match second argument against third. *)
-  val literal_subsumes : Proof.context -> (JLit.T * JLit.T) -> Envir.env option
+  val literal_subsumes : Proof.context -> int -> (JLit.T * JLit.T) -> Envir.env option
   (* FIXME: This type signature is wrong but *)
-  val subsumed_alternatives : Proof.context -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
+  val subsumed_alternatives : Proof.context -> int -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
   (* Top level clause subsumption. *)
   val subsumes : Proof.context -> (JClause.T * JClause.T) -> bool
 end;
@@ -22,39 +22,43 @@ end;
 structure Jeha_Subsumption : JEHA_SUBSUMPTION =
 struct
 
-fun literal_matchers ctxt ((s, t, b), (s', t', b')) =
+fun literal_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
   if b = b'
     then
       Seq.interleave
-        ((Jeha_Unify.matchers (Context.Proof ctxt) [(s, s'), (t, t')]),
-        (Jeha_Unify.matchers (Context.Proof ctxt) [(s, t'), (t, s')]))
+        ((Jeha_Unify.matchers (Context.Proof ctxt) maxidx [(s, s'), (t, t')]),
+        (Jeha_Unify.matchers (Context.Proof ctxt) maxidx [(s, t'), (t, s')]))
     else
       Seq.empty
 
-fun literal_subsumes ctxt ll' =
-  case Seq.pull (literal_matchers ctxt ll') of
+fun literal_subsumes ctxt maxidx ll' =
+  case Seq.pull (literal_matchers ctxt maxidx ll') of
     NONE => NONE
     (* throw away the others *)
   | SOME (env, _) => SOME env
 
 (* all ways in which l can subsume a literal of d *)
-fun subsumed_alternatives ctxt (l, []) = Seq.empty
-  | subsumed_alternatives ctxt (l, l' :: d') = 
+fun subsumed_alternatives ctxt maxidx (l, []) = Seq.empty
+  | subsumed_alternatives ctxt maxidx (l, l' :: d') = 
       let
-        (* recursive call without l', cons l' into the resulting clauses *)
-        val skip_l' = (l, d') |> subsumed_alternatives ctxt |> Seq.map (fn (l, d') => (l, l' :: d'))
+        (* recursive call without l', keep l' around for later *)
+        fun skip_l' maxidx' =
+          (l, d')
+          |> subsumed_alternatives ctxt maxidx'
+          (* d'' is d' but with one literal removed because it was subsumed by l *)
+          |> Seq.map (fn (env, d'') => (env, l' :: d''))
       in
-        case literal_subsumes ctxt (l, l') of
-          NONE => skip_l'
-          (* FIXME is this lazy or do we need Seq.make? *)
-        | SOME env => Seq.cons (env, d') skip_l'
+        case literal_subsumes ctxt maxidx (l, l') of
+          (* l can't subsume l' *)
+          NONE => skip_l' maxidx
+          (* l can subsume l', but still try the alternatives afterwards *)
+        | SOME env => Seq.cons (env, d') (skip_l' (Envir.maxidx_of env))
       end
 
 (* read: "c subsumes d" *)
-fun impl_subsumes ctxt ([], d) = true
-  (* TODO: distinct variables? might not be necessary with Unify.matchers, check! *)
-  | impl_subsumes ctxt (l :: ls, d) =
-      try_alternatives_with_backtracking ctxt (subsumed_alternatives ctxt (l, d)) ls
+fun impl_subsumes ctxt _ ([], d) = true
+  | impl_subsumes ctxt maxidx (l :: ls, d) =
+      try_alternatives_with_backtracking ctxt (subsumed_alternatives ctxt maxidx (l, d)) ls
 
 and try_alternatives_with_backtracking ctxt alternatives ls =
   case Seq.pull alternatives of
@@ -66,7 +70,11 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
           val ls = (map o JLit.map o JTerm.norm_beta_eta_qeta_env) env ls
         in
           (* move on to next l in ls *)
-          impl_subsumes ctxt (ls, d_without_l')
+          (* FIXME: do we need to check that env is consistent with later envs, i.e. they combine to
+          form a valid substitution? No: the variables mapped by env are do not occur anymore after
+          it has been applied (what about the ones not mapped by env? Note: env is total w.r.t. l,
+          because its variables are distinct from those of l'. *)
+          impl_subsumes ctxt (Envir.maxidx_of env) (ls, d_without_l')
         end
       in
         if subsumed
@@ -75,7 +83,14 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
          else try_alternatives_with_backtracking ctxt alternatives ls
       end
 
-fun subsumes ctxt clause_pair =
-  impl_subsumes ctxt (apply2 JClause.literals clause_pair)
+fun subsumes ctxt (c, d) =
+  let
+    (* make vars of c (the pattern) distinct from those of d *)
+    val c = JClause.incr_indexes (JClause.maxidx d + 1) c
+    (* to ensure generate variables are fresh w.r.t. both clauses *)
+    val maxidx = JClause.maxidx_of2 (c, d)
+  in
+    impl_subsumes ctxt maxidx (apply2 JClause.literals (c, d))
+  end
 
 end;
