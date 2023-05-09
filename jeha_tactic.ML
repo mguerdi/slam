@@ -38,11 +38,12 @@ fun jeha_tac options ctxt ths i st0 =
             (* FIXME: asms and prems seems to be the same *)
             if Jeha.refutable context (prems @ ths) asms (Thm.term_of concl)
                 handle Jeha.JEHA_EXCEPTION (e, state) =>
-                  (* FIXME: only dump if the "dump" option was passed to the tactic, change type of
-                  dump to (Proof.context, ...) option *)
-                  let val _ = dump := state :: (!dump) in
-                    (writeln "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Common.dump"; raise e)
-                  end
+                  (if exists (curry (op =) "dump") options
+                    then
+                      (let val _ = dump := state :: (!dump) in
+                        (writeln "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Common.dump"; raise e)
+                      end)
+                    else raise e)
               then ALLGOALS (Skip_Proof.cheat_tac context) st
               else Seq.empty)
           ) ctxt i st0
