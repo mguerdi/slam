@@ -71,7 +71,11 @@ fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
       outer_clausify b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
-  | outer_clausify b s c = [JClause.add_literal (JLit.mk_pred s b) c]
+  (* FIXME: see remark about not simplifying \<leftrightarrow> in the making ho superposition work paper *)
+  | outer_clausify b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
+      [JClause.add_literal (s, t, b) c]
+  (* FIXME: add forall, exists *)
+  | outer_clausify b s c = []
 
 (*** Rules ***)
 (* rule implementation checklist:
