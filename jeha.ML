@@ -22,7 +22,7 @@ sig
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
   structure Passive_Set : HEAP
-  val passive_set_of_list : JClause.T list -> Passive_Set.T
+  val init_passive_set : JClause.T list -> Passive_Set.T
   type loopstate
   (* original exception + prover state before the exception was raised *)
   exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * JClause.T list)
@@ -475,21 +475,21 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
 fun size_of_clause c =
   fold (fn (l, r, _) => fn acc => acc + size_of_term l + size_of_term r) (JClause.literals c) 0
 
-val size_ord = make_ord (fn (c, d) => size_of_clause c <= size_of_clause d)
-
-(* FIXME: Heap recomputes size (maybe `type elem = int * clause`?) *)
-structure Passive_Set = Heap(type elem = JClause.T val ord = size_ord)
+structure Passive_Set = Heap(type elem = int * JClause.T val ord = int_ord o apply2 fst)
 
 fun seq_of_passive_set passive =
   if Passive_Set.is_empty passive
     then Seq.empty
-    else Passive_Set.min_elem passive ||> seq_of_passive_set |> uncurry Seq.cons
+    else Passive_Set.min_elem passive |>> snd ||> seq_of_passive_set |> uncurry Seq.cons
 
-fun passive_set_of_list clauses = fold Passive_Set.insert clauses Passive_Set.empty
+(* initial clauses all have weight 0 so they are added to active set first *)
+fun init_passive_set clauses = fold Passive_Set.insert (map (pair 0) clauses) Passive_Set.empty
 
-fun add_new_clauses passive clauses = fold Passive_Set.insert clauses passive
+fun add_new_clause clause = Passive_Set.insert (size_of_clause clause, clause)
 
-fun select_given_clause cs = Passive_Set.min_elem cs
+fun add_new_clauses passive clauses = fold add_new_clause clauses passive
+
+fun select_given_clause cs = Passive_Set.min_elem cs |>> snd
 
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
 fun forward_simplify ctxt cheap active given_clause =
@@ -688,7 +688,7 @@ fun refutable ctxt prems asms conjecture =
     val clauses = map_index (fn (_, t) => JClause.of_term (t, Clause_Id.new ())) (neg_conjecture :: asms @ prems)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map JClause.term_of clauses))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
-    val result = given_clause_loop true ctxt 40 (passive_set_of_list clauses) []
+    val result = given_clause_loop true ctxt 40 (init_passive_set  clauses) []
   in
     if result = "UNSAT" then true else error result
   end
