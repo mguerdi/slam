@@ -24,6 +24,7 @@ sig
   val mk_multiset_order_of_strict :
         ('a * 'a -> partial_order) -> ('a list) * ('a list) -> partial_order
   val idxs_of_maximal_elements : ('a * 'a -> partial_order) -> 'a list -> (int * bool) list
+  val is_maximal : ('a * 'a -> partial_order) -> bool -> 'a -> 'a list -> bool
 end;
 
 structure Jeha_Order: JEHA_ORDER =
@@ -442,18 +443,25 @@ fun idxs_of_maximal_elements a_ord xs =
     |> map_index (uncurry pair)
     |> map_filter (fn (idx, is_max) => Jeha_Common.map_some (pair idx) is_max)
   end
-  
 
-(* Eligibility without selection functions:
-Definition 22 (Eligibility) A literal L is (strictly) \<ge>-eligible w.r.t. a substitution \<sigma> in C for
-some relation \<ge> if L\<sigma> is (strictly) \<ge>-maximal in C\<sigma>.
-The \<ge>-eligible positions of clause C w.r.t a substitution \<sigma> are inductively defined as follows:
-(E2) If a literal L = s \<doteq> t with \<not> (s\<sigma> \<le> t\<sigma>) is either \<ge>-eligible and negative or strictly
-      \<ge>-eligible and positive, then L.s.\<epsilon> is \<ge>-eligible.
-(E2.1) L.s.\<epsilon> if L = (s = t) with \<not> (s\<sigma> \<le> t\<sigma>) is strictly \<ge>-eligible.
-(E2.2) L.s.\<epsilon> if L = (s \<noteq> t) with \<not> (s\<sigma> \<le> t\<sigma>) is \<ge>-eligible.
-(E3) ...
-(E4) ...
-*)
+fun is_maximal a_ord strict x xs =
+  let
+    (* NONE = not maximal, SOME strict = strict maximal *)
+    val (maximal, occurrences) = 
+      fold (fn y => fn (maximal, occurrences) =>
+        if maximal andalso (not strict orelse occurrences <= 1)
+          then case a_ord (y, x) of
+            (* y is strictly greater than x, so x can't be maximal *)
+            SOME GREATER => (false, occurrences)
+          | SOME EQUAL => (true, occurrences + 1)
+          | SOME LESS => (true, occurrences + 1)
+          | NONE => (true, occurrences)
+          (* early abort *)
+          else (false, occurrences))
+      xs
+      (true, 0)
+    in
+      maximal andalso (not strict orelse occurrences <= 1)
+    end
 
 end;

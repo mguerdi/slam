@@ -399,47 +399,48 @@ fun infer_eq_neq_outer_claus c i =
   end
 
 (* Sup inference *)
-fun infer_sup ctxt (d, i as (lp, cp)) (c, j) =
+fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
   let
-    (* FIXME: better renaming strategy: collect Vars from one term in a Vars structure
-    (term_item.ML), traverse the other creating an environment mapping names already used to fresh
-    names
-    ALSO: Only make t and u (and compose environments afterwards? Envir.merge?)
-    OR: try to use Envir.empty max_idx (augment clauses with max_idx?) and Envir.genvar
-    SEE: COMP_INCR maybe?
-    NOTE: how to handle TVars? *)
     val d = JClause.incr_indexes (JClause.maxidx c + 1) d
     val env = Envir.empty (JClause.maxidx_of2 (c, d))
-    val (_, _, is_pos_eq) = JClause.lit_at cp d
-    val t = JClause.subterm_at_full_pos d ([], lp, cp)
-    val t' = JClause.subterm_at_full_pos d ([], JLit.swap_lpos lp, cp)
-    val u = JClause.subterm_at_full_pos c j
+    val rewriting_literal = JClause.lit_at cp d (* t \<approx> t' *)
+    val (t, t', is_pos_eq) = JLit.orient lp rewriting_literal
+    val u = JClause.subterm_at_full_pos c u_pos
   in
-    if
-      not is_pos_eq orelse
-      JTerm.might_be_fluid u orelse
-      (is_Var u andalso JClause.occurs_deeply u c)
-    then []
-    else
-      (* FIXME: Is smash_unifiers the one we want? How lossy is this? *)
-      (* FIXME: Later, try to keep around flex-flex pairs for a while? *)
-      let
-        val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
-        (* FIXME: print warning message when discarding unifiers *)
-        val (unifiers, _) = Seq.chop 4 unifiers
-        fun build_conclusion unifier =
-          let
-            val d' = JClause.delete_lit_at cp d
-            val ct' = JClause.map_at_full_pos j (K t') c
-          in
-            (* writeln (Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier)); *)
-            JClause.combine d' ct'
-            |> JClause.norm_beta_eta_qeta_env unifier
-            |> JClause.refresh_id ()
-          end
-      in
-        map build_conclusion unifiers
-      end
+    if not is_pos_eq then [] else
+    if JTerm.might_be_fluid u then [] else (* 1. *)
+    if is_Var u andalso JClause.occurs_deeply u c then [] else (* 2. *)
+    (* FIXME: 3. variable condition ... *)
+    let
+      val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
+      (* FIXME: print warning message when discarding unifiers *)
+      val (unifiers, _) = Seq.chop 4 unifiers
+      fun build_conclusion unifier =
+        let
+          val (c, d) = (c, d) |> apply2 (JClause.norm_beta_eta_qeta_env unifier)
+          val u_eligible = JClause.is_eligible_full_pos c u_pos
+          (* This checks for strict eligibility of cp because the literal at cp is positive. *)
+          val tt'_eligible = JClause.is_eligible_cpos d cp
+          val c_comp_d = JClause.kbo (c, d)
+          val d' = JClause.delete_lit_at cp d
+          (* this relies on normalization not destroying green / top level positions, i.e.
+          (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
+          val (t, t', _) = JLit.orient lp (JClause.lit_at cp d)
+          val ct' = JClause.map_at_full_pos u_pos (K t') c
+          val t_comp_t' = Jeha_Order.kbo (t, t')
+        in
+          (* order restrictions *)
+          if SOME LESS = t_comp_t' orelse SOME EQUAL = t_comp_t' then NONE else (* 5. *)
+          if not u_eligible then NONE else (* 6. *)
+          if SOME LESS = c_comp_d orelse SOME EQUAL = c_comp_d then NONE else (* 7. *)
+          if not tt'_eligible then NONE else (* 8. *)
+          JClause.combine d' ct'
+          |> JClause.refresh_id ()
+          |> SOME
+        end
+    in
+      map_filter build_conclusion unifiers
+    end
   end
 
 (* ERes inference *)

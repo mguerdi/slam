@@ -14,6 +14,7 @@ sig
   val mk_pred : term -> bool -> T
   val term_of : T -> term
   val term_at_lpos : T -> lpos -> term
+  val orient : lpos -> T -> term * term * bool
   val map_at_lpos : lpos -> (term -> term) -> T -> T
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
@@ -64,6 +65,9 @@ fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 
 fun term_at_lpos (l, _, _) Left = l
   | term_at_lpos (_, r, _) Right = r
+
+fun orient Left (l, r, b) = (l, r, b)
+  | orient Right (l, r, b) = (r, l, b)
 
 fun map_at_lpos Left f (l, r, b) = (f l, r, b)
   | map_at_lpos Right f (l, r, b) = (l, f r, b)

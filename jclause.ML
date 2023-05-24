@@ -32,6 +32,8 @@ sig
   val norm_beta_eta_qeta : T -> T
   val incr_indexes : int -> T -> T
   val kbo : T * T -> Jeha_Order.partial_order
+  val is_eligible_cpos : T -> cpos -> bool
+  val is_eligible_full_pos : T -> full_pos -> bool
 end;
 
 structure JClause : JCLAUSE =
@@ -167,5 +169,64 @@ fun incr_indexes increment clause =
   |> map_maxidx (K (increment + maxidx clause))
 
 val kbo = Jeha_Order.mk_multiset_order_of_strict JLit.kbo o apply2 literals
+
+(* Eligibility without selection functions:
+Definition 22 (Eligibility) A literal L is (strictly) \<ge>-eligible w.r.t. a substitution \<sigma> in C for
+some relation \<ge> if L\<sigma> is (strictly) \<ge>-maximal in C\<sigma>.
+The \<ge>-eligible positions of clause C w.r.t a substitution \<sigma> are inductively defined as follows:
+(E2) If a literal L = s \<doteq> t with \<not> (s\<sigma> \<le> t\<sigma>) is either \<ge>-eligible and negative or strictly
+      \<ge>-eligible and positive, then L.s.\<epsilon> is \<ge>-eligible.
+(E2.1) L.s.\<epsilon> if L = (s = t) with \<not> (s\<sigma> \<le> t\<sigma>) is strictly \<ge>-eligible.
+(E2.2) L.s.\<epsilon> if L = (s \<noteq> t) with \<not> (s\<sigma> \<le> t\<sigma>) is \<ge>-eligible.
+(E3) ...
+(E4) ...
+*)
+
+(* unfortunately we can't define these functions in JTerm because they depend on Jeha_Order *)
+
+fun is_eligible_tpos_in_eq (Const (@{const_name "HOL.eq"}, _) $ s $ t) (i :: tpos) =
+  let 
+    val s_t_comp = Jeha_Order.kbo (s, t)
+  in
+    not (s_t_comp = SOME EQUAL) andalso
+      case i of
+        1 => not (s_t_comp = SOME LESS)
+      | 2 => not (s_t_comp = SOME GREATER)
+      | _ => error "non green position in is_eligible_tpos_in_eq"
+  end
+
+fun is_eligible_tpos _ [] = true
+  (* subterms of fully applied equalities *)
+  (* FIXME: what about partially applied equalities? see pdf comment in o\<lambda>Sup Definition 22 *)
+  | is_eligible_tpos
+      (t as ((Const (@{const_name "HOL.eq"}, _)) $ _ $ _))
+      (tpos as (_ :: _))
+    = is_eligible_tpos_in_eq t tpos
+  (* general case *)
+  | is_eligible_tpos t (i :: tpos) =
+      if not (JTerm.is_green_tpos [i] t) then error "non green position in is_eligible_tpos" else
+      is_eligible_tpos (JTerm.subterm_at t [i]) tpos
+
+fun is_eligible_cpos c cpos =
+  let
+    val literals = literals c
+    val literal = nth literals cpos
+    val strict = JLit.is_positive literal
+  in
+    Jeha_Order.is_maximal JLit.kbo strict literal literals
+  end
+
+fun is_eligible_full_pos c (tpos, lpos, cpos) =
+  let
+    val literal = nth (literals c) cpos
+    val (s, t, _) = JLit.orient lpos literal
+    val s_t_comp = Jeha_Order.kbo (s, t)
+    val s_leq_t =
+      (SOME LESS = s_t_comp) orelse (SOME EQUAL = s_t_comp)
+  in
+    is_eligible_cpos c cpos
+      andalso not s_leq_t
+      andalso is_eligible_tpos s tpos
+  end
 
 end;
