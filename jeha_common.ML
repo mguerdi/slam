@@ -10,6 +10,8 @@ sig
   val pretty_tenv : Proof.context -> Envir.tenv -> string
   val I : 'a -> 'a
   val map_some : ('a -> 'b) -> 'a option -> 'b option
+  val seq_cartesian_product : 'a Seq.seq -> 'b Seq.seq -> ('a * 'b) Seq.seq
+  val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
 end
 
 structure Jeha_Common : JEHA_COMMON =
@@ -60,5 +62,13 @@ end;
 
 fun map_some _ NONE = NONE
   | map_some f (SOME x) = SOME (f x)
+
+fun seq_cartesian_product xs ys =
+  case Seq.pull xs of
+    SOME (x, xs) => Seq.append (Seq.map (pair x) ys) (seq_cartesian_product xs ys)
+  | NONE => Seq.empty
+
+fun cartesian_product [] _ = []
+  | cartesian_product (x :: xs) ys = map (pair x) ys @ cartesian_product xs ys
 
 end

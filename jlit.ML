@@ -17,6 +17,7 @@ sig
   val map_at_lpos : lpos -> (term -> term) -> T -> T
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
+  val kbo : T * T -> Jeha_Order.partial_order
 end;
 
 structure JLit : JLIT =
@@ -70,5 +71,26 @@ fun map_at_lpos Left f (l, r, b) = (f l, r, b)
 fun occurs_deeply_in x (l, r, _) = JTerm.occurs_deeply_in x l orelse JTerm.occurs_deeply_in x r
 
 fun maxidx_of (s, t, _) = Int.max (apply2 maxidx_of_term (s, t))
+
+(* see notes in info/master/kbo/build/main.pdf *)
+fun kbo (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
+  if not st_pos andalso uv_pos
+    (* compare negative to positive (note: never equal) *)
+    then
+      (* FIXME: merge the two traversals into one *)
+      if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
+          the_default false (Jeha_Common.map_some is_greater_equal (Jeha_Order.kbo (m, n)))))
+        (* negative > positive iff. \<forall>\<dots>\<exists>\<dots> m \<ge> n *)
+        then SOME GREATER
+      else if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
+                the_default false (Jeha_Common.map_some is_less (Jeha_Order.kbo (m, n)))))
+        (* negative < positive iff. \<forall>\<dots>\<exists>\<dots> m > n *)
+        then SOME LESS
+      else NONE
+  else if st_pos andalso not uv_pos
+    (* compare positive to negative by swapping and reversing the result *)
+    then Jeha_Common.map_some rev_order (kbo (uv, st))
+  (* same signs *)
+  else Jeha_Order.mk_multiset_order_of_strict Jeha_Order.kbo ([s, t], [u, v])
 
 end;

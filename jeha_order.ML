@@ -23,8 +23,7 @@ sig
   val kbo : term * term -> partial_order
   val mk_multiset_order_of_strict :
         ('a * 'a -> partial_order) -> ('a list) * ('a list) -> partial_order
-  val lit_kbo : JLit.T * JLit.T -> partial_order
-  val clause_kbo : JClause.T * JClause.T -> partial_order
+  val idxs_of_maximal_elements : ('a * 'a -> partial_order) -> 'a list -> (int * bool) list
 end;
 
 structure Jeha_Order: JEHA_ORDER =
@@ -369,57 +368,81 @@ and tckbolex below_lam vb wb [] [] = (vb, wb, SOME EQUAL)
 
 val kbo = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term [])
 
-(* Baader and Nipkow - Term rewriting and all that, Lemma 2.5.6 *)
+(* Baader and Nipkow - Term rewriting and all that, Lemma 2.5.6: For strict orders:
+    M > N iff. M \<noteq> N \<and> \<forall> m \<in> N-M. \<exists> m \<in> M-N. m > n *)
+(* FIXME: test against a reference implementation *)
 fun mk_multiset_order_of_strict a_ord (m, n) =
   let
     fun a_eq (x, y) = SOME EQUAL = a_ord (x, y)
+    val m_minus_n = fold (remove1 a_eq) n m
+    val n_minus_m = fold (remove1 a_eq) m n
+    val for_m_exists = map (K false) m
+    val for_n_exists = map (K false) n
   in
-    if submultiset a_eq (m, n) andalso submultiset a_eq (n, m)
+    if null n_minus_m andalso null m_minus_n
       then SOME EQUAL
       else
         let
-          val m_minus_n = fold (remove1 a_eq) n m
-          val n_minus_m = fold (remove1 a_eq) m n
-          val all_greater =
-            n_minus_m |> forall (fn x =>
-              m_minus_n |> exists (fn y => SOME GREATER = a_ord (y, x)))
-          val all_smaller =
-            n_minus_m |> forall (fn x =>
-              m_minus_n |> exists (fn y => SOME LESS = a_ord (y, x)))
+          val indexed_m_n_pairs =
+            (m_minus_n, n_minus_m)
+            |> apply2 (map_index (uncurry pair))
+            |> uncurry Jeha_Common.cartesian_product
+          val (for_m_exists, for_n_exists) =
+            (for_m_exists, for_n_exists)
+            |> fold
+                (fn ((m_idx, m), (n_idx, n)) =>
+                  case a_ord (m, n) of
+                    SOME GREATER => apsnd (nth_map n_idx (K true))
+                  | SOME LESS => apfst (nth_map m_idx (K true))
+                  | _ => I)
+                indexed_m_n_pairs
         in
-          if all_greater
+          if forall I for_m_exists
             then SOME GREATER
-          else if all_smaller
+          else if forall I for_n_exists
             then SOME LESS
           else NONE
         end
   end
 
-fun map_some _ NONE = NONE
-  | map_some f (SOME x) = SOME (f x)
-
-(* see notes in info/master/kbo/build/main.pdf *)
-fun lit_kbo (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
-  if not st_pos andalso uv_pos
-    (* compare negative to positive (note: never equal) *)
-    then
-      (* FIXME: merge the two traversals into one *)
-      if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-          the_default false (map_some is_greater_equal (kbo (m, n)))))
-        (* negative > positive iff. \<forall>\<dots>\<exists>\<dots> m \<ge> n *)
-        then SOME GREATER
-      else if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-                the_default false (map_some is_less (kbo (m, n)))))
-        (* negative < positive iff. \<forall>\<dots>\<exists>\<dots> m > n *)
-        then SOME LESS
-      else NONE
-  else if st_pos andalso not uv_pos
-    (* compare positive to negative by swapping and reversing the result *)
-    then map_some rev_order (lit_kbo (uv, st))
-  (* same signs *)
-  else mk_multiset_order_of_strict kbo ([s, t], [u, v])
-
-val clause_kbo = mk_multiset_order_of_strict lit_kbo o apply2 JClause.literals
+(* returns the indices of the maximal elements, marked as strict / non-strict by true / false resp. *)
+fun idxs_of_maximal_elements a_ord xs =
+  let
+    val indexed_xs =  map_index (uncurry pair) xs
+    (* SOME true: strict maximal, SOME false: non strict maximal, NONE: not maximal *)
+    val maximality_markers = map (K (SOME true)) xs
+    (* compare the list elements pairwise and determine which are not (strictly) maximal *)
+    val maximality_markers =
+      fold
+      ( fn (i, x) =>
+          fold
+          ( fn (j, y) => case a_ord (x, y) of 
+                SOME GREATER =>
+                  (* y cannot be maximal *)
+                  nth_map j (K NONE)
+              | SOME LESS =>
+                  (* x cannot be maximal *)
+                  nth_map i (K NONE)
+              | SOME EQUAL => (fn markers =>
+                  markers |> (case (nth markers i) of
+                    (* x and y are equal, so neither is strict maximal.
+                    NOTE: this can only happen with the first y that is equal to x *)
+                    SOME true => nth_map j (K (SOME false)) #> nth_map i (K (SOME false))
+                  | SOME false => nth_map i (K (SOME false))
+                  | NONE => nth_map j (K NONE)))
+              | NONE => I
+          )
+          (* compare with all elements which come later in the list *)
+          (drop (i + 1) indexed_xs)
+      )
+      indexed_xs
+      maximality_markers
+  in
+    maximality_markers
+    |> map_index (uncurry pair)
+    |> map_filter (fn (idx, is_max) => Jeha_Common.map_some (pair idx) is_max)
+  end
+  
 
 (* Eligibility without selection functions:
 Definition 22 (Eligibility) A literal L is (strictly) \<ge>-eligible w.r.t. a substitution \<sigma> in C for

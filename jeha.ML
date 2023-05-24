@@ -34,18 +34,6 @@ end
 structure Jeha : JEHA =
 struct
 
-(* cartesian_product : 'a list -> 'b list -> ('a * 'b) list *)
-fun cartesian_product [] _ = []
-  | cartesian_product (x :: xs) ys = map (pair x) ys @ cartesian_product xs ys
-
-fun seq_cartesian_product xs ys =
-  case Seq.pull xs of
-    SOME (x, xs) => Seq.append (Seq.map (pair x) ys) (seq_cartesian_product xs ys)
-  | NONE => Seq.empty
-
-fun map_some _ NONE = NONE
-  | map_some f (SOME x) = SOME (f x)
-
 (* oc function from the paper
 logically: outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
 Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix of negations
@@ -179,7 +167,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
             |> JClause.map_maxidx (K (Envir.maxidx_of matcher))
           val rewriting_clause = JClause.dummy [(from, to, true)]
           val rewriting_smaller_than_rewritten = (fn () =>
-            SOME LESS = Jeha_Order.clause_kbo (rewriting_clause, rewritten_clause))
+            SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
         in
           (* FIXME: understand and implement the restrictions on RP form Schulz's paper *)
           (* for RP the rewriting clause must be smaller than the rewritten clause *)
@@ -214,7 +202,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     |> Seq.take 4
     |> Seq.map_filter build_conclusion
     |> Seq.pull
-    |> map_some #1
+    |> Jeha_Common.map_some #1
   end
 
 (* Rewriting of positive literals (RP) simplification (Schulz) *)
@@ -264,7 +252,7 @@ fun find_single_green_disagreement ctxt term_pair =
         then tpos
         else chop_end_until_green term (fst (split_last tpos))
     val green_disagreement_pos =
-      map_some (chop_end_until_green (fst term_pair)) disagreement_pos
+      Jeha_Common.map_some (chop_end_until_green (fst term_pair)) disagreement_pos
   in
     green_disagreement_pos
   end
@@ -502,21 +490,21 @@ fun forward_simplify ctxt cheap active given_clause =
     val ctxt = Config.put Jeha_Common.trace (do_trace andalso not cheap) ctxt (* don't trace cheap simplify *)
     val active_units = Seq.filter (fn c => JClause.length c = 1) (Seq.of_list active)
     val active_units_all_orientations : (JClause.T * JLit.lpos) Seq.seq =
-      seq_cartesian_product active_units (Seq.of_list [JLit.Left, JLit.Right])
+      Jeha_Common.seq_cartesian_product active_units (Seq.of_list [JLit.Left, JLit.Right])
     val rn_rp_rules = Seq.of_list [simp_rewrite_negative_lits, simp_rewrite_positive_lits]
     fun first_successful_rewrite c =
       let
         val green_targets : (JClause.T * JClause.full_pos) Seq.seq = Seq.map (pair c) (Seq.of_list (JClause.green_full_poss_of c))
-        val unit_target_pairs = seq_cartesian_product active_units_all_orientations green_targets
+        val unit_target_pairs = Jeha_Common.seq_cartesian_product active_units_all_orientations green_targets
         (* successful rewrites of c (NONE filtered out) *)
         val rn_rp_rewrites : JClause.T Seq.seq =
-          seq_cartesian_product rn_rp_rules unit_target_pairs
+          Jeha_Common.seq_cartesian_product rn_rp_rules unit_target_pairs
           |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target)
         val ps_rewrites : JClause.T Seq.seq =
-          seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
+          Jeha_Common.seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
         val ns_rewrites : JClause.T Seq.seq =
-          seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
+          Jeha_Common.seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_negative_simplify_reflect ctxt unit target)
         val dd_dr_rewrites : JClause.T Seq.seq =
             Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
@@ -528,7 +516,7 @@ fun forward_simplify ctxt cheap active given_clause =
           o Seq.append (if not cheap then ns_rewrites else Seq.empty)
           o Seq.append dd_dr_rewrites)
         |> Seq.pull
-        |> map_some #1
+        |> Jeha_Common.map_some #1
       end
     (* rewrite until not possible anymore *)
     (* FIXME: can this lead to a fixed-point (and not terminate)? *)
@@ -562,7 +550,7 @@ fun forward_simplify ctxt cheap active given_clause =
     outer_clausified
   end *)
 
-fun map_filter_partition f [] = ([], [], [])
+fun map_filter_partition _ [] = ([], [], [])
   | map_filter_partition f (x :: xs) =
       let
         val (deleted, changed, unchanged) = map_filter_partition f xs
@@ -583,16 +571,16 @@ fun infer_clauses ctxt active given_clause =
   let
     (* the equality literals that are being eliminated *)
     val eqs_given : (JClause.T * (JLit.lpos * JClause.cpos)) list =
-      map (pair given_clause) (cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of given_clause))
+      map (pair given_clause) (Jeha_Common.cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of given_clause))
     val eqs_active : (JClause.T * (JLit.lpos * JClause.cpos)) list =
-      maps (fn c => map (pair c) (cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of c))) active
+      maps (fn c => map (pair c) (Jeha_Common.cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of c))) active
     (* what we're superposing into *)
     val targets_given : (JClause.T * JClause.full_pos) list =
       map (pair given_clause) (JClause.green_full_poss_of given_clause)
     val targets_active : (JClause.T * JClause.full_pos) list =
       maps (fn c => map (pair c) (JClause.green_full_poss_of c)) active
     val eq_target_pairs =
-      cartesian_product eqs_given targets_active @ cartesian_product eqs_active targets_given
+      Jeha_Common.cartesian_product eqs_given targets_active @ Jeha_Common.cartesian_product eqs_active targets_given
   in
     maps (uncurry (infer_sup ctxt)) eq_target_pairs
     (* ERes has already been performed for the active clauses *)

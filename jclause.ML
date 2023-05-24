@@ -31,6 +31,7 @@ sig
   val norm_beta_eta_qeta_env : Envir.env -> T -> T
   val norm_beta_eta_qeta : T -> T
   val incr_indexes : int -> T -> T
+  val kbo : T * T -> Jeha_Order.partial_order
 end;
 
 structure JClause : JCLAUSE =
@@ -72,7 +73,7 @@ fun map_maxidx f { literals, id, maxidx } = { literals = literals, id = id, maxi
 fun recalculate_maxidx clause =
   map_maxidx ((K o maxidx_of_literal_list o literals) clause) clause
 
-fun add_literal l clause = 
+fun add_literal l clause =
   clause
   |> map_literals (cons l)
   |> refresh_id ()
@@ -96,7 +97,7 @@ fun filter_out_lits f clause =
 
 val length = List.length o literals
 
-fun of_literals (ls, id) = 
+fun of_literals (ls, id) =
   empty |> map_id (K id) |> map_literals (K ls) |> recalculate_maxidx
 
 (* converts boolean terms to lists of literals *)
@@ -164,5 +165,7 @@ fun incr_indexes increment clause =
   clause
   |> map_literals (map (JLit.map (Logic.incr_indexes ([], [], increment))))
   |> map_maxidx (K (increment + maxidx clause))
+
+val kbo = Jeha_Order.mk_multiset_order_of_strict JLit.kbo o apply2 literals
 
 end;
