@@ -451,14 +451,19 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
     (* FIXME: print warning message when discarding unifiers *)
     val (unifiers, _) = Seq.chop 4 unifiers
     fun build_conclusion unifier =
-      c
-      |> JClause.delete_lit_at cp
-      |> JClause.norm_beta_eta_qeta_env unifier
-      |> JClause.refresh_id ()
+      let
+        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+      in
+        if not (JClause.is_eligible_cpos c cp) then NONE else
+        c
+        |> JClause.delete_lit_at cp
+        |> JClause.refresh_id ()
+        |> SOME
+      end
   in
     if is_pos_eq
       then []
-      else map build_conclusion unifiers
+      else map_filter build_conclusion unifiers
   end
 
 (** Saturation Loop **)
