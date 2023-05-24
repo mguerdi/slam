@@ -600,12 +600,12 @@ fun given_clause_step ctxt countdown passive active =
     fun trace_msg_clauses msg clauses =
       Jeha_Common.trace_msg ctxt
         (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-    val _ =
+    (* val _ =
       let val passive_seq = passive |> seq_of_passive_set in
           trace_msg_clauses
             ("passive [10/" ^ (passive_seq |> Seq.list_of |> length |> @{make_string}) ^ "]")
             (passive_seq |> Seq.take 10 |> Seq.list_of)
-      end
+      end *)
 
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
     inferences are possible and empty clause has not been derived). Later: no non-redundant
@@ -613,7 +613,6 @@ fun given_clause_step ctxt countdown passive active =
     val (given_clause, passive) = select_given_clause passive
 
     (* tracing *)
-    val _ = trace_msg_clauses "active: " active
     val _ = trace_msg_clauses "given_clause " [given_clause]
   in
     (* simplify given_clause with active set *)
@@ -651,6 +650,8 @@ fun given_clause_step ctxt countdown passive active =
             (* val _ = trace_msg_clauses "new_clauses: " new_clauses *)
             (* add inferred clauses to passive set *)
             val passive = add_new_clauses passive new_clauses
+            (* tracing *)
+            val _ = trace_msg_clauses "active: " active
           in
             Next (passive, active)
           end
