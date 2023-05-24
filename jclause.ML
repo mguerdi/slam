@@ -182,7 +182,9 @@ The \<ge>-eligible positions of clause C w.r.t a substitution \<sigma> are induc
 (E4) ...
 *)
 
-(* unfortunately we can't define these functions in JTerm because they depend on Jeha_Order *)
+(* unfortunately we can't define these functions in JTerm because they depend on Jeha_Order
+FIXME: create BASIC_JTERM, have Jeha_Order depend on that, then use include / open in JTERM / JTerm
+to define JTerm.kbo etc. *)
 
 fun is_eligible_tpos_in_eq (Const (@{const_name "HOL.eq"}, _) $ s $ t) (i :: tpos) =
   let 

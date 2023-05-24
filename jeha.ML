@@ -17,7 +17,8 @@ sig
   val simp_rewrite_negative_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val infer_eq_neq_outer_claus : JClause.T -> JClause.cpos -> JClause.T list
   val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
-  val infer_eres : Proof.context -> (JClause.T * JClause.cpos) -> JClause.T list
+  val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
+  val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
   val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
@@ -434,6 +435,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           if not u_eligible then NONE else (* 6. *)
           if SOME LESS = c_comp_d orelse SOME EQUAL = c_comp_d then NONE else (* 7. *)
           if not tt'_eligible then NONE else (* 8. *)
+          (* FXIME 9. 10. *)
           JClause.combine d' ct'
           |> JClause.refresh_id ()
           |> SOME
@@ -444,7 +446,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
   end
 
 (* ERes inference *)
-fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
+fun infer_eres (ctxt : Proof.context) c cp =
   let
     val (u, u', is_pos_eq) = JClause.lit_at cp c
     val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
@@ -465,6 +467,40 @@ fun infer_eres (ctxt : Proof.context) ((c, cp) : (JClause.T * JClause.cpos)) =
       then []
       else map_filter build_conclusion unifiers
   end
+
+(* EFact inference *)
+fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
+  let
+    val (u', v', is_pos') = JLit.orient lp' (JClause.lit_at cp' c)
+    val (u, v, is_pos) = JLit.orient lp (JClause.lit_at cp c)
+    val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
+    (* FIXME: print warning message when discarding unifiers *)
+    val (unifiers, _) = Seq.chop 4 unifiers
+    fun build_conclusion unifier =
+      let
+        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+        val (u', v', _) = JLit.orient lp' (JClause.lit_at cp' c)
+        val uv_literal = JClause.lit_at cp c
+        val (u, v, _) = JLit.orient lp uv_literal
+        val u_v_comp = Jeha_Order.kbo (u, v)
+        val uv_maximal = Jeha_Order.is_maximal JLit.kbo false uv_literal (JClause.literals c)
+      in
+        if SOME EQUAL = u_v_comp orelse SOME LESS = u_v_comp then NONE else
+        if not uv_maximal then NONE else
+        (* FIXME: nothing is selected in C condition *)
+        c
+        |> JClause.delete_lit_at (Int.max (cp, cp'))
+        |> JClause.delete_lit_at (Int.min (cp, cp'))
+        |> JClause.add_literal (v, v', false)
+        |> JClause.add_literal (u, v', true)
+        |> JClause.refresh_id ()
+        |> SOME
+      end
+    in
+      if not (is_pos andalso is_pos') then [] else
+      if cp' = cp then [] else
+      map_filter build_conclusion unifiers
+    end
 
 (** Saturation Loop **)
 
@@ -587,10 +623,18 @@ fun infer_clauses ctxt active given_clause =
       maps (fn c => map (pair c) (JClause.green_full_poss_of c)) active
     val eq_target_pairs =
       Jeha_Common.cartesian_product eqs_given targets_active @ Jeha_Common.cartesian_product eqs_active targets_given
+    (* for ERes, EFact *)
+    val given_clause_cposs = JClause.cposs_of given_clause
+    val given_clause_lpos_cpos_pairs = Jeha_Common.cartesian_product [JLit.Left, JLit.Right] given_clause_cposs
+    val given_clause_lpos_cpos_pairs_pairs =
+      Jeha_Common.cartesian_product
+        given_clause_lpos_cpos_pairs
+        given_clause_lpos_cpos_pairs
   in
     maps (uncurry (infer_sup ctxt)) eq_target_pairs
-    (* ERes has already been performed for the active clauses *)
-    @ maps (infer_eres ctxt) (map (pair given_clause) (0 upto (length (JClause.literals given_clause) - 1)))
+    (* ERes, EFact have already been performed for the active clauses *)
+    @ maps (infer_eres ctxt given_clause) given_clause_cposs
+    @ maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs
   end
 
 datatype loopstate = Unsat | Next of Passive_Set.T * JClause.T list
