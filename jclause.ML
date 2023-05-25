@@ -210,6 +210,12 @@ fun is_eligible_tpos _ [] = true
       if not (JTerm.is_green_tpos [i] t) then error "non green position in is_eligible_tpos" else
       is_eligible_tpos (JTerm.subterm_at t [i]) tpos
 
+(* NOTE: This is not eligibility of literals as defined in \<lambda>oSup Def 22. but
+rather, it anticipates the latter part of Def. 22 (E2), i.e.
+  cpos of a positive literal is eligible if the literal is strictly Def22-eligible
+  cpos of a negative literal is eligible if the literal is          Def22-eligible
+In practice the o\<lambda>Sup paper only ever asks for strict eligibility of positive literals
+(/ eligibility of negative literals) so we don't need the generality of Def. 22 *)
 fun is_eligible_cpos c cpos =
   let
     val literals = literals c

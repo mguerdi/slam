@@ -116,7 +116,7 @@ fun is_variable_headed t =
     is_Var head
   end
 
-(* FIXME: is this list complete? *)
+(* FIXME: is this list complete? See Sign.logical_types *)
 fun is_logical_symbol (Const (@{const_name "HOL.True"}, _)) = true
   | is_logical_symbol (Const (@{const_name "HOL.False"}, _)) = true
   | is_logical_symbol (Const (@{const_name "HOL.Not"}, _)) = true

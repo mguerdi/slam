@@ -10,29 +10,19 @@ In the latter case backtrack to i <- i-1 and try the next l' for l\<^sub>i. *)
 
 signature JEHA_SUBSUMPTION =
 sig
-  val literal_matchers : Proof.context -> int -> (JLit.T * JLit.T) -> Envir.env Seq.seq
   (* Extend environment to match second argument against third. *)
-  val literal_subsumes : Proof.context -> int -> (JLit.T * JLit.T) -> Envir.env option
+  val literal_subsumes : Context.generic -> int -> (JLit.T * JLit.T) -> Envir.env option
   (* FIXME: This type signature is wrong but *)
-  val subsumed_alternatives : Proof.context -> int -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
+  val subsumed_alternatives : Context.generic -> int -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
   (* Top level clause subsumption. *)
-  val subsumes : Proof.context -> (JClause.T * JClause.T) -> bool
+  val subsumes : Context.generic -> (JClause.T * JClause.T) -> bool
 end;
 
 structure Jeha_Subsumption : JEHA_SUBSUMPTION =
 struct
 
-fun literal_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
-  if b = b'
-    then
-      Seq.interleave
-        ((Jeha_Unify.matchers (Context.Proof ctxt) maxidx [(s, s'), (t, t')]),
-        (Jeha_Unify.matchers (Context.Proof ctxt) maxidx [(s, t'), (t, s')]))
-    else
-      Seq.empty
-
 fun literal_subsumes ctxt maxidx ll' =
-  case Seq.pull (literal_matchers ctxt maxidx ll') of
+  case Seq.pull (Jeha_Unify.literal_matchers ctxt maxidx ll') of
     NONE => NONE
     (* throw away the others *)
   | SOME (env, _) => SOME env

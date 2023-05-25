@@ -36,13 +36,11 @@ end
 structure Jeha : JEHA =
 struct
 
-(* oc function from the paper
-logically: outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
-Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix of negations
-above and below) *)
-(* FIXME: Implement as specified in PhD thesis. *)
-(* FIXME: Making HO Sup work p.7 says: never simplify \<longleftrightarrow>. What does this mean concretely? (Isabelle
-represents \<longleftrightarrow> as HOL.eq) *)
+(* oc function from the PhD thesis
+logically:
+  outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
+Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix
+of negations above and below) *)
 fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
@@ -61,7 +59,8 @@ fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
       outer_clausify b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
-  (* FIXME: see remark about not simplifying \<leftrightarrow> in the making ho superposition work paper *)
+  (* FIXME: Making HO Sup work p.7 says: never simplify \<longleftrightarrow>. What does this mean
+  concretely? (Isabelle represents \<longleftrightarrow> as HOL.eq) *)
   | outer_clausify b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
       [JClause.add_literal (s, t, b) c]
   (* FIXME: add forall, exists *)
@@ -226,7 +225,7 @@ fun simp_negative_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
     val lit_as_positive = let val (s, t, false) = lit in (s, t, true) end
     val exists_matcher =
       (target_lit, lit_as_positive)
-      |> Jeha_Subsumption.literal_matchers ctxt maxidx
+      |> Jeha_Unify.literal_matchers (Context.Proof ctxt) maxidx
       |> Seq.pull
       |> is_some
     (* tracing *)
@@ -346,7 +345,7 @@ fun is_redundant ctxt active c =
   (* forward subsumption: does any active clause subsume c? *)
   exists
     (fn ac => equality_subsumes ctxt (ac, c)
-      orelse trace_subsumed ac (Jeha_Subsumption.subsumes ctxt (ac, c)))
+      orelse trace_subsumed ac (Jeha_Subsumption.subsumes (Context.Proof ctxt) (ac, c)))
     active
   end
 
