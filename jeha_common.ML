@@ -5,6 +5,7 @@ sig
   val trace_msg : Proof.context -> (unit -> string) -> unit
   val verbose_of : Proof.context -> Proof.context
   val pretty_term : Proof.context -> term -> string
+  val pretty_typ : Proof.context -> typ -> string
   val pretty_terms : Proof.context -> term list -> string
   val pretty_tyenv : Proof.context -> Type.tyenv -> string
   val pretty_tenv : Proof.context -> Envir.tenv -> string
@@ -32,6 +33,8 @@ and config_put_many_bool ctxt options =
   List.foldr (fn (option, ctxt) => Config.put option true ctxt) ctxt options
 
 fun pretty_term ctxt t = Syntax.pretty_term ctxt t |> Pretty.string_of
+
+fun pretty_typ ctxt T = Syntax.pretty_typ ctxt T |> Pretty.string_of
 
 fun pretty_terms ctxt terms =
   terms
