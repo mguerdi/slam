@@ -20,6 +20,7 @@ sig
   val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
   val infer_bool_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_false_elim : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
@@ -538,6 +539,31 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
     the_default [] (try build_conclusion ())
   end
 
+fun infer_false_elim ctxt c cp =
+  let
+    val s_eq_s' = JClause.lit_at cp c
+    val unifiers =
+      Jeha_Unify.literal_smash_unifiers
+        (Context.Proof ctxt)
+        (s_eq_s', (@{term "False"}, @{term "True"}, true))
+        (Envir.empty (JClause.maxidx c))
+    (* FIXME: print warning message when discarding unifiers *)
+    val (unifiers, _) = Seq.chop 4 unifiers
+    fun build_conclusion unifier =
+      let
+        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+      in
+        if not (JClause.is_eligible_cpos c cp) then NONE else (* 2. *)
+        c
+        |> JClause.delete_lit_at cp
+        |> JClause.refresh_id ()
+        |> SOME
+      end
+  in
+    if not (JLit.is_positive s_eq_s') then [] else
+    map_filter build_conclusion unifiers
+  end
+
 (** Saturation Loop **)
 
 (* Passive_Set *)
@@ -672,6 +698,7 @@ fun infer_clauses ctxt active given_clause =
     @ maps (infer_eres ctxt given_clause) given_clause_cposs
     @ maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs
     @ maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ maps (infer_false_elim ctxt given_clause) given_clause_cposs
   end
 
 datatype loopstate = Unsat | Next of Passive_Set.T * JClause.T list
