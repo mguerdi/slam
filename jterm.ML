@@ -6,6 +6,8 @@ sig
   val quantified_typ : term -> typ
   val strip_comb_fun_types_args : term -> term * typ list * term list
   val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
+  val is_variable_headed : term -> bool
+  val is_position_of_fully_applied_logical_symbol : tpos -> term -> bool
   val tposs_of : term -> tpos list
   val disagreement_tpos_of2 : term * term -> tpos option
   val green_tposs_of : term -> tpos list
@@ -57,6 +59,15 @@ fun strip_comb_fun_types_args t = strip_comb_fun_types_args1 ([], t)
 (* Term position, mostly for documentation / testing purposes. See long comment at bottom. *)
 type tpos = int list;
 
+(* t|\<^sub>p *)
+fun subterm_at t [] = t
+  | subterm_at (Abs(_,_,u)) (0 :: p) = subterm_at u p
+  (* FIXME: when you forget to bind the t (via as) there is no warning and when
+  you call the function from somewhere else, where a t has been declared it uses
+  that. Scoping broken?? *)
+  | subterm_at (t as (_$_)) (i :: p) = subterm_at (nth (uncurry cons (strip_comb t)) i) p
+  | subterm_at _ _ = error ""
+
 fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
   | tposs_of (t as (_$_)) =
     let
@@ -98,6 +109,48 @@ fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Jeha_Common.map_some (cons 
     end
   | disagreement_tpos_of2 _ = SOME []
 
+fun is_variable_headed t =
+  let
+    val (head, _) = strip_comb t
+  in
+    is_Var head
+  end
+
+(* FIXME: is this list complete? *)
+fun is_logical_symbol (Const (@{const_name "HOL.True"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.False"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.Not"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.disj"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.conj"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.implies"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.All"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.Ex"}, _)) = true
+  | is_logical_symbol (Const (@{const_name "HOL.eq"}, _)) = true
+  | is_logical_symbol _ = false
+
+fun is_position_of_fully_applied_logical_symbol tpos term =
+  let
+    val head = subterm_at term tpos
+  in
+    if not (is_logical_symbol head) then false else
+    (* \<top> and \<bottom> are always fully applied *)
+    if head = @{term "True"} orelse head = @{term "False"} then true else
+    (* now the logical symbol must have function type
+    FIXME: check that \<top>, \<bottom> are the only atomic (?) logical symbols *)
+    if tpos = [] then false else
+    let
+      val comb_pos = drop 1 tpos
+      val comb = subterm_at term comb_pos
+      val comb_typ = fastype_of comb
+      fun is_comb (_ $ _) = true
+        | is_comb _ = false
+    in
+      (* a logical symbol (except for \<top> and \<bottom>) is fully applied iff. it is the
+      head of a combination with boolean type *)
+      is_comb comb andalso @{typ "HOL.bool"} = comb_typ
+    end 
+  end
+
 (* The arguments of f are in green position iff. f \<in> \<Sigma>\<setminus>{\<forall>, \<exists>}, where Free _ variables are taken to
 be in \<Sigma>. *)
 fun can_have_green_args (t as (Const _)) = not (is_quantifier t)
@@ -120,15 +173,6 @@ fun green_tposs_of (t as (_$_)) =
           end
       else [[]]
   | green_tposs_of _ = [[]] (* [\<epsilon>] *)
-
-(* t|\<^sub>p *)
-fun subterm_at t [] = t
-  | subterm_at (Abs(_,_,u)) (0 :: p) = subterm_at u p
-  (* FIXME: when you forget to bind the t (via as) there is no warning and when
-  you call the function from somewhere else, where a t has been declared it uses
-  that. Scoping broken?? *)
-  | subterm_at (t as (_$_)) (i :: p) = subterm_at (nth (uncurry cons (strip_comb t)) i) p
-  | subterm_at _ _ = error ""
 
 fun is_green_tpos [] _ = true
   | is_green_tpos (0 :: _) _ = false

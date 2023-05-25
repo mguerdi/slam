@@ -19,6 +19,7 @@ sig
   val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
   val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
+  val infer_bool_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
@@ -502,6 +503,42 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
       map_filter build_conclusion unifiers
     end
 
+fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
+  let
+    val u = JClause.subterm_at_full_pos c u_pos
+    val u_in_positive_lit = JLit.is_positive (JClause.lit_at cpos c)
+    val u_eligible = JClause.is_eligible_full_pos c u_pos
+    val u_typ = fastype_of u
+    (* raises TUNIFY (from Sign.typ_unify) *)
+    fun build_conclusion _ =
+      let
+        val (unifier, maxidx) =
+          Sign.typ_unify
+            (Proof_Context.theory_of ctxt)
+            (u_typ, @{typ "HOL.bool"})
+            (Vartab.empty, JClause.maxidx c)
+        val u_eq_true = JLit.mk_pred u true
+        val unifier = Envir.Envir { maxidx = maxidx, tenv = Vartab.empty, tyenv = unifier }
+      in
+        if
+          JTerm.is_variable_headed u (* 2. *)
+          orelse JClause.is_position_of_fully_applied_logical_symbol u_pos c (* 2. *)
+          orelse not u_eligible (* 3. *)
+          orelse (u_in_positive_lit andalso [] = #1 u_pos) (* 4. *)
+        then
+          []
+        else
+          c
+          |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"})
+          |> JClause.add_literal u_eq_true
+          |> JClause.norm_beta_eta_qeta_env unifier
+          |> JClause.refresh_id ()
+          |> single
+        end
+  in
+    the_default [] (try build_conclusion ())
+  end
+
 (** Saturation Loop **)
 
 (* Passive_Set *)
@@ -635,6 +672,7 @@ fun infer_clauses ctxt active given_clause =
     (* ERes, EFact have already been performed for the active clauses *)
     @ maps (infer_eres ctxt given_clause) given_clause_cposs
     @ maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs
+    @ maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
   end
 
 datatype loopstate = Unsat | Next of Passive_Set.T * JClause.T list

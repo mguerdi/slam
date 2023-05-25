@@ -34,6 +34,7 @@ sig
   val kbo : T * T -> Jeha_Order.partial_order
   val is_eligible_cpos : T -> cpos -> bool
   val is_eligible_full_pos : T -> full_pos -> bool
+  val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
 end;
 
 structure JClause : JCLAUSE =
@@ -230,5 +231,9 @@ fun is_eligible_full_pos c (tpos, lpos, cpos) =
       andalso not s_leq_t
       andalso is_eligible_tpos s tpos
   end
+
+fun is_position_of_fully_applied_logical_symbol (tpos, lpos, cpos) c =
+  subterm_at_full_pos c ([], lpos, cpos)
+  |> JTerm.is_position_of_fully_applied_logical_symbol tpos
 
 end;
