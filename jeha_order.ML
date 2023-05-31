@@ -232,6 +232,7 @@ fun type_prec_ord (Type (_, _::_), _) = error "Type should not have args"
 (* lam > db > quantifier > symbols > bot > top *)
 fun prec_ord (Lam, Lam) = EQUAL
   | prec_ord (Lam, _) = GREATER
+  | prec_ord (_, Lam) = LESS
   | prec_ord
       (Fun (Const ("Pure.dummy_pattern", F), F_arity),
       Fun (Const ("Pure.dummy_pattern", G), G_arity))
