@@ -21,6 +21,7 @@ sig
   val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
   val infer_bool_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_false_elim : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
+  val infer_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
@@ -358,6 +359,10 @@ fun ml_bool_of @{term True} = true
   | ml_bool_of @{term False} = false
   | ml_bool_of _ = error "term is not HOL.True or HOL.False"
 
+fun hol_bool_of true = @{term "True"}
+  | hol_bool_of false = @{term "False"}
+  | hol_bool_of _ = error "term is not true of false"
+
 fun is_eq_bool_lit (s, t, true) = exists is_boolean_const [s, t]
     (* FIXME: Maybe accept boolean disequations? (by turning them into equations) *)
   | is_eq_bool_lit _ = false
@@ -564,6 +569,88 @@ fun infer_false_elim ctxt c cp =
     map_filter build_conclusion unifiers
   end
 
+val bool_rw_non_var_rules =
+  let
+    val truth_values = [@{term "True"}, @{term "False"}]
+    val truth_value_pairs = Jeha_Common.cartesian_product truth_values truth_values
+    fun ml_conj (x, y) = x andalso y
+    fun ml_disj (x, y) = x orelse y
+    fun ml_imp (x, y) = (not x) orelse y
+    fun make_binary_truth_table (logical_constructor, ml_function) =
+      map
+        (fn pair =>
+          (logical_constructor pair, (hol_bool_of o ml_function o apply2 ml_bool_of) pair))
+        truth_value_pairs
+  in
+    [ (@{term "\<not> True"}, @{term "False"})
+    , (@{term "\<not> False"}, @{term "True"}) ]
+    @
+    maps make_binary_truth_table
+      [ (HOLogic.mk_conj, ml_conj)
+      , (HOLogic.mk_disj, ml_disj)
+      , (HOLogic.mk_imp, ml_imp) ]
+  end
+
+(* FIXME: Idea: have the rw rules as active clauses, then this is basically superposition *)
+fun infer_bool_rw ctxt c u_pos =
+  let
+    val u = JClause.subterm_at_full_pos c u_pos
+    val maxidx = JClause.maxidx c
+    val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
+    val fresh_variable = Var (("y", maxidx + 1), fresh_typ) (* y *)
+    val fresh_variable_eq_itself = HOLogic.mk_eq (fresh_variable, fresh_variable)
+    val rw_rules =
+      [ (fresh_variable_eq_itself, @{term "True"})
+      , (HOLogic.mk_not fresh_variable_eq_itself, @{term "False"}) ]
+      @
+      bool_rw_non_var_rules
+    val u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term =
+      case u_pos of
+        ([], lpos, cpos) =>
+          let
+            val (_, other_side, is_positive) = c |> JClause.lit_at cpos |> JLit.orient lpos
+          in
+            is_positive andalso
+              (other_side = @{term True}
+                orelse other_side = @{term False}
+                orelse JTerm.is_variable_headed other_side)
+          end
+      | _ => false (* not at top level *)
+    val u_variable_headed_condition =
+      not (JTerm.is_variable_headed u)
+        orelse u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term
+    fun build_conclusion (t, t') unifier =
+      let
+        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+        val maxidx = JClause.maxidx c
+      in
+        if not (JClause.is_eligible_full_pos c u_pos) then NONE else (* 3. *)
+        if not u_variable_headed_condition then NONE else (* 4. *)
+        c
+        (* Note: t' is always ground and we're inserting into a green position
+        so no further normalization necessary *)
+        |> JClause.map_at_full_pos u_pos (K t')
+        |> JClause.map_maxidx (K maxidx)
+        |> JClause.refresh_id ()
+        |> SOME
+      end
+    fun apply_rw_rule (t, t') =
+      let
+        val unifiers =
+          Jeha_Unify.smash_unifiers
+            (Context.Proof ctxt)
+            [(u, t)]
+            (Envir.empty (maxidx + 1))
+        (* FIXME: print warning message when discarding unifiers? *)
+        val (unifiers, _) = Seq.chop 4 unifiers
+      in
+        map_filter (build_conclusion (t, t')) unifiers
+      end
+  in
+    if is_Var u then [] else
+    maps apply_rw_rule rw_rules
+  end
+
 (** Saturation Loop **)
 
 (* Passive_Set *)
@@ -699,6 +786,7 @@ fun infer_clauses ctxt active given_clause =
     @ maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs
     @ maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
     @ maps (infer_false_elim ctxt given_clause) given_clause_cposs
+    @ maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
   end
 
 datatype loopstate = Unsat | Next of Passive_Set.T * JClause.T list
