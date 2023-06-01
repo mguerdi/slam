@@ -92,7 +92,7 @@ fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Jeha_Common.map_some (cons 
         val disagreement_tpos_of2_head_and_args : tpos option list =
           map disagreement_tpos_of2 (head_args_t ~~ head_args_u)
         val disagreement_tpos_of2_comb =
-          (* prepend term position in the combination *)
+          (* prepend term position in the combination FIXME: just map_index pair and prepend in the case ... [()]*)
           map_index
             (fn (idx, disagreement_tpos_of2_subterm) =>
               Jeha_Common.map_some (cons idx) disagreement_tpos_of2_subterm)
@@ -107,7 +107,7 @@ fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Jeha_Common.map_some (cons 
         | _ => SOME []
       end
     end
-  | disagreement_tpos_of2 _ = SOME []
+  | disagreement_tpos_of2 (t, u) = if t aconv u then NONE else SOME []
 
 fun is_variable_headed t =
   let
