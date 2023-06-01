@@ -536,7 +536,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
           |> single
         end
   in
-    the_default [] (try build_conclusion ())
+    (build_conclusion () handle TUNIFY => [])
   end
 
 fun infer_false_elim ctxt c cp =
@@ -626,7 +626,7 @@ fun forward_simplify ctxt cheap active given_clause =
     (* FIXME: can this lead to a fixed-point (and not terminate)? *)
     fun full_rewrite c countdown =
       if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
-      let val _ = Jeha_Common.trace_msg ctxt (fn () => "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in
+      let val _ = Jeha_Common.trace_msg ctxt (fn () => (if cheap then "cheap " else "") ^ "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in
       case first_successful_rewrite c of
         SOME c' =>
           full_rewrite c' (countdown - 1)
