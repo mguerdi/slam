@@ -22,6 +22,8 @@ sig
   val infer_bool_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_false_elim : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_eq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_neq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
@@ -591,19 +593,22 @@ val bool_rw_non_var_rules =
       , (HOLogic.mk_imp, ml_imp) ]
   end
 
-(* FIXME: Idea: have the rw rules as active clauses, then this is basically superposition *)
-fun infer_bool_rw ctxt c u_pos =
+(* Implementation of BoolRw, EqHoist, NeqHoist, ForallHoist and ExistsHoist.
+unifies u with boolean pattern, returns C<\<top>> or C<\<bottom>> and checks relevant conditions *)
+fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
+  ctxt
+  (c : JClause.T)
+  (u_pos : JClause.full_pos)
+  (pattern : term)
+  (u_var_allowed : bool) (* this is false for BoolRw but true for the others *)
+  (insert_for_u : term) (* will be \<top> or \<bottom> *)
+  (disjunct_with : JLit.T option) (* this is needed for the Hoist rules *)
+  : JClause.T list
+=
+  let val u = JClause.subterm_at_full_pos c u_pos in
+  if (not u_var_allowed) andalso (is_Var u) then [] else (* BoolRw: 2. *)
   let
-    val u = JClause.subterm_at_full_pos c u_pos
     val maxidx = JClause.maxidx c
-    val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
-    val fresh_variable = Var (("y", maxidx + 1), fresh_typ) (* y *)
-    val fresh_variable_eq_itself = HOLogic.mk_eq (fresh_variable, fresh_variable)
-    val rw_rules =
-      [ (fresh_variable_eq_itself, @{term "True"})
-      , (HOLogic.mk_not fresh_variable_eq_itself, @{term "False"}) ]
-      @
-      bool_rw_non_var_rules
     val u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term =
       case u_pos of
         ([], lpos, cpos) =>
@@ -615,41 +620,81 @@ fun infer_bool_rw ctxt c u_pos =
                 orelse other_side = @{term False}
                 orelse JTerm.is_variable_headed other_side)
           end
-      | _ => false (* not at top level *)
+      | _ => false
     val u_variable_headed_condition =
       not (JTerm.is_variable_headed u)
         orelse u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term
-    fun build_conclusion (t, t') unifier =
+    val unifiers =
+      Jeha_Unify.smash_unifiers
+        (Context.Proof ctxt)
+        [(u, pattern)]
+        (Envir.empty (maxidx + 1))
+    (* FIXME: print warning message when discarding unifiers? *)
+    val (unifiers, _) = Seq.chop 4 unifiers
+    fun build_conclusion unifier =
       let
         val c = c |> JClause.norm_beta_eta_qeta_env unifier
         val maxidx = JClause.maxidx c
+        val new_literal =
+          Jeha_Common.map_some
+            (JLit.map (JTerm.norm_beta_eta_qeta_env unifier))
+            disjunct_with
       in
-        if not (JClause.is_eligible_full_pos c u_pos) then NONE else (* 3. *)
-        if not u_variable_headed_condition then NONE else (* 4. *)
+        (* 3. the position of u is eligible in C w.r.t. \<sigma> *)
+        if not (JClause.is_eligible_full_pos c u_pos) then NONE else
+        (* 4. if the hed of u is a variable ... *)
+        if not u_variable_headed_condition then NONE else
+
         c
-        (* Note: t' is always ground and we're inserting into a green position
-        so no further normalization necessary *)
-        |> JClause.map_at_full_pos u_pos (K t')
-        |> JClause.map_maxidx (K maxidx)
+        |> JClause.map_at_full_pos u_pos (K insert_for_u)
+        |> JClause.map_maxidx (K maxidx) (* restore invalidated maxidx *)
+        (* add the new literal if it exists, otherwise apply identity function *)
+        |> the_default I (Jeha_Common.map_some JClause.add_literal new_literal)
         |> JClause.refresh_id ()
         |> SOME
       end
-    fun apply_rw_rule (t, t') =
-      let
-        val unifiers =
-          Jeha_Unify.smash_unifiers
-            (Context.Proof ctxt)
-            [(u, t)]
-            (Envir.empty (maxidx + 1))
-        (* FIXME: print warning message when discarding unifiers? *)
-        val (unifiers, _) = Seq.chop 4 unifiers
-      in
-        map_filter (build_conclusion (t, t')) unifiers
-      end
   in
-    if is_Var u then [] else
+    map_filter build_conclusion unifiers
+  end
+  end
+
+(* FIXME: Idea: have the rw rules as active clauses, then this is basically superposition *)
+fun infer_bool_rw ctxt c u_pos =
+  let
+    val maxidx = JClause.maxidx c
+    val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
+    val fresh_variable = Var (("y", maxidx + 1), fresh_typ) (* y *)
+    val fresh_variable_eq_itself = HOLogic.mk_eq (fresh_variable, fresh_variable)
+    val rw_rules =
+      [ (fresh_variable_eq_itself, @{term "True"})
+      , (HOLogic.mk_not fresh_variable_eq_itself, @{term "False"}) ]
+      @
+      bool_rw_non_var_rules
+    fun apply_rw_rule (t, t') =
+      impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos t false t' NONE
+  in
     maps apply_rw_rule rw_rules
   end
+
+fun impl_eq_neq_hoist positive ctxt c u_pos =
+  let
+    val maxidx = JClause.maxidx c
+    val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
+    val fresh_x = Var (("x", maxidx + 1), fresh_typ) (* x *)
+    val fresh_y = Var (("y", maxidx + 1), fresh_typ) (* y *)
+    val x_eq_y_lit = (fresh_x, fresh_y, true)
+    val pattern =
+      (fresh_x, fresh_y)
+      |> HOLogic.mk_eq
+      |> not positive ? HOLogic.mk_not
+    val insert_for_u = hol_bool_of (not positive)
+  in
+    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos pattern true insert_for_u (SOME x_eq_y_lit)
+  end
+
+val infer_eq_hoist = impl_eq_neq_hoist true
+
+val infer_neq_hoist = impl_eq_neq_hoist false
 
 (** Saturation Loop **)
 
@@ -787,6 +832,8 @@ fun infer_clauses ctxt active given_clause =
     @ maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
     @ maps (infer_false_elim ctxt given_clause) given_clause_cposs
     @ maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
   end
 
 datatype loopstate = Unsat | Next of Passive_Set.T * JClause.T list
