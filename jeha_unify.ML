@@ -27,6 +27,8 @@ fun give_to_undefined t =
 
 fun smash_unifiers ctxt tus env =
   let
+    (* disable very long Enter MATCH tracing messages when unification bound is exceeded *)
+    val ctxt = Context_Position.set_visible_generic false ctxt
     val maxidx =
       fold
         (fn tu => fn maxidx => Int.max (maxidx, Int.max (apply2 maxidx_of_term tu)))
