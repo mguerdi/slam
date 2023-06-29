@@ -39,6 +39,7 @@ fun of_term t =
     fun lit_of_aux b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
       | lit_of_aux b (@{term Not} $ t) = lit_of_aux (not b) t
       (* FIXME: Should we prefer equation to disequations when injecting booleans? *)
+      (* FIXME: us mk_pred_lit here? *)
       | lit_of_aux b t = (t, if b then @{term True} else @{term False}, true)
   in
     if not (fastype_of t = @{typ bool})

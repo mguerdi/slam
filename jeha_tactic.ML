@@ -25,7 +25,8 @@ fun jeha_tac options ctxt ths i st0 =
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Thm.prop_of st0: " ^ @{make_string} (Thm.prop_of st0))
     val seq =
       case Thm.prop_of st0 of
-        (* FIXME: this handles the TERM _ call from Isar, but why do we need to do this?? *)
+        (* This handles the TERM _ call from Isar. Explanation:
+        https://isabelle.zulipchat.com/#narrow/stream/336180-Archive-Mirror.3A-Isabelle-Users-Mailing-List/topic/.5Bisabelle.5D.20tactic.20being.20executed.20twice *)
         (Const ("Pure.prop", _) $ (Const ("Pure.term", _) $ _)) => Seq.single st0
       | _ =>
         let
@@ -34,9 +35,10 @@ fun jeha_tac options ctxt ths i st0 =
         in
           (* if Jeha.refutable ctxt ths st0 then ALLGOALS (Skip_Proof.cheat_tac ctxt) st0 else Seq.empty *)
           (* FIXME: why are we doing this??? *)
-          Subgoal.FOCUS (fn { context, prems, asms, concl, ...} => (fn st =>
-            (* FIXME: asms and prems seems to be the same *)
-            if Jeha.refutable context (prems @ ths) asms (Thm.term_of concl)
+          Subgoal.FOCUS (fn { context, prems, concl, ...} => (fn st =>
+            (* FIXME: make sure that we really don't need asms (only use is in
+            HOL/Tools/Quotient/quotient_tacs.ML) *)
+            if Jeha.refutable context (prems @ ths) (Thm.term_of concl)
                 handle Jeha.JEHA_EXCEPTION (e, state) =>
                   (if exists (curry (op =) "dump") options
                     then

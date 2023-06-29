@@ -27,6 +27,7 @@ fun give_to_undefined t =
 
 fun smash_unifiers ctxt tus env =
   let
+    (* val _ = Jeha_Common.trace_msg (Context.the_proof ctxt) (fn () => "unifying: " ^ fold (curry (op ^)) (map ((fn (l, r) => l ^ " = " ^ r ^ ", ") o apply2 (Jeha_Common.pretty_term (Context.the_proof ctxt))) tus) "") *)
     (* disable very long Enter MATCH tracing messages when unification bound is exceeded *)
     val ctxt = Context_Position.set_visible_generic false ctxt
     val maxidx =
@@ -62,3 +63,75 @@ fun literal_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
     , matchers ctxt maxidx [(s, t'), (t, s')] )
 
 end
+
+
+(* Plan
+
+       s = t      u = v \<or> R
+(RP) ------------------------  u|\<^sub>p = s\<sigma>
+     s = t     u\<langle>t\<sigma>\<rangle>\<^sub>p = v \<or> R
+
+call unit_clause = (s = t), target_clause (u = v \<or> R)
+
+suppose p is given.
+ 1. Match pattern s against u|\<^sub>p, making sure any newly introduced variables are
+    fresh in the target clause. Result is \<sigma> which assigns subterms of u to vars
+    of s.
+ 2. Rename the variables of t which are not present in \<sigma> to avoid clashes
+    between vars of t\<sigma> and vars of the target clause. Note: the new variables
+    need to be distinct from the ones of the target_clause and the r.h.s. of \<sigma>
+ 3. Apply \<sigma> to the renamed t and insert into u.
+
+in pseudo code:
+
+\<sigma> = Jeha_Unify.matchers (maxidx target_clause) [(s, u|\<^sub>p)]
+
+(* Assumption: Envir.maxidx_of \<sigma> >= maxidx target_clause *)
+
+for var in Vars(t)
+  if var in \<sigma>
+    then continue
+    else
+      var' = genvar \<sigma> var (??) 
+      \<sigma> = (var = var') :: \<sigma>
+
+u = u\<langle>t\<sigma>\<rangle>\<^sub>p
+
+fun refresh_unaffected_vars env t =
+  let
+    val TVars = TVars.build (TVars.add_tvars t)
+    val Vars = Vars.build (Vars.add_vars t)
+    
+    fun maps_var env var = is_some (Envir.lookup1 (Envir.term_env env) var)
+    fun maps_tvar env tvar_sort = is_some (Type.lookup (Envir.type_env env) tvar_sort)
+
+    fun refresh_tvars T env =
+      fold_atyps_sorts
+        (fn aT =>
+          case aT of
+            TVar (tvar, sort) ->
+              if maps_tvar env tvar
+                then env
+                else
+                  let
+                    val maxidx = Term.maxidx
+
+          )
+
+    fun refresh t T env =
+      let
+        val env = refresh_tvars env
+
+    fold_term_types
+    val fold_term_types: (term -> typ -> 'a -> 'a) -> term -> 'a -> 'a
+
+
+val matcher = Jeha_Unify.matchers (JClause.maxidx target_clause) [(from, target_term)]
+val matcher = refresh_unaffected_vars matcher ()
+
+
+simpler solution:
+
+
+
+*)

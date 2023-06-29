@@ -10,6 +10,12 @@ general procedure:
 
 signature JEHA =
 sig
+  val is_pos_unit : JClause.T -> bool
+  val impl_simp_rewrite_lits : bool -> Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
+  val find_single_green_disagreement : Proof.context -> term * term -> JTerm.tpos option
+  val literal_can_match_single_disagreement : Proof.context -> int * JLit.T -> int * JLit.T -> bool
+  val equality_subsumes : Proof.context -> JClause.T * JClause.T -> bool
+  val bool_rw_non_var_rules : (term * term) list
   (* outer clausification *)
   val outer_clausify : bool -> term -> JClause.T -> JClause.T list
   val simp_bool_outer_claus : JClause.T -> JClause.cpos -> JClause.T list
@@ -34,7 +40,7 @@ sig
   exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * JClause.T list)
   val given_clause_loop : bool -> Proof.context -> int -> Passive_Set.T -> JClause.T list -> string
   val given_clause_step : Proof.context -> int -> Passive_Set.T -> JClause.T list -> loopstate
-  val refutable : Proof.context -> thm list -> cterm list -> term -> bool
+  val refutable : Proof.context -> thm list -> term -> bool
 end
 
 structure Jeha : JEHA =
@@ -45,6 +51,7 @@ logically:
   outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
 Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix
 of negations above and below) *)
+(* FIXME: refresh ids *)
 fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
@@ -198,7 +205,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
           (Jeha_Common.trace_msg ctxt (fn () => msg);
           (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
-          SOME (JClause.norm_beta_eta_qeta rewritten_clause))
+          (JClause.norm_beta_eta_qeta rewritten_clause)
+          |> JClause.refresh_id ()
+          |> SOME)
         end
       end
   in
@@ -240,7 +249,10 @@ fun simp_negative_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   in
     if exists_matcher
       then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
-        SOME (JClause.delete_lit_at target_cp target_clause)
+        target_clause
+        |> JClause.delete_lit_at target_cp
+        |> JClause.refresh_id ()
+        |> SOME 
       end
       else NONE
   end
@@ -248,7 +260,14 @@ fun simp_negative_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
 (* given terms s, t, the longest common position p s.t. s, t are equal except
 for their subtrees at p *)
 (* FIXME: rename to find_single_blue_disagreement and change appropriately *)
-(* FIXME: how to deal with types??? *)
+(* FIXME: how to deal with types???
+    Just take types into consideration when comparing constant symbols and vars?
+    Is there any other meaningful way of treating types (contrived: extend the
+    notion of subterm to types, extend the notion of path to index into types as
+    well, etc.) ? 
+    How much follows from well-typedness of the equality literal? -> at least
+    that [] is a disagreement position
+*)
 fun find_single_green_disagreement ctxt term_pair =
   let
     val disagreement_pos = JTerm.disagreement_tpos_of2 term_pair
@@ -320,7 +339,10 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   in
     if exists_matcher
       then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
-        SOME (JClause.delete_lit_at target_cp target_clause)
+        target_clause
+        |> JClause.delete_lit_at target_cp
+        |> JClause.refresh_id ()
+        |> SOME 
       end
       else NONE
   end
@@ -446,6 +468,13 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           (* FXIME 9. 10. *)
           JClause.combine d' ct'
           |> JClause.refresh_id ()
+          |> JClause.set_origin
+              (Jeha_Log.Sup
+                { left_premise = JClause.id d
+                , right_premise = JClause.id c
+                , literal = (lp, cp)
+                , subterm = u_pos
+                , substitution = unifier })
           |> SOME
         end
     in
@@ -468,6 +497,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
         c
         |> JClause.delete_lit_at cp
         |> JClause.refresh_id ()
+        |> JClause.set_origin (Jeha_Log.ERes { premise = JClause.id c, literal = cp, substitution = unifier })
         |> SOME
       end
   in
@@ -502,6 +532,12 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         |> JClause.add_literal (v, v', false)
         |> JClause.add_literal (u, v', true)
         |> JClause.refresh_id ()
+        |> JClause.set_origin
+            (Jeha_Log.EFact
+              { premise = JClause.id c
+              , left_literal = (lp', cp')
+              , right_literal = (lp, cp)
+              , substitution = unifier })
         |> SOME
       end
     in
@@ -540,6 +576,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
           |> JClause.add_literal u_eq_true
           |> JClause.norm_beta_eta_qeta_env unifier
           |> JClause.refresh_id ()
+          |> JClause.set_origin (Jeha_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
           |> single
         end
   in
@@ -564,6 +601,7 @@ fun infer_false_elim ctxt c cp =
         c
         |> JClause.delete_lit_at cp
         |> JClause.refresh_id ()
+        |> JClause.set_origin (Jeha_Log.FalseElim { premise = JClause.id c, literal = cp, substitution = unifier })
         |> SOME
       end
   in
@@ -603,7 +641,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   (u_var_allowed : bool) (* this is false for BoolRw but true for the others *)
   (insert_for_u : term) (* will be \<top> or \<bottom> *)
   (disjunct_with : JLit.T option) (* this is needed for the Hoist rules *)
-  : JClause.T list
+  : (Envir.env * JClause.T) list
 =
   let val u = JClause.subterm_at_full_pos c u_pos in
   if (not u_var_allowed) andalso (is_Var u) then [] else (* BoolRw: 2. *)
@@ -651,6 +689,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         (* add the new literal if it exists, otherwise apply identity function *)
         |> the_default I (Jeha_Common.map_some JClause.add_literal new_literal)
         |> JClause.refresh_id ()
+        |> pair unifier
         |> SOME
       end
   in
@@ -672,6 +711,7 @@ fun infer_bool_rw ctxt c u_pos =
       bool_rw_non_var_rules
     fun apply_rw_rule (t, t') =
       impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos t false t' NONE
+      |> map (fn (unifier, clause) => clause |> JClause.set_origin (Jeha_Log.BoolRw { premise = JClause.id c, subterm = u_pos, subrule = (t, t'), substitution = unifier }))
   in
     maps apply_rw_rule rw_rules
   end
@@ -690,6 +730,9 @@ fun impl_eq_neq_hoist positive ctxt c u_pos =
     val insert_for_u = hol_bool_of (not positive)
   in
     impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos pattern true insert_for_u (SOME x_eq_y_lit)
+    |> map (fn (unifier, clause) => clause |> JClause.set_origin (
+        (if positive then Jeha_Log.EqHoist else Jeha_Log.NeqHoist)
+          { premise = JClause.id c, subterm = u_pos, substitution = unifier }))
   end
 
 val infer_eq_hoist = impl_eq_neq_hoist true
@@ -745,7 +788,7 @@ fun forward_simplify ctxt cheap active given_clause =
         val dd_dr_rewrites : JClause.T Seq.seq =
             Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
       in
-        (* following Schulz: RN, RP, PS, FIXME: NS, DD, DR *)
+        (* following Schulz: RN, RP, PS, NS, DD, DR *)
         Seq.empty
         |> (Seq.append rn_rp_rewrites
           o Seq.append (if not cheap then ps_rewrites else Seq.empty)
@@ -755,7 +798,8 @@ fun forward_simplify ctxt cheap active given_clause =
         |> Jeha_Common.map_some #1
       end
     (* rewrite until not possible anymore *)
-    (* FIXME: can this lead to a fixed-point (and not terminate)? *)
+    (* FIXME: can this lead to a fixed-point (and not terminate)? No, even RP with unit s\<approx>t and \<sigma> a
+    unifier of s and t as well, violates s\<sigma> > t\<sigma>*)
     fun full_rewrite c countdown =
       if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
       let val _ = Jeha_Common.trace_msg ctxt (fn () => (if cheap then "cheap " else "") ^ "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in
@@ -793,8 +837,7 @@ fun map_filter_partition _ [] = ([], [], [])
       in
         case f x of
           [y] =>
-            (* FIXME: aconv w.r.t. Var and TVar? *)
-            if y = x
+            if JClause.id y = JClause.id x
               then (deleted, changed, y :: unchanged)
               else (deleted, y :: changed, unchanged)
         | [] => (x :: deleted, changed, unchanged)
@@ -916,21 +959,35 @@ fun given_clause_loop dump ctxt countdown passive active =
     Unsat => "UNSAT"
   | Next (passive, active) => given_clause_loop dump ctxt (countdown - 1) passive active
 
-fun refutable ctxt prems asms conjecture =
+fun refutable ctxt prems conjecture =
   let
     val _ = Jeha_Common.trace_msg ctxt
       (fn () => "conjecture: " ^ Jeha_Common.pretty_term ctxt conjecture)
-    val prems = map (Object_Logic.atomize_term ctxt o Thm.prop_of) prems
+    (* compare: Object_Logic.full_atomize_tac *)
+    val atomized_prems = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) prems
     val _ = Jeha_Common.trace_msg ctxt
-      (fn () => "prems: " ^ Jeha_Common.pretty_terms ctxt prems)
-    val asms = map (Object_Logic.atomize_term ctxt o Thm.term_of) asms
-    val _ = Jeha_Common.trace_msg ctxt
-      (fn () => "asms: " ^ Jeha_Common.pretty_terms ctxt asms)
-    val neg_conjecture = HOLogic.mk_not (Object_Logic.atomize_term ctxt conjecture)
-    val clauses = map_index (fn (_, t) => JClause.of_term (t, Clause_Id.new ())) (neg_conjecture :: asms @ prems)
+      (fn () => "atomized prems: " ^ Jeha_Common.pretty_terms ctxt (map (Object_Logic.drop_judgment ctxt o Thm.prop_of) atomized_prems))
+    fun clause_of_prem prem =
+      prem
+      |> Thm.prop_of
+      |> Object_Logic.drop_judgment ctxt (* remove Trueprop *)
+      |> (fn t => JClause.of_term (t, Clause_Id.new ()))
+      |> JClause.set_origin (Jeha_Log.Axiom { thm = prem })
+    val prems_clauses = map clause_of_prem atomized_prems
+    val neg_conjecture_clause =
+      conjecture
+      (* FIXME: this needs to be part of the proof somehow, maybe use full
+      atomize tac before starting the prover? And don't atomize here at all? But
+      then how to ensure that the premises are also fully atomized, not just the
+      ones appearing as assumptions of the goal? *)
+      |> Object_Logic.atomize_term ctxt
+      |> HOLogic.mk_not (* negate *)
+      |> (fn t => JClause.of_term (t, Clause_Id.new ()))
+      |> JClause.set_origin Jeha_Log.NegatedConjecture
+    val clauses = neg_conjecture_clause :: prems_clauses
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map JClause.term_of clauses))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
-    val result = given_clause_loop true ctxt 40 (init_passive_set  clauses) []
+    val result = Runtime.exn_trace (fn () => given_clause_loop true ctxt 300 (init_passive_set clauses) [])
   in
     if result = "UNSAT" then true else error result
   end

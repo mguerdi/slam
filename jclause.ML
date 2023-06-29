@@ -1,14 +1,18 @@
 signature JCLAUSE =
 sig
-  type T
-  (* position of literal in a clause *)
+  (*
   type cpos = int
   type full_pos = JTerm.tpos * JLit.lpos * cpos
+  *)
+  include JCLAUSE_POS
+  type T
   val literals : T -> JLit.T list
   val id : T -> int
   val maxidx : T -> int
   val maxidx_of2 : T * T -> int
   val map_maxidx : (int -> int) -> T -> T
+  val set_origin : Jeha_Log.inference -> T -> T
+  val origin : T -> Jeha_Log.inference
   val lit_at : cpos -> T -> JLit.T
   val dummy : JLit.T list -> T
   val refresh_id : unit -> T -> T
@@ -40,7 +44,15 @@ end;
 structure JClause : JCLAUSE =
 struct
 
-type T = { literals: JLit.T list, id : int , maxidx : int }
+open JClause_Pos
+
+type T =
+  { literals: JLit.T list
+  , id : int
+  , maxidx : int
+  , origin: Jeha_Log.inference
+  }
+
 type cpos = int
 type full_pos = JTerm.tpos * JLit.lpos * cpos
 
@@ -52,25 +64,29 @@ val maxidx = #maxidx
 
 val maxidx_of2 = Int.max o apply2 maxidx
 
-val empty = { literals = [], id = ~1, maxidx = ~1 }
+val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid }
 
-(* NOTE: invalidates maxidx *)
-fun map_literals f { literals, id, maxidx } =
-  { literals = f literals, id = id, maxidx = ~1 }
+(* NOTE: invalidates maxidx and origin *)
+fun map_literals f { literals, id, maxidx, origin } =
+  { literals = f literals, id = id, maxidx = ~1, origin = origin }
 
 fun lit_at cp clause = nth (literals clause) cp
 
 fun dummy literals =
   map_literals (K literals) empty
 
-fun map_id f { literals, id, maxidx } = { literals = literals, id = f id, maxidx = maxidx }
+fun map_id f { literals, id, maxidx, origin } = { literals = literals, id = f id, maxidx = maxidx, origin = origin }
 
 fun refresh_id _ = map_id (K (Clause_Id.new ()))
 
 fun maxidx_of_literal_list ls =
   fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
 
-fun map_maxidx f { literals, id, maxidx } = { literals = literals, id = id, maxidx = f maxidx }
+fun map_maxidx f { literals, id, maxidx, origin } = { literals = literals, id = id, maxidx = f maxidx, origin = origin }
+
+fun set_origin origin { literals, id, maxidx, ... } = { literals = literals, id = id, maxidx = maxidx, origin = origin }
+
+fun origin { origin, ... } = origin
 
 (* FIXME: use this for testing *)
 fun recalculate_maxidx clause =
