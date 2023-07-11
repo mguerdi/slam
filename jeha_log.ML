@@ -5,7 +5,6 @@ sig
   datatype inference =
   (* part of the input problem *)
     Axiom of { thm: thm }
-  | NegatedConjecture
   (* proper inferences *)
   | Sup of { left_premise: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidSup
@@ -51,8 +50,6 @@ struct
 datatype inference =
   (* part of the input problem *)
     Axiom of { thm: thm }
-  (* do we get a proof of this? (from ccontr?) *)
-  | NegatedConjecture
   (* proper inferences *)
   (** general **)
   | Sup of { left_premise: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -95,12 +92,15 @@ datatype inference =
 (* Building blocks of proofs (inspired by metis_reconstruct.ML):
 
 substitution / instantiation
-  * e.g. as part of Sup: apply unifier \<sigma> to D and to C<u>, then buil the conclusion
+  * e.g. as part of Sup: apply unifier \<sigma> to D and to C<u>, then build the conclusion
   * renaming to make variables disjoint (or is there a better isabelle primitive for this)
+
+normalization
+  * Q\<^sub>\<approx>-normal form (preprocessing)
+  * \<beta>\<eta>Q\<^sub>\<eta>-normal form
 
 superposition with trivial (identity) unification
   * covers Sup, FluidSup, *Hoist (with LEM), BoolRw (with RW rules as left premises), 
-
 
 BoolHoist: superposition with LEM (x = \<top> \<or> x = \<bottom>)
 EqHoist: superposition with LEM 

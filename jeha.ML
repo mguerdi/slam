@@ -40,7 +40,7 @@ sig
   exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * JClause.T list)
   val given_clause_loop : bool -> Proof.context -> int -> Passive_Set.T -> JClause.T list -> string
   val given_clause_step : Proof.context -> int -> Passive_Set.T -> JClause.T list -> loopstate
-  val refutable : Proof.context -> thm list -> term -> bool
+  val refutable : Proof.context -> thm list -> bool
 end
 
 structure Jeha : JEHA =
@@ -959,32 +959,17 @@ fun given_clause_loop dump ctxt countdown passive active =
     Unsat => "UNSAT"
   | Next (passive, active) => given_clause_loop dump ctxt (countdown - 1) passive active
 
-fun refutable ctxt prems conjecture =
+fun refutable ctxt prems =
   let
     val _ = Jeha_Common.trace_msg ctxt
-      (fn () => "conjecture: " ^ Jeha_Common.pretty_term ctxt conjecture)
-    (* compare: Object_Logic.full_atomize_tac *)
-    val atomized_prems = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) prems
-    val _ = Jeha_Common.trace_msg ctxt
-      (fn () => "atomized prems: " ^ Jeha_Common.pretty_terms ctxt (map (Object_Logic.drop_judgment ctxt o Thm.prop_of) atomized_prems))
+      (fn () => "prems: " ^ Jeha_Common.pretty_terms ctxt (map (Object_Logic.drop_judgment ctxt o Thm.prop_of) prems))
     fun clause_of_prem prem =
       prem
       |> Thm.prop_of
       |> Object_Logic.drop_judgment ctxt (* remove Trueprop *)
       |> (fn t => JClause.of_term (t, Clause_Id.new ()))
       |> JClause.set_origin (Jeha_Log.Axiom { thm = prem })
-    val prems_clauses = map clause_of_prem atomized_prems
-    val neg_conjecture_clause =
-      conjecture
-      (* FIXME: this needs to be part of the proof somehow, maybe use full
-      atomize tac before starting the prover? And don't atomize here at all? But
-      then how to ensure that the premises are also fully atomized, not just the
-      ones appearing as assumptions of the goal? *)
-      |> Object_Logic.atomize_term ctxt
-      |> HOLogic.mk_not (* negate *)
-      |> (fn t => JClause.of_term (t, Clause_Id.new ()))
-      |> JClause.set_origin Jeha_Log.NegatedConjecture
-    val clauses = neg_conjecture_clause :: prems_clauses
+    val clauses = map clause_of_prem prems
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map JClause.term_of clauses))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
     val result = Runtime.exn_trace (fn () => given_clause_loop true ctxt 300 (init_passive_set clauses) [])
