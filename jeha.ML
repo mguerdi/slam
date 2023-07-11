@@ -26,7 +26,7 @@ sig
   val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
   val infer_bool_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_false_elim : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
+  val infer_false_elim : Proof.context -> JClause.T -> (JLit.lpos * JClause.cpos) -> JClause.T list
   val infer_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_eq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_neq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
@@ -226,26 +226,27 @@ val simp_rewrite_positive_lits = impl_simp_rewrite_lits true
 val simp_rewrite_negative_lits = impl_simp_rewrite_lits false
 
 (* Negative simplify-reflect (NS) simplification (Schulz) *)
-fun simp_negative_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
+fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, target_cp) =
   if is_pos_unit unit_clause then NONE else
   (* check that to be deleted literal is indeed positive *)
   if not (true = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
     val unit_clause = JClause.incr_indexes (JClause.maxidx target_clause + 1) unit_clause
     val maxidx = JClause.maxidx_of2 (unit_clause, target_clause)
-    val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
+    val unit_lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
+    val (s, t, false) = JLit.orient unit_lp unit_lit
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
-    val lit_as_positive = let val (s, t, false) = lit in (s, t, true) end
+    val (u, v, b) = target_lit
     val exists_matcher =
-      (target_lit, lit_as_positive)
-      |> Jeha_Unify.literal_matchers (Context.Proof ctxt) maxidx
+      [(u, s), (v, t)]
+      |> Jeha_Unify.matchers (Context.Proof ctxt) maxidx
       |> Seq.pull
       |> is_some
     (* tracing *)
     val msg =  "   " ^ "(NS)"
       ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
       ^ " in " ^ JClause.pretty_clause ctxt target_clause
-      ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [lit])
+      ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [unit_lit])
   in
     if exists_matcher
       then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
@@ -583,13 +584,13 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
     (build_conclusion () handle TUNIFY => [])
   end
 
-fun infer_false_elim ctxt c cp =
+fun infer_false_elim ctxt c (lp, cp) =
   let
-    val s_eq_s' = JClause.lit_at cp c
-    val unifiers =
-      Jeha_Unify.literal_smash_unifiers
+    val (s, s', b) = JClause.lit_at cp c |> JLit.orient lp
+    val unifiers = if not b then Seq.empty else
+      Jeha_Unify.smash_unifiers
         (Context.Proof ctxt)
-        (s_eq_s', (@{term "False"}, @{term "True"}, true))
+        [(s, @{term "False"}), (s', @{term "True"})]
         (Envir.empty (JClause.maxidx c))
     (* FIXME: print warning message when discarding unifiers *)
     val (unifiers, _) = Seq.chop 4 unifiers
@@ -601,11 +602,10 @@ fun infer_false_elim ctxt c cp =
         c
         |> JClause.delete_lit_at cp
         |> JClause.refresh_id ()
-        |> JClause.set_origin (Jeha_Log.FalseElim { premise = JClause.id c, literal = cp, substitution = unifier })
+        |> JClause.set_origin (Jeha_Log.FalseElim { premise = JClause.id c, literal = (lp, cp), substitution = unifier })
         |> SOME
       end
   in
-    if not (JLit.is_positive s_eq_s') then [] else
     map_filter build_conclusion unifiers
   end
 
@@ -783,8 +783,8 @@ fun forward_simplify ctxt cheap active given_clause =
           Jeha_Common.seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
         val ns_rewrites : JClause.T Seq.seq =
-          Jeha_Common.seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
-          |> Seq.map_filter (fn (unit, target) => simp_negative_simplify_reflect ctxt unit target)
+          Jeha_Common.seq_cartesian_product active_units_all_orientations (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
+          |> Seq.map_filter (fn (oriented_unit, target) => simp_negative_simplify_reflect ctxt oriented_unit target)
         val dd_dr_rewrites : JClause.T Seq.seq =
             Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
       in
@@ -873,7 +873,7 @@ fun infer_clauses ctxt active given_clause =
     @ maps (infer_eres ctxt given_clause) given_clause_cposs
     @ maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs
     @ maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_false_elim ctxt given_clause) given_clause_cposs
+    @ maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs
     @ maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
     @ maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
     @ maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)

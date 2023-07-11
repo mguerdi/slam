@@ -14,7 +14,7 @@ sig
   | ArgCong
   (* Booleans *)
   | BoolHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FalseElim of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | FalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   | EqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | NeqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -62,7 +62,7 @@ datatype inference =
   | ArgCong
   (** Booleans **)
   | BoolHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FalseElim of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | FalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   | EqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | NeqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
