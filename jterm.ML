@@ -23,6 +23,7 @@ sig
   (* normalization *)
   val norm_beta_eta_qeta_env : Envir.env -> term -> term
   val norm_beta_eta_qeta : term -> term
+  val ensure_lambda_under_q : term -> term
 end;
 
 structure JTerm : JTERM =

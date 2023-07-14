@@ -25,22 +25,35 @@ sig
   val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
   val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
+  val infer_arg_cong : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_bool_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_false_elim : Proof.context -> JClause.T -> (JLit.lpos * JClause.cpos) -> JClause.T list
   val infer_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_eq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_neq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_forall_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_exists_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_forall_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_exists_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
   structure Passive_Set : HEAP
   val init_passive_set : JClause.T list -> Passive_Set.T
-  type loopstate
+  datatype step_result = Unsat | MaybeSat | Next 
+  type prover_state =
+    { context: Proof.context
+    , countdown: int
+    , passive: Passive_Set.T
+    , active: JClause.T list
+    , archive: JClause.T list
+    }
   (* original exception + prover state before the exception was raised *)
-  exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * JClause.T list)
-  val given_clause_loop : bool -> Proof.context -> int -> Passive_Set.T -> JClause.T list -> string
-  val given_clause_step : Proof.context -> int -> Passive_Set.T -> JClause.T list -> loopstate
-  val refutable : Proof.context -> thm list -> bool
+  exception JEHA_EXCEPTION of exn * prover_state
+  val given_clause_loop : bool -> prover_state -> step_result * prover_state
+  val given_clause_step : prover_state -> step_result * prover_state
+  val try_saturate : Proof.context -> thm list -> step_result * prover_state
+  val make_clause_db : prover_state -> int -> JClause.T
 end
 
 structure Jeha : JEHA =
@@ -135,7 +148,11 @@ fun simp_delete_resolved_lits ctxt c =
       else
         (Jeha_Common.trace_msg ctxt (fn () =>
           "deleted resolved literals in " ^ JClause.pretty_clause ctxt c);
-        SOME (JClause.refresh_id () c'))
+        SOME (
+          JClause.refresh_id () c'
+          |> JClause.set_origin
+            (Jeha_Log.DeleteResolvedLits  { premise = JClause.id c })
+        ))
   end
 
 fun is_pos_unit { literals = [(_, _, true)], ... } = true
@@ -417,7 +434,9 @@ fun infer_eq_neq_outer_claus c i =
   let
     val (s, t, b) = JClause.lit_at i c
   in
-    if not (fastype_of s = @{typ bool} andalso fastype_of t = @{typ bool})
+    if (Runtime.exn_trace (fn () =>
+          not (fastype_of s = @{typ bool} andalso fastype_of t = @{typ bool})
+    ))
       then error "not boolean equation"
     else if b
       then (* EqOuterClaus *)
@@ -429,6 +448,28 @@ fun infer_eq_neq_outer_claus c i =
         , fold JClause.add_literal [JLit.mk_pred s true, JLit.mk_pred t true] c
         ]
   end
+
+(*
+fun impl_infer_sup precheck ctxt (d, (lp, cp), (c, u_pos)) =
+  let
+    (* rename *)
+    val d = JClause.incr_indexes (JClause.maxidx c + 1) d
+    val env = Envir.empty (JClause.maxidx_of2 (c, d))
+    (* unpack *)
+    val rewriting_literal = JClause.lit_at cp d (* t \<approx> t' *)
+    val (t, t', is_pos_eq) = JLit.orient lp rewriting_literal
+    val u = JClause.subterm_at_full_pos c u_pos
+  in
+    (* first round of checks *)
+    if not (precheck is_pos_eq u c) then [] else
+    let
+      val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
+    in
+      error "impl_infer_sup unimplemented"
+    end
+  end
+*)
+
 
 (* Sup inference *)
 fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
@@ -547,6 +588,75 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
       map_filter build_conclusion unifiers
     end
 
+(* ArgCong inference
+
+        C' \<or> s = s'
+------------------------------- ArgCong
+C'\<sigma> \<or> s\<sigma> x\<^sub>1 \<dots> x\<^sub>n = s'\<sigma> x\<^sub>1 \<dots> x\<^sub>n
+
+* n > 0
+* x\<^sub>i :: \<alpha>\<^sub>i fresh
+* \<sigma> is the most general unifier that guarantees well typedness of the
+  conclusion, so \<sigma> = mgu(type(s), \<alpha>\<^sub>1 \<Rightarrow> \<dots> \<Rightarrow> \<alpha>\<^sub>n \<Rightarrow> \<tau>) (Note: type(s) = type(s'))
+* s = s' strictly >-eligible in C w.r.t \<sigma>
+
+*)
+
+(* number of extra conclusions generated by ArgCong if the return type of s is a
+type variable *)
+val ARG_CONG_EXTRA_CONCLUSIONS = 2
+
+fun infer_arg_cong ctxt c cpos =
+  let val (s, s', b) = JClause.lit_at cpos c in
+  if not b then [] else
+  let
+    val s_num_of_args = length (Term.binder_types (fastype_of s))
+
+    fun mk_fresh_typ idx = TVar (("'a", idx), Sign.defaultS (Proof_Context.theory_of ctxt))
+    fun mk_fresh_var idx = Var (("x_ac", idx), mk_fresh_typ idx)
+
+    val maxidx = JClause.maxidx c
+
+    val new_maxidx = s_num_of_args + ARG_CONG_EXTRA_CONCLUSIONS + 1
+
+    val fresh_result_type = mk_fresh_typ new_maxidx
+    val xs_idxs = (maxidx + 1) upto (new_maxidx - 1)
+    val fresh_variables = map mk_fresh_var xs_idxs
+
+    fun build_conclusion fresh_variables =
+      let
+        val function_type = (map fastype_of fresh_variables) ---> fresh_result_type
+
+        val unifier =
+          Pattern.unify_types
+            (Context.Proof ctxt)
+            (fastype_of s, function_type)
+            (Envir.empty new_maxidx)
+
+        val new_literal =
+          (s, s')
+          |> apply2 (fn t => list_comb (t, fresh_variables))
+          |> (fn (x, y) => (x, y, true))
+
+        val new_clause =
+          c
+          |> JClause.map_at_cpos cpos (K new_literal)
+          |> JClause.norm_beta_eta_qeta_env unifier
+          |> JClause.map_maxidx (K new_maxidx)
+          |> JClause.refresh_id ()
+          |> JClause.set_origin
+              (Jeha_Log.ArgCong 
+                { premise = JClause.id c, literal = cpos, number_of_vars = length fresh_variables })
+      in
+        if not (JClause.is_eligible_cpos new_clause cpos) then NONE else
+        SOME new_clause
+      end
+  in
+    prefixes1 fresh_variables
+    |> map_filter (fn vars => build_conclusion vars handle Pattern.Unif => NONE)
+  end
+  end
+
 fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
   let
     val u = JClause.subterm_at_full_pos c u_pos
@@ -584,6 +694,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
     (build_conclusion () handle TUNIFY => [])
   end
 
+(* FIXME: apply as simplification if unifier is the identity *)
 fun infer_false_elim ctxt c (lp, cp) =
   let
     val (s, s', b) = JClause.lit_at cp c |> JLit.orient lp
@@ -646,7 +757,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   let val u = JClause.subterm_at_full_pos c u_pos in
   if (not u_var_allowed) andalso (is_Var u) then [] else (* BoolRw: 2. *)
   let
-    val maxidx = JClause.maxidx c
+    val maxidx = Int.max (Int.max (JClause.maxidx c, maxidx_of_term pattern), the_default ~1 (Jeha_Common.map_some JLit.maxidx_of disjunct_with))
     val u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term =
       case u_pos of
         ([], lpos, cpos) =>
@@ -672,20 +783,34 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
     fun build_conclusion unifier =
       let
         val c = c |> JClause.norm_beta_eta_qeta_env unifier
-        val maxidx = JClause.maxidx c
         val new_literal =
           Jeha_Common.map_some
             (JLit.map (JTerm.norm_beta_eta_qeta_env unifier))
             disjunct_with
+        val insert_for_u = JTerm.norm_beta_eta_qeta_env unifier insert_for_u
+
+        (* FIXME: remove after debugging *)
+        val u_subbed = JClause.subterm_at_full_pos c u_pos
+        val _ = if type_of u_subbed <> type_of insert_for_u then
+            (writeln ("TYPES DONT MATCH: " ^ Jeha_Common.pretty_term ctxt u_subbed ^ " <> " ^ Jeha_Common.pretty_term ctxt insert_for_u);
+            writeln ("NORMED CLAUSE: " ^ JClause.pretty_clause ctxt c);
+            writeln ("PATTERN: " ^ Jeha_Common.pretty_term ctxt pattern);
+            writeln ("U: " ^ Jeha_Common.pretty_term ctxt u);
+            writeln ("UNIFIER: " ^ Jeha_Common.pretty_tenv ctxt (Envir.term_env unifier));
+            writeln ("INSERT FOR U:" ^ Jeha_Common.pretty_term ctxt insert_for_u);
+            error "TYPESDONTMATCH")
+          else ()
+
+        val maxidx = Int.max (Int.max (JClause.maxidx c, maxidx_of_term insert_for_u), the_default ~1 (Jeha_Common.map_some JLit.maxidx_of new_literal))
       in
         (* 3. the position of u is eligible in C w.r.t. \<sigma> *)
         if not (JClause.is_eligible_full_pos c u_pos) then NONE else
-        (* 4. if the hed of u is a variable ... *)
+        (* 4. if the head of u is a variable ... *)
         if not u_variable_headed_condition then NONE else
 
         c
         |> JClause.map_at_full_pos u_pos (K insert_for_u)
-        |> JClause.map_maxidx (K maxidx) (* restore invalidated maxidx *)
+        |> JClause.map_maxidx (K maxidx)
         (* add the new literal if it exists, otherwise apply identity function *)
         |> the_default I (Jeha_Common.map_some JClause.add_literal new_literal)
         |> JClause.refresh_id ()
@@ -702,7 +827,7 @@ fun infer_bool_rw ctxt c u_pos =
   let
     val maxidx = JClause.maxidx c
     val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
-    val fresh_variable = Var (("y", maxidx + 1), fresh_typ) (* y *)
+    val fresh_variable = Var (("y_brw", maxidx + 1), fresh_typ) (* y *)
     val fresh_variable_eq_itself = HOLogic.mk_eq (fresh_variable, fresh_variable)
     val rw_rules =
       [ (fresh_variable_eq_itself, @{term "True"})
@@ -716,12 +841,14 @@ fun infer_bool_rw ctxt c u_pos =
     maps apply_rw_rule rw_rules
   end
 
+datatype HoistType = Eq | Neq | Forall | Exists
+
 fun impl_eq_neq_hoist positive ctxt c u_pos =
   let
     val maxidx = JClause.maxidx c
     val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
     val fresh_x = Var (("x", maxidx + 1), fresh_typ) (* x *)
-    val fresh_y = Var (("y", maxidx + 1), fresh_typ) (* y *)
+    val fresh_y = Var (("y_eqneqhoist", maxidx + 1), fresh_typ) (* y *)
     val x_eq_y_lit = (fresh_x, fresh_y, true)
     val pattern =
       (fresh_x, fresh_y)
@@ -738,6 +865,80 @@ fun impl_eq_neq_hoist positive ctxt c u_pos =
 val infer_eq_hoist = impl_eq_neq_hoist true
 
 val infer_neq_hoist = impl_eq_neq_hoist false
+
+fun impl_forall_exists_hoist is_forall ctxt c u_pos =
+  let
+    val maxidx = JClause.maxidx c
+    val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt))
+    val fresh_x = Var (("x", maxidx + 1), fresh_typ)
+    val fresh_predicate = Var (("y_faexhoist", maxidx + 1), fresh_typ --> @{typ bool})
+
+    val quantifier =
+      (if is_forall then HOLogic.all_const else HOLogic.exists_const) fresh_typ
+    (* \<forall> y / \<exists> y*)
+    val pattern = quantifier $ fresh_predicate
+    (* y x = T / y x = \<bottom>*)
+    val new_lit = (fresh_predicate $ fresh_x, hol_bool_of is_forall, true)
+    (* \<top> / \<bottom> *)
+    val insert_for_u = hol_bool_of (not is_forall)
+  in
+    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos pattern true insert_for_u (SOME new_lit)
+    |> map (fn (unifier, clause) => clause |> JClause.set_origin (
+        (if is_forall then Jeha_Log.ForallHoist else Jeha_Log.ExistsHoist)
+          { premise = JClause.id c, subterm = u_pos, substitution = unifier }))
+  end
+
+val infer_forall_hoist = impl_forall_exists_hoist true
+
+val infer_exists_hoist = impl_forall_exists_hoist false
+
+(* We diverge from the o\<lambda>Sup paper to avoid skolemization. (FIXME: Experimental)
+Idea: Replace \<forall>x. y x by y (SOME z. \<not> (y z))
+If the universal statement holds then there is no z s.t. \<not> (y z) and the r.h.s
+is also true. If the universal statement does not hold, then there is such a z
+and the r.h.s. becomes false, because z witnesses \<not> (y z).
+Similarly replace \<exists>x. y x by y (SOME z. y z) *)
+fun impl_infer_forall_exists_rw is_forall ctxt clause u_pos =
+  (* condition 5. *)
+  (case u_pos of
+    ([], lpos, cpos) =>
+      let
+        val (_, other_side, is_positive) = clause |> JClause.lit_at cpos |> JLit.orient lpos
+      in
+        if not is_positive then I else
+        if (is_forall andalso other_side = @{term True})
+          orelse (not is_forall andalso other_side = @{term False})
+        then
+          K []
+        else
+          I
+      end
+  | _ => I)
+  (let
+
+    val maxidx = JClause.maxidx clause
+    val fresh_typ = TVar (("'b", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* \<beta> *)
+    val fresh_predicate = Var (("y_faexrw", maxidx + 1), fresh_typ --> @{typ bool})
+    
+    val choice_body = (is_forall ? HOLogic.mk_not) (fresh_predicate $ Free ("z", fresh_typ))
+    val skolem_symbol = HOLogic.choice_const fresh_typ $ (absfree ("z", fresh_typ) choice_body)
+    val insert_for_u = fresh_predicate $ skolem_symbol
+
+    val quantifier =
+      (if is_forall then HOLogic.all_const else HOLogic.exists_const) fresh_typ
+    (* \<forall> y / \<exists> y*)
+    val pattern = quantifier $ fresh_predicate
+  in
+      impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt clause u_pos pattern false insert_for_u NONE
+      |> map (fn (unifier, clause) => clause |> JClause.set_origin (
+          (if is_forall then Jeha_Log.ForallRw else Jeha_Log.ExistsRw)
+            { premise = JClause.id clause, subterm = u_pos, substitution = unifier }))
+  end)
+
+val infer_forall_rw = impl_infer_forall_exists_rw true
+
+val infer_exists_rw = impl_infer_forall_exists_rw false
+
 
 (** Saturation Loop **)
 
@@ -802,7 +1003,7 @@ fun forward_simplify ctxt cheap active given_clause =
     unifier of s and t as well, violates s\<sigma> > t\<sigma>*)
     fun full_rewrite c countdown =
       if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
-      let val _ = Jeha_Common.trace_msg ctxt (fn () => (if cheap then "cheap " else "") ^ "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in
+      (* let val _ = Jeha_Common.trace_msg ctxt (fn () => (if cheap then "cheap " else "") ^ "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in *)
       case first_successful_rewrite c of
         SOME c' =>
           full_rewrite c' (countdown - 1)
@@ -810,7 +1011,7 @@ fun forward_simplify ctxt cheap active given_clause =
           let val _ = Jeha_Common.trace_msg ctxt (fn () => "done rewriting " ^ JClause.pretty_clause ctxt c ^ ".") in
           c
           end
-      end
+      (* end *)
     val given_clause = full_rewrite given_clause 10
   in
     if
@@ -872,31 +1073,43 @@ fun infer_clauses ctxt active given_clause =
     (* ERes, EFact have already been performed for the active clauses *)
     @ maps (infer_eres ctxt given_clause) given_clause_cposs
     @ maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs
+    @ maps (infer_arg_cong ctxt given_clause) given_clause_cposs
     @ maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
     @ maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs
     @ maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
     @ maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
     @ maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
   end
 
-datatype loopstate = Unsat | Next of Passive_Set.T * JClause.T list
+datatype step_result = Unsat | MaybeSat | Next 
 
-type prover_state = { context: Proof.context, countdown: int, passive: Passive_Set.T, active: JClause.T list}
+type prover_state =
+  { context: Proof.context
+  , countdown: int
+  , passive: Passive_Set.T
+  , active: JClause.T list
+  , archive: JClause.T list
+  }
 
-fun given_clause_step ctxt countdown passive active =
+fun given_clause_step { context, countdown, passive, active, archive } =
   if countdown <= 0 then error "TIMEOUT" else
+  (Runtime.exn_trace (fn () =>
   let
     (* tracing *)
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "countdown = " ^ @{make_string} countdown)
+    val _ = Jeha_Common.trace_msg context (fn () => "countdown = " ^ @{make_string} countdown)
     fun trace_msg_clauses msg clauses =
-      Jeha_Common.trace_msg ctxt
-        (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-    (* val _ =
+      Jeha_Common.trace_msg context
+        (fn () => msg ^ JClause.pretty_clauses context clauses)
+    val _ =
       let val passive_seq = passive |> seq_of_passive_set in
           trace_msg_clauses
             ("passive [10/" ^ (passive_seq |> Seq.list_of |> length |> @{make_string}) ^ "]")
             (passive_seq |> Seq.take 10 |> Seq.list_of)
-      end *)
+      end
 
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
     inferences are possible and empty clause has not been derived). Later: no non-redundant
@@ -907,15 +1120,17 @@ fun given_clause_step ctxt countdown passive active =
     val _ = trace_msg_clauses "given_clause " [given_clause]
   in
     (* simplify given_clause with active set *)
-    case forward_simplify ctxt false active given_clause of
+    (* FIXME TODO add simplification steps to archive *)
+    case forward_simplify context false active given_clause of
       (* given_clause redundant w.r.t. active set *)
-      [] => Next (passive, active)
+      [] => (Next, { context = context, countdown = countdown - 1, passive = passive, active = active, archive = archive })
       (* select first simplification as given_clause *)
     | given_clause :: simplifications =>
       (* if given_clause simplifies to (or is) [] then UNSAT *)
-      if exists (curry (op =) [] o JClause.literals) (given_clause :: simplifications)
-        then Unsat
-        else
+      case find_first JClause.is_false (given_clause :: simplifications) of
+        SOME empty_clause =>
+          (Unsat, { context = context, countdown = countdown - 1, passive = passive, active = empty_clause :: active , archive = archive })
+      | NONE =>
           let
             (* following zipperposition (src/prover/saturate.ml) add all simplifications except one
             (the current given_clause) to the passive set *)
@@ -924,57 +1139,74 @@ fun given_clause_step ctxt countdown passive active =
             (* FIXME: remove direct descendants of redundant_actives and simplified_actives from
             passive set, or: do what's described in the E 2.3 paper (deleting at activation time) *)
             val (redundant_active, simplified_active, unsimplifiable_active) =
-              backward_simplify ctxt active given_clause
+              backward_simplify context active given_clause
+            val archive = redundant_active @ archive
             (* remove simplified and redundant actives, add given_cluase to active set *)
             val active = given_clause :: unsimplifiable_active
             (* perform all possible inferences between given_clause and active set NOTE: also
             computes inferences between given_clause and itself! *)
-            val inferred_clauses = infer_clauses ctxt active given_clause
+            val inferred_clauses = infer_clauses context active given_clause
             (* val _ = trace_msg_clauses "inferred: " inferred_clauses *)
             (* clauses to be added to passive set *)
             val new_clauses =
               simplified_active @ inferred_clauses
               (* cheap_simplify *)
-              |> maps (forward_simplify ctxt true active)
+              |> maps (forward_simplify context true active)
               (* |> (fn cheap_simplified => (trace_msg_clauses "cheap_simplified: " cheap_simplified; cheap_simplified)) *)
               |> filter (not o is_trivial)
-            (* val _ = trace_msg_clauses "new_clauses: " new_clauses *)
+            val _ = trace_msg_clauses "new_clauses: " new_clauses
             (* add inferred clauses to passive set *)
             val passive = add_new_clauses passive new_clauses
             (* tracing *)
             val _ = trace_msg_clauses "active: " active
           in
-            Next (passive, active)
+            (Next, { context = context, countdown = countdown - 1, passive = passive, active = active, archive = archive })
           end
   end
+  ))
 
-exception JEHA_EXCEPTION of exn * (Proof.context * int * Passive_Set.T * JClause.T list)
+exception JEHA_EXCEPTION of exn * prover_state
 
-fun given_clause_loop dump ctxt countdown passive active =
+fun given_clause_loop dump state =
   case (if dump
         then
-          given_clause_step ctxt countdown passive active
-            handle e => raise (JEHA_EXCEPTION (e, (ctxt, countdown, passive, active)))
-        else given_clause_step ctxt countdown passive active) of
-    Unsat => "UNSAT"
-  | Next (passive, active) => given_clause_loop dump ctxt (countdown - 1) passive active
+          given_clause_step state
+            handle e => raise (JEHA_EXCEPTION
+              (e, state)
+            )
+        else given_clause_step state) of
+    (Unsat, state) => (Unsat, state)
+  | (Next, state) => given_clause_loop dump state
 
-fun refutable ctxt prems =
+fun try_saturate context prems =
   let
-    val _ = Jeha_Common.trace_msg ctxt
-      (fn () => "prems: " ^ Jeha_Common.pretty_terms ctxt (map (Object_Logic.drop_judgment ctxt o Thm.prop_of) prems))
+    val _ = Jeha_Common.trace_msg context
+      (fn () => "prems: " ^ Jeha_Common.pretty_terms context (map (Object_Logic.drop_judgment context o Thm.prop_of) prems))
     fun clause_of_prem prem =
       prem
       |> Thm.prop_of
-      |> Object_Logic.drop_judgment ctxt (* remove Trueprop *)
+      |> Object_Logic.drop_judgment context (* remove Trueprop *)
       |> (fn t => JClause.of_term (t, Clause_Id.new ()))
       |> JClause.set_origin (Jeha_Log.Axiom { thm = prem })
     val clauses = map clause_of_prem prems
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) (map JClause.term_of clauses))
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "\n>>> start of given clause procedure <<<")
-    val result = Runtime.exn_trace (fn () => given_clause_loop true ctxt 300 (init_passive_set clauses) [])
+    val _ = Jeha_Common.trace_msg context (fn () => "clauses: " ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of context) (map JClause.term_of clauses))
+    val _ = Jeha_Common.trace_msg context (fn () => "\n>>> start of given clause procedure <<<")
+    val (result, final_state) =
+      Runtime.exn_trace (fn () =>
+        given_clause_loop
+          true
+          { context = context, countdown = 300, passive = (init_passive_set clauses), active = [], archive = [] }
+      )
   in
-    if result = "UNSAT" then true else error result
+    (result, final_state)
+  end
+
+fun make_clause_db state clause_id =
+  (* FIXME include archive *)
+  let
+    val SOME clause = find_first (JClause.id #> curry (op =) clause_id) (#active state)
+  in
+    clause
   end
 
 (*

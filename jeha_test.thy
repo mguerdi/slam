@@ -1,8 +1,10 @@
 theory jeha_test
 
-imports Main
+imports Main HOL.Hilbert_Choice
 
 begin
+
+notation (output) "Pure.prop" ("#_" [1000] 1000)
 
 (* Antiquotations for term and type patterns from the cookbook. *)
 ML \<open>
@@ -83,22 +85,25 @@ ML \<open>
   ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_term Theory.get_pure);
 \<close>
 
-(* declare [[ML_debugger = true]]
+declare [[ML_debugger = true]]
 declare [[ML_exception_trace = true]]
-declare [[ML_exception_debugger = true]] *)
+declare [[ML_exception_debugger = true]]
 
-ML_file(*_debug*) \<open>jeha_common.ML\<close>
-ML_file(*_debug*) \<open>clause_id.ML\<close>
-ML_file(*_debug*) \<open>jterm.ML\<close>
-ML_file(*_debug*) \<open>jeha_order.ML\<close>
-ML_file(*_debug*) \<open>jlit.ML\<close>
-ML_file(*_debug*) \<open>jclause_pos.ML\<close>
-ML_file(*_debug*) \<open>jeha_log.ML\<close>
-ML_file(*_debug*) \<open>jclause.ML\<close>
-ML_file(*_debug*) \<open>jeha_unify.ML\<close>
-ML_file(*_debug*) \<open>jeha_subsumption.ML\<close>
-ML_file(*_debug*) \<open>jeha.ML\<close>
-ML_file(*_debug*) \<open>jeha_tactic.ML\<close>
+ML_file_debug \<open>jeha_common.ML\<close>
+ML_file_debug \<open>clause_id.ML\<close>
+ML_file_debug \<open>jterm.ML\<close>
+ML_file_debug \<open>jeha_order.ML\<close>
+ML_file_debug \<open>jlit.ML\<close>
+ML_file_debug \<open>jclause_pos.ML\<close>
+ML_file_debug \<open>jeha_log.ML\<close>
+ML_file_debug \<open>jclause.ML\<close>
+ML_file_debug \<open>jeha_proof.ML\<close>
+ML_file_debug \<open>jeha_unify.ML\<close>
+ML_file_debug \<open>jeha_subsumption.ML\<close>
+ML_file_debug \<open>jeha.ML\<close>
+ML_file_debug \<open>jeha_tactic.ML\<close>
+
+declare [[jeha_trace = true]]
 
 ML \<open>
   val idxs_of_max = Jeha_Order.idxs_of_maximal_elements (SOME o int_ord)
@@ -239,8 +244,52 @@ apply(tactic \<open>assume_tac @{context} 1\<close>)
 
 lemma test:
   shows "(x = y) \<Longrightarrow> (y = z) \<Longrightarrow> (x = z)"
-  by jeha 
+  by jeha
 (* apply(tactic \<open>my_print_tac @{context}\<close>) *)
+
+lemma arg_cong_test:
+  shows "\<forall> x. g x = f x \<Longrightarrow> g a = f a"
+  by jeha
+
+lemma funext_test:
+  shows "\<forall> x . g x = f x \<Longrightarrow> f = g"
+  by jeha
+
+ML \<open>
+  (* val false_refl_clause = JClause.of_term (@{term "False = False"}, 0) *)
+  (* SOME z . \<not> (y z) *)
+  (* val offending_term = @{term_pat "(SOME (z::?'b1). (\<not> ((?y1::(?'b1 \<Rightarrow> bool)) z))) = False"} *)
+  val offending_term = @{term "((SOME (z::('a \<Rightarrow> bool)). (\<forall>(x::'a). ((z x) = (((p::('a \<Rightarrow> bool)) x) \<and> ((q::('a \<Rightarrow> bool)) x))))) = True)"}
+  val arg_congs = Jeha.infer_arg_cong @{context} false_refl_clause 0
+\<close>
+
+lemma paper_example_26:
+  shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x)) = True"
+  by (jeha)
+
+(*
+ML \<open>
+  val dumped_state = !Jeha_Tactic.dump;
+  val dumped_states = length dumped_state;
+  val { context = context, countdown = countdown, passive = passive, active = active, archive = archive } = nth dumped_state 0
+  val state = { context = verbose_of context, countdown = countdown, passive = passive, active = active, archive = archive }
+  val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
+\<close>
+*)
+
+
+
+(*
+(* FIXME: BoolRw is not applicable... Is Outer clausification necessary for completeness? *)
+lemma test2:
+  shows "(x = y) \<Longrightarrow> (y = z) \<longrightarrow> (x = z)"
+  by jeha
+
+(* FIXME: BoolRw is not applicable... Is Outer clausification necessary for completeness? *)
+lemma test3:
+  shows "(A \<Longrightarrow> B) \<Longrightarrow> A \<Longrightarrow> B"
+  by jeha
+*)
 
 lemma
   shows "(1 :: nat) + 1 = 2"
@@ -289,8 +338,6 @@ primrec append :: "'a bt => 'a bt => 'a bt" where
 
 
 
-declare [[jeha_trace = true]]
-
 lemma n_leaves_reflect: "n_leaves (reflect t) = n_leaves t"
 proof (induct t)
   case Lf thus ?case
@@ -303,11 +350,24 @@ proof (induct t)
 next
   case (Br a t1 t2) thus ?case
     (* takes 33 steps with order restrictions, ~210 steps without *)
-    by (jeha n_leaves.simps(2) add.commute reflect.simps(2))
+    by (jeha (dump) n_leaves.simps(2) add.commute reflect.simps(2))
 qed
 
-declare [[jeha_trace = false]]
+declare [[show_types]]
+ML \<open>
+  val t = @{term_pat "?y :: ?'a \<Rightarrow> bool"}
+  val fa_a = HOLogic.all_const @{typ_pat "?'a"} $ t
+  val T = type_of fa_a
+  val normed = JTerm.ensure_lambda_under_q fa_a
+\<close>
 
+ML \<open>
+  val dumped_state = !Jeha_Tactic.dump;
+  val dumped_states = length dumped_state;
+  val { context = context, countdown = countdown, passive = passive, active = active, archive = archive } = nth dumped_state 0
+  val state = { context = verbose_of context, countdown = countdown, passive = passive, active = active, archive = archive }
+  val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
+\<close>
 
 (*
 ML \<open>
@@ -553,14 +613,6 @@ val inferred = Jeha.infer_clauses @{context} [gc] pc
 val _ = writeln (JClause.pretty_clauses @{context} inferred)
 \<close>
 
-(*
-ML \<open>
-  val dumped_state = !Jeha_Tactic.dump;
-  val dumped_states = length dumped_state;
-  val (ctxt, countdown, passive, active) = nth dumped_state 0
-  val _ = Jeha.given_clause_loop false (Jeha_Common.verbose_of ctxt) 4 passive active (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
-\<close>
-*)
 
 
 
@@ -570,18 +622,14 @@ ML \<open>
 
 
 
-
-(*
 
 (* FIXME: needs clausification
-*)
-declare [[unify_search_bound = 10]]
+(* declare [[unify_search_bound = 10]] *)
 lemma bt_map_compose: "bt_map (f o g) t = bt_map f (bt_map g t)"
 apply (induct t)
  apply (jeha bt_map.simps(1))
 by (jeha (dump) bt_map.simps(2) o_eq_dest_lhs)
 (* takes an hour, prints Unification bound exceeded 19481 times*)
-
 *)
 
 
@@ -688,21 +736,15 @@ done
 
 (* FIXME: requires EqHoist or clausifcation of \<leftrightarrow>
 *)
+
+declare [[show_types]]
+
 lemma inorder_reflect: "inorder (reflect t) = rev (inorder t)"
 apply (induct t)
  apply (jeha Nil_is_rev_conv inorder.simps(1) reflect.simps(1))
-by simp
-(* Slow:
-by (metis append.simps(1) append_eq_append_conv2 inorder.simps(2)
+by (jeha append.simps(1) append_eq_append_conv2 inorder.simps(2)
           reflect.simps(2) rev.simps(2) rev_append)
-*)
-
-(*
-ML \<open>
-  val dumped_state = !Jeha_Tactic.dump;
-  val (ctxt, countdown, passive, active) = nth dumped_state 0
-  val _ = Jeha.given_clause_loop false (Jeha_Common.verbose_of ctxt) countdown passive active
-\<close>
+(* Slow:
 *)
 
 ML \<open>
@@ -723,7 +765,7 @@ ML \<open>
   val clauses = HOLogic.mk_not (Object_Logic.atomize_term @{context} conjecture) :: map (Object_Logic.atomize_term @{context}) axioms *)
   val clauses = map_index (fn (i, t) => JClause.of_term (t, i)) [@{term "x = y"}, @{term "y = z"}, @{term "x \<noteq> z"}]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map JClause.term_of clauses))
-  val result = Jeha.given_clause_loop false @{context} 12 (Jeha.init_passive_set clauses) []
+  val result = Jeha.given_clause_loop false { context = @{context}, countdown = 12, passive = (Jeha.init_passive_set clauses), active = [], archive = [] }
 \<close>
 
 ML \<open>
@@ -732,7 +774,7 @@ ML \<open>
   val f_is_id = HOLogic.mk_eq (f $ var_x, var_x)
   val clauses = map_index (fn (i, t) => JClause.of_term (t, i)) [f_is_id, @{term "f (f y) \<noteq> y"}]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map JClause.term_of clauses))
-  val result = Jeha.given_clause_loop false @{context} 10 (Jeha.init_passive_set clauses) []
+  val result = Jeha.given_clause_loop false { context = @{context}, countdown = 10, passive = (Jeha.init_passive_set clauses), active = [], archive = [] }
 \<close>
 
 ML \<open>
@@ -747,7 +789,7 @@ ML \<open>
   val clauses = map_index (fn (i, t) => JClause.of_term (t, i)) [zero_right_neutral, plus_def, two_neq_one_plus_one]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map JClause.term_of clauses))
   (* FIXME: looks like some rewriting steps are missing pretty early on *)
-  val result = Jeha.given_clause_loop false @{context} 40 (Jeha.init_passive_set clauses) []
+  val result = Jeha.given_clause_loop false { context = @{context}, countdown = 40, passive = (Jeha.init_passive_set clauses), active = [], archive = [] }
 \<close>
 
 (* Baader, Nipkow Example 7.1.1 (central groupoids) *)
@@ -761,7 +803,7 @@ ML \<open>
   val xxyz_neq_xy = HOLogic.mk_not (HOLogic.mk_eq (t $ var_x $ (t $ (t $ var_x $ var_y) $ var_z), t $ var_x $ var_y))
   val clauses = map_index (fn (i, t) => JClause.of_term (t, i)) [eq, xxyz_neq_xy]
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map JClause.term_of clauses))
-  val result = Jeha.given_clause_loop false @{context} 6 (Jeha.init_passive_set clauses) []
+  val result = Jeha.given_clause_loop false { context = @{context}, countdown = 6, passive = (Jeha.init_passive_set clauses), active = [], archive = [] }
 \<close>
 
 (*
@@ -799,8 +841,4 @@ begin
 end
 
 *)
-
-
-
-
 

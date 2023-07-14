@@ -19,10 +19,11 @@ struct
 
 fun give_to_undefined t =
   let
-    val T = fastype_of t
+    val T = fastype_of t handle TERM e => (writeln ("BIG ERROR (TERM)" ^ @{make_string} t); raise TERM e)
   in
     (* FIXME: there is a function with this type, maybe better than undefined *)
     Const (@{const_name undefined}, T --> @{typ unit}) $ t
+      
   end
 
 fun smash_unifiers ctxt tus env =

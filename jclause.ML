@@ -39,6 +39,7 @@ sig
   val is_eligible_cpos : T -> cpos -> bool
   val is_eligible_full_pos : T -> full_pos -> bool
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
+  val is_false : T -> bool
 end;
 
 structure JClause : JCLAUSE =
@@ -137,8 +138,8 @@ fun term_of { literals = [], ... } = @{term False}
         fold (curry HOLogic.mk_disj) (map JLit.term_of xs) (JLit.term_of x)
       end
 
-fun pretty_clause ctxt (c as { id, ... }) =
-  @{make_string} id ^ ":" ^ Jeha_Common.pretty_term ctxt (term_of c)
+fun pretty_clause ctxt (c as { id, origin, ... }) =
+  @{make_string} id ^ ":" ^ Jeha_Common.pretty_term ctxt (term_of c) ^ " (" ^ Jeha_Log.name_of origin ^ ")"
 
 fun pretty_clauses ctxt cs =
   cs
@@ -146,6 +147,7 @@ fun pretty_clauses ctxt cs =
       Pretty.block
         [Pretty.str (@{make_string} (#id c) ^ ":")
         , Syntax.pretty_term ctxt (term_of c)
+        , Pretty.str (" (" ^ (Jeha_Log.name_of (#origin c)) ^ ")")
         ])
   |> Pretty.commas
   |> Pretty.block
@@ -257,5 +259,7 @@ fun is_eligible_full_pos c (tpos, lpos, cpos) =
 fun is_position_of_fully_applied_logical_symbol (tpos, lpos, cpos) c =
   subterm_at_full_pos c ([], lpos, cpos)
   |> JTerm.is_position_of_fully_applied_logical_symbol tpos
+
+val is_false = length #> curry (op =) 0
 
 end;

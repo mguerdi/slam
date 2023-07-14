@@ -5,7 +5,8 @@ sig
   val jeha_method : jeha_options * thm list -> Proof.context -> thm list -> tactic
   val jeha_tac : jeha_options -> Proof.context -> thm list -> int -> tactic
   val parse_jeha_options : jeha_options parser
-  val dump : ((Proof.context * int * Jeha.Passive_Set.T * JClause.T list) list) Unsynchronized.ref
+  val dump : (Jeha.prover_state list) Unsynchronized.ref
+  val reconstruct_proof : Jeha.prover_state -> tactic
 end
 
 structure Jeha_Tactic : JEHA_TACTIC =
@@ -18,6 +19,27 @@ exception JEHA_UNIMPLEMENTED
 type jeha_options = string list
 
 val dump = Unsynchronized.ref []
+
+fun reconstruct_proof
+      (state as
+        { context = context,
+          countdown = _,
+          passive = passive,
+          active = active,
+          archive = archive })
+      _
+    =
+  let
+    val SOME false_id =
+      active
+      |> find_first (curry (op =) 0 o length o JClause.literals)
+      |> Jeha_Common.map_some JClause.id
+    val clause_db = Jeha.make_clause_db state
+    val false_proved =
+      Jeha_Proof.reconstruct_with_auto context clause_db false_id
+  in
+    Seq.single (Goal.protect 0 false_proved)
+  end
 
 fun jeha_tac options ctxt ths i st0 =
   let
@@ -38,10 +60,14 @@ fun jeha_tac options ctxt ths i st0 =
       Subgoal.FOCUS (fn { context, prems, ...} => (fn st =>
         (* FIXME: make sure that we really don't need asms (only use is in
         HOL/Tools/Quotient/quotient_tacs.ML) *)
-        if Jeha.refutable context (prems @ atomized_ths)
-            handle Jeha.JEHA_EXCEPTION (e, state) => handle_exception (e, state)
-          then ALLGOALS (Skip_Proof.cheat_tac context) st
-          else Seq.empty)
+        case (Jeha.try_saturate context (prems @ atomized_ths)
+            handle Jeha.JEHA_EXCEPTION (e, state) => handle_exception (e, state)) of
+          (Unsat, final_state) => ALLGOALS (Skip_Proof.cheat_tac context) st
+            (* (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
+            (* we provide #False *)
+            reconstruct_proof final_state st *)
+        | (MaybeSat, final_state) => Seq.empty
+        | (Next, final_state) => error "Bug: Next in final result")
       ) ctxt i'
     val seq =
       (* SELECT_GOAL applies the tactic (it's first argument) to the selected
