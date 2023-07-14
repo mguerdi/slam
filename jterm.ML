@@ -340,7 +340,7 @@ fun ensure_lambda_under_q (t $ Abs (x, T, u)) = t $ Abs (x, T, ensure_lambda_und
       if is_quantifier t
         then
           let val (T, _) = dest_funT (fastype_of u) in
-            Abs(Name.uu, T, incr_boundvars 1 (ensure_lambda_under_q u) $ Bound 0)
+            t $ Abs(Name.uu, T, incr_boundvars 1 (ensure_lambda_under_q u) $ Bound 0)
           end
         else ensure_lambda_under_q t $ ensure_lambda_under_q u
   | ensure_lambda_under_q t = t
