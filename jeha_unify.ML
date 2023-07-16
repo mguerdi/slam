@@ -30,7 +30,16 @@ fun smash_unifiers ctxt tus env =
   let
     (* val _ = Jeha_Common.trace_msg (Context.the_proof ctxt) (fn () => "unifying: " ^ fold (curry (op ^)) (map ((fn (l, r) => l ^ " = " ^ r ^ ", ") o apply2 (Jeha_Common.pretty_term (Context.the_proof ctxt))) tus) "") *)
     (* disable very long Enter MATCH tracing messages when unification bound is exceeded *)
-    val ctxt = Context_Position.set_visible_generic false ctxt
+    val ctxt = 
+      ctxt
+      |> Context.the_proof
+      |> Context_Position.set_visible false
+      |> (fn ctxt => Config.put Unify.trace_bound (Config.get ctxt Unify.search_bound) ctxt)
+      |> Proof_Context.background_theory
+          (fn thy => thy
+            |> Context_Position.set_visible_global false
+            |> Config.put_global Unify.trace_bound (Config.get_global thy Unify.search_bound))
+      |> Context.Proof
     val maxidx =
       fold
         (fn tu => fn maxidx => Int.max (maxidx, Int.max (apply2 maxidx_of_term tu)))

@@ -59,6 +59,8 @@ end
 structure Jeha : JEHA =
 struct
 
+val UNIFIER_CUTOFF = 2
+
 (* oc function from the PhD thesis
 logically:
   outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
@@ -229,8 +231,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
       end
   in
     matchers
-    (* FIXME: print warning message when discarding unifiers? *)
-    |> Seq.take 4
+    |> Seq.take UNIFIER_CUTOFF
     |> Seq.map_filter build_conclusion
     |> Seq.pull
     |> Jeha_Common.map_some #1
@@ -486,8 +487,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     (* FIXME: 3. variable condition ... *)
     let
       val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
-      (* FIXME: print warning message when discarding unifiers *)
-      val (unifiers, _) = Seq.chop 4 unifiers
+      val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
       fun build_conclusion unifier =
         let
           val (c, d) = (c, d) |> apply2 (JClause.norm_beta_eta_qeta_env unifier)
@@ -529,8 +529,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
   let
     val (u, u', is_pos_eq) = JClause.lit_at cp c
     val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
-    (* FIXME: print warning message when discarding unifiers *)
-    val (unifiers, _) = Seq.chop 4 unifiers
+    val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
         val c = c |> JClause.norm_beta_eta_qeta_env unifier
@@ -554,8 +553,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
     val (u', v', is_pos') = JLit.orient lp' (JClause.lit_at cp' c)
     val (u, v, is_pos) = JLit.orient lp (JClause.lit_at cp c)
     val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
-    (* FIXME: print warning message when discarding unifiers *)
-    val (unifiers, _) = Seq.chop 4 unifiers
+    val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
         val c = c |> JClause.norm_beta_eta_qeta_env unifier
@@ -703,8 +701,7 @@ fun infer_false_elim ctxt c (lp, cp) =
         (Context.Proof ctxt)
         [(s, @{term "False"}), (s', @{term "True"})]
         (Envir.empty (JClause.maxidx c))
-    (* FIXME: print warning message when discarding unifiers *)
-    val (unifiers, _) = Seq.chop 4 unifiers
+    val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
         val c = c |> JClause.norm_beta_eta_qeta_env unifier
@@ -778,8 +775,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         (Context.Proof ctxt)
         [(u, pattern)]
         (Envir.empty (maxidx + 1))
-    (* FIXME: print warning message when discarding unifiers? *)
-    val (unifiers, _) = Seq.chop 4 unifiers
+    val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
         val c = c |> JClause.norm_beta_eta_qeta_env unifier

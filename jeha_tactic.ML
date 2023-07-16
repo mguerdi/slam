@@ -20,8 +20,8 @@ type jeha_options = string list
 
 val dump = Unsynchronized.ref []
 
-fun reconstruct_proof
-      (state as
+fun reconstruct_proof _ = error "reconstruct_proof unimplmeneted (suspected of Enter MATCH)"
+(*      (state as
         { context = context,
           countdown = _,
           passive = passive,
@@ -40,6 +40,7 @@ fun reconstruct_proof
   in
     Seq.single (Goal.protect 0 false_proved)
   end
+*)
 
 fun jeha_tac options ctxt ths i st0 =
   let

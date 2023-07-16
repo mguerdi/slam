@@ -255,6 +255,14 @@ lemma funext_test:
   shows "\<forall> x . g x = f x \<Longrightarrow> f = g"
   by jeha
 
+lemma ap_eq_test:
+  shows "g = f \<Longrightarrow> (\<And> x. f x = g x)"
+  by jeha
+
+lemma ap_fa_eq_test:
+  shows "g = f \<Longrightarrow> \<forall>x . f x = g x"
+  by jeha
+
 ML \<open>
   (* val false_refl_clause = JClause.of_term (@{term "False = False"}, 0) *)
   (* SOME z . \<not> (y z) *)
@@ -350,7 +358,7 @@ proof (induct t)
 next
   case (Br a t1 t2) thus ?case
     (* takes 33 steps with order restrictions, ~210 steps without *)
-    by (jeha (dump) n_leaves.simps(2) add.commute reflect.simps(2))
+    by (jeha n_leaves.simps(2) add.commute reflect.simps(2))
 qed
 
 declare [[show_types]]
@@ -361,6 +369,7 @@ ML \<open>
   val normed = JTerm.ensure_lambda_under_q fa_a
 \<close>
 
+(*
 ML \<open>
   val dumped_state = !Jeha_Tactic.dump;
   val dumped_states = length dumped_state;
@@ -368,6 +377,7 @@ ML \<open>
   val state = { context = verbose_of context, countdown = countdown, passive = passive, active = active, archive = archive }
   val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
 \<close>
+*)
 
 (*
 ML \<open>
