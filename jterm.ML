@@ -217,9 +217,8 @@ variables" *)
 fun is_not_ground t =
   let
     fun is_not_ground_type T =
-      fold_atyps (fn U => fn acc => acc orelse is_TFree U orelse is_TVar U) T false
-    fun is_immediate_not_ground_term (Free _) = true
-      | is_immediate_not_ground_term (Var _) = true
+      fold_atyps (fn U => fn acc => acc orelse is_TVar U) T false
+    fun is_immediate_not_ground_term (Var _) = true
       | is_immediate_not_ground_term _ = false (* need to look further down *)
   in
     fold_term_types
