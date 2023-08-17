@@ -30,6 +30,7 @@ fun smash_unifiers ctxt tus env =
   let
     (* val _ = Jeha_Common.trace_msg (Context.the_proof ctxt) (fn () => "unifying: " ^ fold (curry (op ^)) (map ((fn (l, r) => l ^ " = " ^ r ^ ", ") o apply2 (Jeha_Common.pretty_term (Context.the_proof ctxt))) tus) "") *)
     (* disable very long Enter MATCH tracing messages when unification bound is exceeded *)
+    (* based on slience_methods from try0.ML *)
     val ctxt = 
       ctxt
       |> Context.the_proof
