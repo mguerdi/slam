@@ -18,10 +18,95 @@ structure Random = SpecCheck_Random
 ML_file \<open>../jeha_common.ML\<close>
 ML_file \<open>../jterm.ML\<close>
 ML_file \<open>../jeha_order.ML\<close>
+ML_file \<open>../jeha_order_reference.ML\<close>
+
+declare [[speccheck_max_success = 1000000]]
+declare [[speccheck_num_counterexamples = 30]]
+declare [[ML_print_depth = 100]]
+declare [[show_types = true]]
+
+(* Antiquotations for term and type patterns from the cookbook. *)
+ML \<open>
+  val term_pat_setup =
+  let
+    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
+
+    fun term_pat (ctxt, str) =
+      str |> Proof_Context.read_term_pattern ctxt |> ML_Syntax.print_term |> ML_Syntax.atomic
+  in
+    ML_Antiquotation.inline @{binding "term_pat"} (parser >> term_pat)
+  end
+
+  val type_pat_setup =
+  let
+    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
+
+    fun typ_pat (ctxt, str) =
+      let
+        val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
+      in
+        str |> Syntax.read_typ ctxt' |> ML_Syntax.print_typ |> ML_Syntax.atomic
+      end
+  in
+    ML_Antiquotation.inline @{binding "typ_pat"} (parser >> typ_pat)
+  end
+\<close>
+
+setup \<open> term_pat_setup \<close>
+
+setup \<open> type_pat_setup \<close>
+
+ML \<open>
+  fun type_checks t = (type_of t; false) handle _ => true
+\<close>
+
+ML_command \<open>
+check_dynamic @{context} "ALL s t. type_checks t orelse type_checks s orelse (Jeha_Order.kbo (s, t) = Jeha_Order_Reference.kbo (s, t))"
+\<close>
+
+ML_command \<open>
+check_dynamic @{context} "ALL s t. (Jeha_Order.kbo (s, t) = Jeha_Order_Reference.kbo (s, t))"
+\<close>
+
+(*
+(??.c_8 ??.c_8, ??.c_8 ?v_8.0 ?v_8.1) 
+    ?c    ?c  ,   ?c     ?v     ?w
+*)
+ML \<open>
+  val s = @{term_pat "?c ?c"}
+\<close>
 
 declare [[speccheck_max_success = 10]]
 declare [[speccheck_num_counterexamples = 30]]
 declare [[ML_print_depth = 100]]
+
+ML \<open>
+  (* \<forall> \<iota> (\<lambda>x. p y y (\<lambda>u. f y y (\<forall> \<iota> (\<lambda>v. u)))) *)
+  val example_term = @{term_pat "\<forall> x. p ?y ?y (\<lambda> u. f ?y ?y (\<forall> v. ?u))"}
+  val translated = Jeha_Order_Reference.to_fo_term example_term
+  (* val _ = writeln (Jeha_Order_Reference.pretty_fo_term @{context} translated) *)
+  val ground_lambda = @{term "\<lambda>x. x"}
+  val might_be_fluid = JTerm.might_be_fluid ground_lambda
+  val ground_translated = Jeha_Order_Reference.to_fo_term ground_lambda
+  (* val _ = writeln (Jeha_Order_Reference.pretty_fo_term @{context} ground_translated) *)
+  val with_green_subterms = @{term_pat "(f :: 'a => 'b => 'c) ?x ((g :: 'd => 'e => 'b) ?y b)"}
+  val green_subterm_1 = @{term_pat "?x :: 'a"}
+  val green_subterm_2 = @{term_pat "(g :: 'd \<Rightarrow> 'e \<Rightarrow> 'b) ?y b"}
+  val green_subterm_3 = @{term_pat "b :: 'e"}
+  val with_green_subterms_translated = Jeha_Order_Reference.to_fo_term with_green_subterms
+  val _ = writeln ("with_green_subterms_translated:  " ^ Jeha_Order_Reference.pretty_fo_term @{context} with_green_subterms_translated)
+  val green_subterm_1_translated = Jeha_Order_Reference.to_fo_term green_subterm_1
+  val green_subterm_2_translated = Jeha_Order_Reference.to_fo_term green_subterm_2
+  val _ = writeln ("green_subterm_2: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_2_translated)
+  val green_subterm_3_translated = Jeha_Order_Reference.to_fo_term green_subterm_3
+  val _ = writeln ("green_subterm_3: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_3_translated)
+  val ge_1 = Jeha_Order_Reference.fo_kbo_greater (with_green_subterms_translated, green_subterm_1_translated)
+  val ge_2 = Jeha_Order_Reference.fo_kbo_greater (with_green_subterms_translated, green_subterm_2_translated)
+  val ge_3 = Jeha_Order_Reference.fo_kbo_greater (with_green_subterms_translated, green_subterm_3_translated)
+  (* g ?y b > b *)
+  val ge_23 = Jeha_Order_Reference.fo_kbo_greater (green_subterm_2_translated, green_subterm_3_translated)
+  val kbo_gyb_b = Jeha_Order_Reference.kbo (green_subterm_2, green_subterm_3)
+\<close>
 
 ML \<open>
 fun close_term t =

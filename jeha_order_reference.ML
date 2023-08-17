@@ -3,7 +3,6 @@
 signature JEHA_ORDER_REFERENCE =
 sig
   (* copy pasted *)
-  type partial_order = order option
   type weight = int * int
   val plus_weight : weight -> weight -> weight
   val weight_ord : weight ord
@@ -16,18 +15,22 @@ sig
   val type_weight : typ -> weight
   val term_weight : bool -> term -> weight
 
+  type fo_head
   type fo_term
-  val mk_de_bruijn_constant : int -> typ -> term
-  val translate_O : term -> fo_term
+  val translate_O : typ list -> term -> fo_term
   val translate_P : fo_term -> fo_term
   val translate_p : fo_term -> fo_term
   val to_fo_term : term -> fo_term
   val pretty_fo_term : Proof.context -> fo_term -> string
-  val fo_head_weight : string -> weight
+  val fo_head_weight : fo_head -> weight
   val fo_term_weight : fo_term -> weight
   val fold_fo_vars : (term * bool -> 'a -> 'a) -> fo_term -> 'a -> 'a
   val fo_var_counts : fo_term -> int Termtab.table * int Termtab.table
-  val fo_kbo_greater_equal : (fo_term * fo_term) -> bool
+  val fo_prec_greater : fo_head * fo_head -> bool
+  val lex_greater : (''a * ''a -> bool) -> (''a list * ''a list) -> bool
+  val fo_kbo_greater : (fo_term * fo_term) -> bool
+
+  val kbo : (term * term) -> Jeha_Order.partial_order
 end;
 
 structure Jeha_Order_Reference: JEHA_ORDER_REFERENCE =
@@ -36,8 +39,6 @@ struct
 (* copy pasted *)
 infix 6 +++
 infix 6 ---
-
-type partial_order = order option
 
 (* (omega, one) represents the number: omega * \<omega> + one * 1 *)
 type weight = int * int;
@@ -90,18 +91,12 @@ fun term_weight _ (Var _) = var_weight
 
 (* Translation *)
 
-(* db\<^sup>i *)
-fun mk_de_bruijn_constant level T = Const ("jehakboolambdasupdebruijn" ^ @{make_string} level, T)
-
-fun mk_fo_const_name (Const (name, _)) = "Const" ^ name
-  | mk_fo_const_name (Free (name, _)) = "Free" ^ name
-  | mk_fo_const_name _ = error "invalid input for mk_fo_const_name"
-
 datatype fo_head =
   (* term.ML typ *)
-  FOType of string * typ list (* Type *)
+  FOType of string (* Type *)
 | FOTFree of string * sort (* *)
   (* term.ML: term *)
+  (* FIXME: same name but different type are different? *)
 | FOConst of string * typ (* Const without \<forall>, \<exists> *)
 | FOForall (* HOL.All *)
 | FOExists (* HOL.Ex *)
@@ -111,6 +106,16 @@ datatype fo_head =
 | FOForallPrime
 | FOExistsPrime
 | FODeBruijn of int
+
+fun mk_fo_const_head (Const ("HOL.All", _)) = FOForall
+  | mk_fo_const_head (Const ("HOL.Ex", _)) = FOExists
+  | mk_fo_const_head (Bound i) = FODeBruijn i
+  | mk_fo_const_head (Const c) = FOConst c
+  | mk_fo_const_head (Free c) = FOFree c
+  | mk_fo_const_head _ = error "invalid input for mk_fo_const_head"
+
+fun type_of_head Ts (Bound i) = nth Ts i
+  | type_of_head _ t = fastype_of t
 
 datatype fo_term =
   (* the first element of the list is the type of the bound var in case of
@@ -124,15 +129,15 @@ datatype fo_term =
   Type...
   TFree...
   *)
-  FOApp of string * fo_term list
+  FOApp of fo_head * fo_term list
   (* includes type variables via dummy_pattern *)
   (* first arg is a fluid term or a Var or a dummy_pattern with a TVar with dummy sort as type *)
 | FOVar of term * bool (* z\<^sub>t, z\<^sub>t' with false, true resp. *)
 
 (* name apart terms and types, i.e. Const, Free, Var, Type, TFree, TVar by
 prefixing constructor names *)
-fun type_to_fo_term (Type (name, Ts)) = FOApp ("Type" ^ name, map type_to_fo_term Ts)
-  | type_to_fo_term (TFree (name, _)) = FOApp ("TFree" ^ name, [])
+fun type_to_fo_term (Type (name, Ts)) = FOApp (FOType name, map type_to_fo_term Ts)
+  | type_to_fo_term (TFree (name, Ss)) = FOApp (FOTFree (name, Ss), [])
   (* TVar encoded as Const ("Pure.dummy_pattern", T) with sort replaced by dummy sort [""] *)
   | type_to_fo_term (TVar (name, _)) = FOVar (Term.dummy_pattern (TVar (name, Term.dummyS)), false)
 
@@ -142,6 +147,7 @@ fun is_Abs (Abs _) = true
 fun is_Comb (_ $ _) = true
   | is_Comb _ = false
 
+(*
 (* B\<^sub>x from the \<lambda>oSup Paper
 replace one Bound by the constant *)
 fun translate_O_bound level T (t as (Bound i)) =
@@ -150,75 +156,79 @@ fun translate_O_bound level T (t as (Bound i)) =
       translate_O_bound level T s $ translate_O_bound level T t
   | translate_O_bound level T (Abs (x, S, u)) = Abs (x, S, translate_O_bound (level + 1) T u)
   | translate_O_bound _ _ t = t
+*)
 
 (* O from the \<lambda>oSup Paper *)
-fun translate_O t =
+fun translate_O Ts t =
   if JTerm.might_be_fluid t orelse is_Var t
     then FOVar (t, false)
   else if is_Abs t then
-    translate_O_Abs t
+    translate_O_Abs Ts t
   else
     (* all other cases are treated as applications, strip_comb behaves correctly *)
     let val (head, args) = strip_comb t in
       if (not (JTerm.is_quantifier head)) orelse length args = 0
-        then FOApp (mk_fo_const_name head, type_to_fo_term (fastype_of head) :: map translate_O args)
-        else translate_O_Quant t
+        then FOApp (mk_fo_const_head head, type_to_fo_term (type_of_head Ts head) :: map (translate_O Ts) args)
+        else translate_O_Quant Ts t
     end
-and translate_O_Abs (Abs (_, T, u)) =
-  FOApp ("Lam", [type_to_fo_term T, translate_O (translate_O_bound 0 T u)])
+and translate_O_Abs Ts (Abs (_, T, u)) =
+  FOApp (FOLam, [type_to_fo_term T, translate_O (T::Ts) u])
 (* argument is an Abs because of Q\<^sub>\<eta> normal form *)
-and translate_O_Quant (quantifier $ (Abs (_, T, u))) =
-  FOApp (mk_fo_const_name quantifier, [type_to_fo_term T, translate_O (translate_O_bound 0 T u)])
+and translate_O_Quant Ts (quantifier $ (Abs (_, T, u))) =
+  FOApp (mk_fo_const_head quantifier, [type_to_fo_term T, translate_O (T::Ts) u])
 
 fun translate_p (t as FOVar (Const ("Pure.dummy_pattern", _), _)) = t (* \<alpha> *)
   | translate_p (FOVar (t, false)) = FOVar (t, true)
   | translate_p (FOVar (t, true)) = error "fresh var encountered in translate_p"
   | translate_p (FOApp (f, ts)) =
       FOApp (
-        if (f = "ConstHOL.All" orelse f = "ConstHOL.Ex") andalso length ts = 2
-          then "Prime" ^ f
-          else f
+        if f = FOForall andalso length ts = 2
+          then FOForallPrime
+        else if f = FOExists andalso length ts = 2
+          then FOExistsPrime
+        else f
         ,
         map translate_p ts
       )
 
 fun translate_P (FOVar t) = FOVar t (* \<alpha> and z\<^sub>u *)
-  | translate_P (t as FOApp (f, ts)) =
-      if String.isPrefix "Lam" f
-        then let val [T, u] = ts in FOApp (f, [T, translate_p u]) end
-      else if String.isPrefix "Type" f
-                orelse String.isPrefix "TFree" f
-                orelse String.isPrefix "Const" f
-                orelse String.isPrefix "Free" f
-        then FOApp (f, map translate_P ts)
-        else error ("translate_P: fo function symbol can't be " ^ f)
+  | translate_P (t as FOApp (FOLam, [T, u])) = FOApp (FOLam, [T, translate_p u])
+  | translate_P (FOApp (f, ts)) = FOApp (f, map translate_P ts)
 
-val to_fo_term = translate_P o translate_O
+val to_fo_term = translate_P o translate_O []
+
+fun pretty_fo_head ctxt (FOType name) = "Type-" ^ name
+  | pretty_fo_head ctxt (FOTFree (name, S)) = "TFree-" ^ name ^ "-" ^ "sort?"
+  | pretty_fo_head ctxt (FOConst (name, T)) = "Const-" ^ name ^ "-" ^ Jeha_Common.pretty_typ ctxt T
+  | pretty_fo_head ctxt FOForall = "\<forall>"
+  | pretty_fo_head ctxt FOExists = "\<exists>"
+  | pretty_fo_head ctxt (FOFree (name, T)) = "Free-" ^ name ^ "-" ^ Jeha_Common.pretty_typ ctxt T
+  | pretty_fo_head ctxt FOLam = "\<lambda>"
+  | pretty_fo_head ctxt FOForallPrime = "\<forall>'"
+  | pretty_fo_head ctxt FOExistsPrime = "\<exists>'"
+  | pretty_fo_head ctxt (FODeBruijn level) = "db_" ^ @{make_string} level
+
 
 fun pretty_fo_term ctxt (FOVar (t, below_lam)) = Jeha_Common.pretty_term ctxt t ^ (if below_lam then "'" else "")
   | pretty_fo_term ctxt (FOApp (f, ts)) =
       if length ts = 0
-        then f ^ "0"
-        else f ^ @{make_string} (length ts - 1) ^ "(" ^ space_implode ", " (map (pretty_fo_term ctxt) ts) ^ ")"
+        then pretty_fo_head ctxt f (* ^ "0" *)
+        else pretty_fo_head ctxt f (* ^ @{make_string} (length ts - 1) *) ^ "(" ^ space_implode ", " (map (pretty_fo_term ctxt) ts) ^ ")"
 
 
 
 (* KBO reference implementation *)
 
-fun fo_head_weight f =
-  if String.isPrefix "Constjehakboolambdasupdebruijn" f
-    then bound_weight
-  else if String.isPrefix "Var" f orelse String.isPrefix "TVar" f
-    then var_weight
-  else if String.isPrefix "ConstHOL.All" f orelse String.isPrefix "Const.HOL.Ex" f
-    then quantifier_weight false
-  else if String.isPrefix "Prime" f
-    then quantifier_weight true
-  else if exists (fn p => String.isPrefix p f) ["Const", "Free", "Type", "TFree"]
-    then const_weight
-  else if String.isPrefix "Lam" f
-    then fo_lambda_weight
-  else error ("fo_head_weight: fo function symbol can't be " ^ f)
+fun fo_head_weight (FODeBruijn _) = bound_weight
+  | fo_head_weight FOForall = quantifier_weight false
+  | fo_head_weight FOExists = quantifier_weight false
+  | fo_head_weight FOForallPrime = quantifier_weight true
+  | fo_head_weight FOExistsPrime = quantifier_weight true
+  | fo_head_weight (FOType _) = const_weight
+  | fo_head_weight (FOTFree _) = const_weight
+  | fo_head_weight (FOConst _) = const_weight
+  | fo_head_weight (FOFree _) = const_weight
+  | fo_head_weight Lam = fo_lambda_weight
 
 (* FIXME: test against HOL based reference above *)
 fun fo_term_weight (FOVar _) = var_weight
@@ -249,19 +259,60 @@ fun counts_greater_equal ((s_counts_above, s_counts_below), (t_counts_above, t_c
     andalso single_counts_greater_equal s_counts_below t_counts_below
   end
 
-fun fo_kbo_greater_equal (s as (FOApp (f, ss)), (t as FOApp (g, ts))) =
-      counts_greater_equal (fo_var_counts s) (fo_var_counts t)
+(* lam > db > quantifier > symbols > bot > top *)
+fun fo_prec_greater (FOLam, FOLam) = false
+  | fo_prec_greater (FOLam, _) = true
+  | fo_prec_greater (_, FOLam) = false
+  | fo_prec_greater (FODeBruijn i, FODeBruijn j) = i > j
+  | fo_prec_greater (FODeBruijn _, _) = true
+  | fo_prec_greater (_, FODeBruijn _) = false
+  | fo_prec_greater (FOForall, FOForall) = false
+  | fo_prec_greater (FOForall, _) = true
+  | fo_prec_greater (_, FOForall) = false
+  | fo_prec_greater (FOExists, FOExists) = false
+  | fo_prec_greater (FOExists, _) = true
+  | fo_prec_greater (_, FOExists) = false
+  | fo_prec_greater (FOForallPrime, FOForallPrime) = false
+  | fo_prec_greater (FOForallPrime, _) = true
+  | fo_prec_greater (_, FOForallPrime) = false
+  | fo_prec_greater (FOExistsPrime, FOExistsPrime) = false
+  | fo_prec_greater (FOExistsPrime, _) = true
+  | fo_prec_greater (_, FOExistsPrime) = false
+  | fo_prec_greater (FOConst (f, _), FOConst (g, _)) = GREATER = string_ord (f, g) 
+  | fo_prec_greater (FOConst _, _) = true
+  | fo_prec_greater (_, FOConst _) = false
+  | fo_prec_greater (FOFree (f, _), FOFree (g, _)) = GREATER = string_ord (f, g)
+  | fo_prec_greater (FOFree _, _) = true
+  | fo_prec_greater (_, FOFree _) = false
+
+fun lex_greater a_ord ([], []) = false
+  | lex_greater a_ord (s::ss, t::ts) = 
+      (* FIXME: appropriate equality? *)
+      if s = t
+        then lex_greater a_ord (ss, ts)
+        else a_ord (s, t)
+  | lex_greater _ _ = error "unequal number of args in lexicographic comparison"
+
+(* Things to know when implementing KBO, Definition 1 *)
+fun fo_kbo_greater (s as (FOApp (f, ss)), (t as FOApp (g, ts))) =
+      (* Need to take below_lam into account in recursive call *)
+      counts_greater_equal (fo_var_counts s, fo_var_counts t) (* 1 *)
       andalso (
-        fo_term_weight s > fo_term_weight t
-        orelse fo_term_weight_s = fo_term_weight t andalso error "implement prec on strings"
-        orelse fo_term_weight_s = fo_term_weight t andalso error "implement fo kbo lex"
+        GREATER = weight_ord (fo_term_weight s, fo_term_weight t) (* 2a *)
+        orelse (
+          fo_term_weight s = fo_term_weight t (* 2b or 2c *)
+          andalso (
+            fo_prec_greater (f, g) (* 2b *)
+            orelse (f = g andalso lex_greater fo_kbo_greater (ss, ts)) (* 2c *)
+          )
+        )
       )
-      error ""
-      (* \<forall> x \<in> t. |s|\<^sub>x \<ge> |t|\<^sub>x*)
-      (* \<phi>(s) \<ge> \<phi>(t) *)
-      (* *)
-  | fo_kbo_greater_equal (FOApp (f, ss), FOVar x) =
-      error ""
+  | fo_kbo_greater (s as (FOApp _), t as FOVar _) =
+      counts_greater_equal (fo_var_counts s, fo_var_counts t)
+  | fo_kbo_greater _ = false
+
+
+
 
 (*
 KBO only compares args if heads are equal
@@ -275,5 +326,39 @@ KBO only compares args if heads are equal
   * do we compare sorts? (very possible)
 * overloaded constants
 *)
+
+(*
+Testable properties
+
+* invariant w.r.t. aconv
+* (O1) - (O4)
+* t = s => not t > s
+* strictness: t > s => not s > t
+* injectivity by constructing a reverse translation
+
+*)
+
+fun kbo (t, s) =
+  let
+    val t_eq_s = t aconv s
+    val (fo_t, fo_s) = apply2 to_fo_term (t, s)
+    val t_g_s = fo_kbo_greater (fo_t, fo_s)
+    val t_l_s = fo_kbo_greater (fo_s, fo_t)
+  in
+    if t_eq_s
+      then if t_g_s
+        then error "Reference KBO: eq and greater"
+      else if t_l_s
+        then error "Reference KBO: eq and less"
+      else SOME EQUAL
+    else if t_g_s
+      then if t_l_s
+        then error "Reference KBO: greater and less"
+      else SOME GREATER
+    else if t_l_s
+      then SOME LESS
+    else
+      NONE
+  end
 
 end;

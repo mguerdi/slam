@@ -139,6 +139,9 @@ datatype fo_head =
   (* Const or Free and arity *)
   (* FIXME: Delete type information in term below to make sure it's not accidentally being used
   (mismatch between FO and HO quantifier because its Abs is stripped away). *)
+  (* FIXME: above is probably a bit wrong, constants with different types might
+  be different due to overloading, might need to properly distinguish those from
+  logical symbols, etc. *)
   | Fun of term * int
 
 datatype fo_term = 
@@ -317,6 +320,9 @@ fun tckbo below_lam vb wb (FluidOrVar x) (FluidOrVar y) =
       end
   | tckbo below_lam vb wb (App (f, ss)) (App (g, ts)) =
       let
+        (* lex will only be inspected if f = g, otherwise it is NONE anyways *)
+        (* FIXME: and vb, wb? this is relevant for below_lam and esp. boundTs *)
+        (* vb, wb do depend on the head: e.g. if f = Lam and g not *)
         val (vb, wb, lex) = tckbo' below_lam vb wb f g ss ts
         val wb = wb +++ fo_head_weight below_lam f --- fo_head_weight below_lam g
         val nNeg = no_neg_balances vb
@@ -333,6 +339,7 @@ fun tckbo below_lam vb wb (FluidOrVar x) (FluidOrVar y) =
           else if is_greater f_comp_g then G_or_N
           else if is_less f_comp_g then L_or_N
           else if not (is_equal f_comp_g) then NONE
+          (* f = g *)
           else if lex = SOME EQUAL then SOME EQUAL
           else if lex = SOME GREATER then G_or_N
           else if lex = SOME LESS then L_or_N
