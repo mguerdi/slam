@@ -494,6 +494,9 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           val u_eligible = JClause.is_eligible_full_pos c u_pos
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
           val tt'_eligible = JClause.is_eligible_cpos d cp
+          (* FIXME: according to the thesis this is skipped for performance
+          reasons, would explain the difficulty in understanding zipperpositions
+          implementation *)
           val c_comp_d = JClause.kbo (c, d)
           val d' = JClause.delete_lit_at cp d
           (* this relies on normalization not destroying green / top level positions, i.e.
