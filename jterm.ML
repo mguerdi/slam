@@ -45,13 +45,14 @@ fun quantified_typ (t as Const (_, T_to_bool_to_bool)) =
     else error "not a quantifier"
   | quantified_typ _ = error ""
 
-fun strip_comb_fun_types_args1 (boundTs, t) =
-  let
+fun strip_comb_fun_types_args1 (boundTs, t) = error "strip_comb_fun_types_args1 incorrectly implemented"
+  (* FIXME: the below returns the types of the arguments not the type arguments *)
+  (* let
     val (f, ts) = strip_comb t
     val types = fastype_of1 (boundTs, f) |> binder_types |> take (length ts)
   in
     (f, types, ts)
-  end
+  end *)
 
 (* Translates Isabelle/HOL application (f $ u\<^sub>1) $ u\<^sub>2) \<dots> to o\<lambda>Sup application f \<open>\<tau>\<^sub>1, \<tau>\<^sub>2\<close> u\<^sub>1 u\<^sub>2 \<dots> with
 explicit type args. *)
@@ -331,8 +332,6 @@ precondition of the completeness theorem." *)
 (* \<forall> (\<lambda>x.v) \<mapsto> \<lambda>y.y\<approx>(\<lambda>x.\<top>) *)
 
 fun norm_beta_eta_env env = Envir.eta_contract o Envir.norm_term env
-
-val norm_beta_eta = norm_beta_eta_env Envir.init
 
 (* Q t \<mapsto> Q (\<lambda>x. t x) *)
 fun ensure_lambda_under_q (t $ Abs (x, T, u)) = t $ Abs (x, T, ensure_lambda_under_q u)
