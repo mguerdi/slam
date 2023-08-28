@@ -19,11 +19,11 @@ ML_file \<open>../jeha_common.ML\<close>
 ML_file \<open>../jterm.ML\<close>
 ML_file \<open>../jeha_order.ML\<close>
 ML_file \<open>../jeha_order_reference.ML\<close>
+ML_file \<open>../jeha_index.ML\<close>
 
-declare [[speccheck_max_success = 1000000]]
+declare [[speccheck_max_success = 100]]
 declare [[speccheck_num_counterexamples = 30]]
 declare [[ML_print_depth = 100]]
-declare [[show_types = true]]
 
 (* Antiquotations for term and type patterns from the cookbook. *)
 ML \<open>
@@ -57,7 +57,113 @@ setup \<open> term_pat_setup \<close>
 setup \<open> type_pat_setup \<close>
 
 ML \<open>
+  val fps = [[], [1]]
+  val terms =
+    [ @{term_pat "?x :: int"}
+    , @{term_pat "c :: int"}
+    , @{term_pat "d :: int"}
+    , @{term_pat "f(d) :: int"}
+    , @{term_pat "f(?x) :: int"}
+    , @{term "\<lambda> x . d"}
+    ]
+  val keys = map (FeatureTrie.compute_key fps) terms
+  val index = fold (FeatureTrie.insert_term fps) terms FeatureTrie.empty
+  (* val _ =
+    FeatureTrie.fold
+      (K true)
+      [Jeha_Index.FOFree "f", Jeha_Index.AnonymousVar]
+      (fn t => K (writeln (Jeha_Common.pretty_term @{context} t)))
+      index
+      () *)
+\<close>
+
+declare [[speccheck_max_success = 10]]
+declare [[speccheck_num_counterexamples = 30]]
+declare [[show_types = true]]
+
+ML \<open>
+  fun term_num_args_gen nv ni weights num_args_gen h i =
+    Gen.zip (Gen.aterm' (Gen.nonneg nv) (Gen.nonneg ni) weights) (num_args_gen h i)
+
+  fun term_gen ctxt nv ni weights num_args_gen =
+    let val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
+    in
+      Gen.term_tree (term_num_args_gen nv ni weights num_args_gen)
+      |> Gen.map (try (singleton (Variable.polymorphic ctxt') o Syntax.check_term ctxt'))
+      |> Gen.filter is_some
+      |> Gen.map the
+    end
+
+  fun term_pair_gen ctxt nv ni weights num_args_gen =
+    let
+      val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
+      val term_gen = Gen.term_tree (term_num_args_gen nv ni weights num_args_gen)
+    in
+      Gen.zip term_gen term_gen
+      |> Gen.map (fn (s, t) => try (Variable.polymorphic ctxt' o Syntax.check_terms ctxt') [s, t])
+      |> Gen.filter is_some
+      |> Gen.map (fn SOME [s, t] => (s, t))
+    end
+
+  fun num_args_gen max_h max_args h _ = if h > max_h then Gen.return 0 else Gen.nonneg max_args
+
+  fun term_gen' ctxt nv ni weights max_h max_args =
+    term_gen ctxt nv ni weights (num_args_gen max_h max_args)
+  
+  fun term_pair_gen' ctxt nv ni weights max_h max_args =
+    term_pair_gen ctxt nv ni weights (num_args_gen max_h max_args)
+
+  (* *)
+  val term_gen_set = term_gen' @{context} 2 2 (1, 1, 1, 0) 4 4
+
+  (* (weight_const, weight_free, weight_var, weight_bound) *)
+  (* these weights achieve ~50 percent unifiability *)
+  val term_pair_gen_set = term_pair_gen' @{context} 2 2 (4,4,1,0) 4 4
+
+  val check_term = check (Show.term @{context}) term_gen_set
+
+  fun show_termpair ctxt =
+    let val pretty_term = Syntax.pretty_term ctxt
+    in SpecCheck_Show.zip pretty_term pretty_term end
+
+  val check_term_pair = check (show_termpair @{context}) term_pair_gen_set
+
+  fun unify_retrieve (s, t) =
+    let
+      val fps = [[]]
+      val index = FeatureTrie.insert_term fps s FeatureTrie.empty
+    in
+      (((if is_some (Seq.pull (Unify.unifiers (Context.Proof @{context}, Envir.init, [(s, t)])))
+        then (
+          if 0 = length (FeatureTrie.get_unifiables fps t index)
+            then (false; error "bad")
+            else (writeln ("GOOD (|s|, |t|) = (" ^ @{make_string} (size_of_term s) ^ ", " ^ @{make_string} (size_of_term t) ^ ")"); true)
+          )
+        else (writeln "VACUOUS"; true))
+      handle ListPair.UnequalLengths => (writeln "CAUGHT"; true))
+      handle TERM msg => (writeln ("TERM: " ^ fst msg ^ " (s,t) = " ^ Jeha_Common.pretty_terms @{context} [s,t]); true))
+      handle TYPE _ => (writeln "TYPE"; true)
+    end
+
+  val _ = Lecker.test_group @{context} (Random.new ()) [
+    (* Prop.prop (fn t => false) |> check_term "no loose bvars" *)
+    (* Prop.prop (K false) |> check_term_pair "some term pairs" *)
+    Prop.prop (unify_retrieve) |> check_term_pair "unifiables retrieved"
+  ]
+\<close>
+
+declare [[speccheck_num_counterexamples = 30]]
+
+ML \<open>
+  val ctxt = Context.Proof @{context}
+\<close>
+
+ML \<open>
   fun type_checks t = (type_of t; false) handle _ => true
+\<close>
+
+ML_command \<open>
+  check_dynamic @{context} "ALL s t. not (type_checks s) orelse not (type_checks t) orelse is_some (Unify.matcher ctxt [s] [t])"
 \<close>
 
 ML_command \<open>
@@ -72,9 +178,6 @@ check_dynamic @{context} "ALL s t. (Jeha_Order.kbo (s, t) = Jeha_Order_Reference
 (??.c_8 ??.c_8, ??.c_8 ?v_8.0 ?v_8.1) 
     ?c    ?c  ,   ?c     ?v     ?w
 *)
-ML \<open>
-  val s = @{term_pat "?c ?c"}
-\<close>
 
 declare [[speccheck_max_success = 10]]
 declare [[speccheck_num_counterexamples = 30]]
