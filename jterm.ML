@@ -14,6 +14,13 @@ sig
   val is_green_tpos : tpos -> term -> bool
   val subterm_at : term -> tpos -> term
   val map_at : tpos -> (term -> term) -> term -> term
+  (* Preroder fold, i.e. first we see the whole term, then the first head, then
+  that heads structure, afterwards the first arg, that args structure, ...
+  First argument gets information about the number of binders passed, and the
+  path of the current subterm. It can return (_, false) to indicate that no
+  further recursion on the term is needed. *)
+  type fold_state = { lvl : int, binder_types : typ list, depth : int, path : tpos }
+  val fold_preorder_augmented : (fold_state -> term -> 'a -> 'a * bool) -> term -> 'a -> 'a
   (* preprocessing *)
   val fold_non_greens_lvl : (int -> term -> 'a -> 'a) -> int -> term -> 'a -> 'a
   val fold_non_greens : (term -> 'a -> 'a) -> term -> 'a -> 'a
@@ -191,6 +198,48 @@ fun map_at [] f t = f t
       t |> strip_comb |> uncurry cons |> nth_map i (map_at p f) |> head_tail_pair |> list_comb
   | map_at _ _ _ = error ""
 
+(* invariants:
+    lvl = length binder_types
+    depth = length path
+*)
+type fold_state = { lvl : int, binder_types: typ list, depth : int, path : tpos }
+
+val init_state = { lvl = 0, binder_types = [], depth = 0, path = []}
+
+fun descend_abs (T : typ) { lvl = lvl, binder_types = binder_types, depth = depth, path = path } =
+  { lvl = lvl + 1, binder_types = T :: binder_types, depth = depth, path = path }
+(* for applications: head -> 0, ith arg -> i *)
+fun descend_subterm (i : int) { lvl = lvl, binder_types = binder_types, depth = depth, path = path } =
+  { lvl = lvl, binder_types = binder_types, depth = depth, path = i :: path }
+(* FIXME:
+  Q: how to not increase depth with Abs ?
+  A: depth - lvl ! *)
+
+(* An augmented fold, which traverses the term in preorder, supplying f with all
+encountered subterms, as well as that subterms level, binder_types, depth and
+path. The bool returned by f indicates wether the fold should descend further
+into the subterm or consider it a leaf. Note that Free, Const, etc. are
+necessarily leaves, no matter what f says. *)
+fun fold_preorder_augmented (f : fold_state -> term -> 'a -> 'a * bool) t acc =
+  let
+    fun fold_subterms f (t as (_$_)) acc =
+          fold_index
+            (fn (i, subterm) =>
+              fold_preorder_augmented (f o descend_subterm i) subterm)
+            (uncurry cons (strip_comb t))
+            acc
+      | fold_subterms f (Abs (_, T, u)) acc =
+          fold_preorder_augmented (f o descend_abs T) u acc
+      (* Var, Free, Const, Bound, have no subterms. Note comment when returning
+      acc below. *)
+      | fold_subterms _ _ acc = acc
+    val (acc, is_leaf) = f init_state t acc
+  in
+    if is_leaf
+      then acc (* f has been called on t already *)
+      else fold_subterms f t acc
+  end
+
 fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (acc : 'a) =
   case t of
     Abs(_,_,u) => f (lvl + 1) u acc (* the abstraction itself is still green, it's body is not *)
@@ -211,6 +260,8 @@ fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (ac
 of a tree. Or: a green position is always contained in another green position, as is the root so
 they form a subtree starting at the root. The nongreen "leaves" are the ones 1 below the green
 leaves. *)
+
+(* NOTE: In particular all heads are considered non green subterms! *)
 fun fold_non_greens f = fold_non_greens_lvl (K f) 0
 
 (* "A raw \<lambda>-term is ground if it is built without using type variables and contains no free term

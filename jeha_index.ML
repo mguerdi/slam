@@ -1,7 +1,23 @@
 (* fingerprint indexing, from the paper
 Efficient Full Higher-Order Unification *)
 
-signature JEHA_INDEX =
+(* Const and Free *)
+signature JEHA_SYMBOL =
+sig
+  type symbol
+  val of_term : term -> symbol
+end;
+
+structure Jeha_Symbol =
+struct
+  type symbol = term
+
+  fun of_term (t as Free _) = t
+    | of_term (t as Const _) = t
+    | of_term _ = error "can only convert Free or Const to symbol"
+end;
+
+signature JEHA_FINGERPRINT =
 sig
   datatype feature = 
     AnonymousVar (* A *)
@@ -18,7 +34,7 @@ sig
   val could_match : (feature * feature) -> bool
 end;
 
-structure Jeha_Index : JEHA_INDEX =
+structure Jeha_Fingerprint : JEHA_FINGERPRINT =
 struct
 
 (* see zipperposition Fingerprint.ml *)
@@ -37,7 +53,12 @@ fun is_symbol (DB _) = true
   | is_symbol _ = false
 
 (* In the sense of the translation for fingerprint indexing, i.e. if the head is
-a variable or the head's type's return type (domain) is a TVar *)
+a variable or the head's type's return type (domain) is a TVar
+   Q: What if it contains a TVar? Why is that okay?
+   A: Probably because only function types can lead to eta expansion?
+   Q: Okay, but what if the return type is a type synonym for a function type?
+   A: ??? (not possible?)
+*)
 fun return_is_tvar T = is_TVar (body_type T)
 
 fun is_var_head _ (Var _) = true
@@ -137,25 +158,28 @@ fun feature_ord feature_pair =
 
 end;
 
-structure FeatureTable = Table(type key = Jeha_Index.feature val ord = Jeha_Index.feature_ord);
-
-signature FEATURE_TRIE =
+signature JEHA_TRIE =
 sig
-  include JEHA_INDEX
-  type 'a T
+  type 'a T (* The Trie itself *)
+  structure FeatureTable : TABLE;
+  type key = FeatureTable.key list
   val empty: 'a T
-  val insert : (feature list * 'a) -> 'a T -> 'a T
-  val insert_term : JTerm.tpos list -> term -> term T -> term T
-  val compute_key : JTerm.tpos list -> term -> feature list
-  val fold : (feature * feature -> bool) -> feature list -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
-  val get_unifiables : JTerm.tpos list -> term -> term T -> term list
+  val insert : (key * 'a) -> 'a T -> 'a T
+  val fold : (FeatureTable.key * FeatureTable.key -> bool) -> key -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
 end;
 
-structure FeatureTrie : FEATURE_TRIE =
-struct
-  open Jeha_Index
-  type key = feature list
 
+(* feature is
+    * for green subterms: Jeha_Index.feature
+    * for subsumption: numbers based on the translation from Jeha_Index *)
+functor Jeha_Trie(structure FeatureTable : TABLE) : JEHA_TRIE =
+struct
+  structure FeatureTable = FeatureTable;
+  (* FIXME: DELETE open Jeha_Index *)
+  (* FIXME: DELETE type feature = feature *)
+  type key = FeatureTable.key list
+
+  (* A Trie storing lists of 'a. *)
   datatype 'a T =
     Leaf of 'a list
   | Node of ('a T) FeatureTable.table
@@ -167,24 +191,14 @@ struct
   (* add a new 'a to the matching leaf *)
   fun insert ([], value) (Leaf values) = Leaf (value::values)
     | insert ([], _) _  = error "key too short"
-    | insert ([k], value) (Node children) = Node (FeatureTable.map_default (k, Leaf []) (add_to_leaf value) children)
+    | insert ([k], value) (Node children) =
+        Node (FeatureTable.map_default (k, Leaf []) (add_to_leaf value) children)
     | insert (k::ks, value) (Node children) =
         children
         |> FeatureTable.map_default (k, empty) (insert (ks, value))
         |> Node
     | insert _ _ = error "key too long"
   
-  fun compute_key feature_positions t = map (fn p => feature_at [] p t) feature_positions
-  
-  (* FIXME: we want insert term and subterms *)
-  (* FIXME: for testing purposes only *)
-  fun insert_term feature_positions t index =
-    let
-      val key = compute_key feature_positions t
-    in
-      insert (key, t) index
-    end
-
   (* fold but need to skip branches *)
   (* always look at head of key, decide which branches to descend into, chop head off on recursive calls *)
   (* fold : key -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b *)
@@ -201,19 +215,127 @@ struct
           acc
     | fold _ [] _ (Node _) _ = error "fold: key too short"
     | fold _ (_::_) _ (Leaf _) _ = error "fold: key too long"
+end;
 
+(* Index for green subterms, etc. *)
+
+signature TERM_INDEX =
+sig
+  include JEHA_TRIE
+  val insert_term : JTerm.tpos list -> term -> term T -> term T
+  val compute_key : JTerm.tpos list -> term -> key
+  val get_unifiables : JTerm.tpos list -> term -> term T -> term list
+  val get_instances : JTerm.tpos list -> term -> term T -> term list
+end;
+
+
+structure Term_Index : TERM_INDEX =
+struct
+  structure FPFeatureTable : TABLE = Table(type key = Jeha_Fingerprint.feature val ord = Jeha_Fingerprint.feature_ord);
+  structure Term_Index_Trie = Jeha_Trie(structure FeatureTable = FPFeatureTable);
+
+  open Term_Index_Trie
+
+  fun compute_key feature_positions t = map (fn p => Jeha_Fingerprint.feature_at [] p t) feature_positions
+  
   fun get_unifiables feature_positions t index =
     let
       val key = compute_key feature_positions t
     in
-      fold could_unify key cons index []
+      fold Jeha_Fingerprint.could_unify key cons index []
     end
   
   fun get_instances feature_positions t index =
     let
       val key = compute_key feature_positions t
     in
-      fold could_match key cons index []
+      fold Jeha_Fingerprint.could_match key cons index []
     end
 
+  (* FIXME: we want insert term and subterms *)
+  (* FIXME: for testing purposes only *)
+  fun insert_term feature_positions t index =
+    let
+      val key = compute_key feature_positions t
+    in
+      insert (key, t) index
+    end
 end;
+
+signature SUBSUMPTION_INDEX =
+sig
+  include JEHA_TRIE
+  type feature_fun
+  (* Only FOFree or FOConst as first arg! *)
+  val compute_key : feature_fun list -> JClause.T -> key
+  val symbols_with_max_depth : term -> int Termtab.table
+  val symbols_with_min_depth : term -> int Termtab.table
+end;
+
+(* FIXME: aggregate features (i.e. all depths) into sets, maps like zipperposition's FV_Tree.ml *)
+
+
+structure Subsumption_Index : SUBSUMPTION_INDEX =
+struct
+  datatype subsumption_feature =
+    Number of int
+  | Map of int Termtab.table
+
+  fun subsumption_ord (left : subsumption_feature, right : subsumption_feature) = error ""
+
+  structure Subsumption_Index_Trie =
+    Jeha_Trie(structure FeatureTable =
+      Table(type key = subsumption_feature val ord = subsumption_ord)
+    );
+
+  open Subsumption_Index_Trie
+
+  type feature_fun = JClause.T -> FeatureTable.key
+  
+  (* features *)
+  (* independent of signature *)
+  val num_positive = JClause.literals #> filter JLit.is_positive #> length
+  val num_negative = JClause.literals #> filter (not o JLit.is_positive) #> length
+  (* signature dependent (FIXME) *)
+  
+  (* do we need something like symbol present / not present?
+  Or is this already covered by max_depth of symbol etc.?
+
+  Suppose symbol f is present. Then f will have a max depth d.
+  Otherwise the max depth feature for f will be 0. (?)
+  In zipperposition does the first guard the second?
+  Can we do ~1 if the symbol is not present?
+  *)
+
+  (* compare zipperposition FV_tree.ML:182 (symbols_depth) *)
+  (* FIXME: collect all features with one traversal *)
+  fun symbols_with_depth combine t =
+    let
+      fun add_term (info : JTerm.fold_state) t depth_map = 
+          let
+            val { lvl = lvl, depth = depth, ... } = info
+            val depth_without_lambdas = depth - lvl
+            val is_leaf = JTerm.is_variable_headed t
+            val depth_map =
+              if is_Free t orelse is_Const t (* => not is_leaf *)
+                then Termtab.map_entry t (combine depth_without_lambdas) depth_map
+                else depth_map
+          in
+            (* FIXME: Can we count typed Bound as a symbol "in the same way"
+            that fingerprint indexing does? *)
+            (* FIXME: do we consider head with polymorphic return types to be
+            variables? like above. Probably no *)
+            (depth_map, is_leaf)
+          end
+    in
+      JTerm.fold_preorder_augmented add_term t Termtab.empty
+    end
+
+  val symbols_with_max_depth = symbols_with_depth (curry Int.max)
+
+  val symbols_with_min_depth = symbols_with_depth (curry Int.min)
+
+  fun compute_key features clause = map (fn f => f clause) features
+end;
+
+(* FIXME: same structure again but with flat int features *)
