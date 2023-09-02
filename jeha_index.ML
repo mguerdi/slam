@@ -311,12 +311,14 @@ struct
   (* FIXME: collect all features with one traversal *)
   fun symbols_with_depth combine t =
     let
-      fun add_term (info : JTerm.fold_state) t depth_map = 
+      fun add_term (info : JTerm.subterm_info) t depth_map = 
           let
             val { lvl = lvl, depth = depth, ... } = info
             val depth_without_lambdas = depth - lvl
             val is_leaf = JTerm.is_variable_headed t
             val depth_map =
+              (* FIXME: the way we fold, a head is at a lower depth if it has
+              arguments than if it stands alone *)
               if is_Free t orelse is_Const t (* => not is_leaf *)
                 then Termtab.map_entry t (combine depth_without_lambdas) depth_map
                 else depth_map

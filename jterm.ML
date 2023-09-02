@@ -7,6 +7,7 @@ sig
   val strip_comb_fun_types_args : term -> term * typ list * term list
   val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
   val is_variable_headed : term -> bool
+  val can_have_green_args : term -> bool
   val is_position_of_fully_applied_logical_symbol : tpos -> term -> bool
   val tposs_of : term -> tpos list
   val disagreement_tpos_of2 : term * term -> tpos option
@@ -19,8 +20,8 @@ sig
   First argument gets information about the number of binders passed, and the
   path of the current subterm. It can return (_, false) to indicate that no
   further recursion on the term is needed. *)
-  type fold_state = { lvl : int, binder_types : typ list, depth : int, path : tpos }
-  val fold_preorder_augmented : (fold_state -> term -> 'a -> 'a * bool) -> term -> 'a -> 'a
+  type subterm_info = { lvl : int, binder_types : typ list, depth : int, path : tpos }
+  val fold_preorder_augmented : (subterm_info -> term -> 'a -> 'a * bool) -> term -> 'a -> 'a
   (* preprocessing *)
   val fold_non_greens_lvl : (int -> term -> 'a -> 'a) -> int -> term -> 'a -> 'a
   val fold_non_greens : (term -> 'a -> 'a) -> term -> 'a -> 'a
@@ -202,7 +203,7 @@ fun map_at [] f t = f t
     lvl = length binder_types
     depth = length path
 *)
-type fold_state = { lvl : int, binder_types: typ list, depth : int, path : tpos }
+type subterm_info = { lvl : int, binder_types: typ list, depth : int, path : tpos }
 
 val init_state = { lvl = 0, binder_types = [], depth = 0, path = []}
 
@@ -211,16 +212,13 @@ fun descend_abs (T : typ) { lvl = lvl, binder_types = binder_types, depth = dept
 (* for applications: head -> 0, ith arg -> i *)
 fun descend_subterm (i : int) { lvl = lvl, binder_types = binder_types, depth = depth, path = path } =
   { lvl = lvl, binder_types = binder_types, depth = depth, path = i :: path }
-(* FIXME:
-  Q: how to not increase depth with Abs ?
-  A: depth - lvl ! *)
 
 (* An augmented fold, which traverses the term in preorder, supplying f with all
-encountered subterms, as well as that subterms level, binder_types, depth and
-path. The bool returned by f indicates wether the fold should descend further
-into the subterm or consider it a leaf. Note that Free, Const, etc. are
-necessarily leaves, no matter what f says. *)
-fun fold_preorder_augmented (f : fold_state -> term -> 'a -> 'a * bool) t acc =
+encountered subterms, as well as that subterms level (number of passed Abs),
+binder_types, depth and path. The bool returned by f indicates wether the fold
+should descend further into the subterm or consider it a leaf. Note that Free,
+Const, etc. are necessarily leaves, no matter what f says. *)
+fun fold_preorder_augmented (f : subterm_info -> term -> 'a -> 'a * bool) t acc =
   let
     fun fold_subterms f (t as (_$_)) acc =
           fold_index

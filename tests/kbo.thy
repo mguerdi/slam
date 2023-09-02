@@ -17,8 +17,13 @@ structure Random = SpecCheck_Random
 
 ML_file \<open>../jeha_common.ML\<close>
 ML_file \<open>../jterm.ML\<close>
+ML_file \<open>../clause_id.ML\<close>
 ML_file \<open>../jeha_order.ML\<close>
 ML_file \<open>../jeha_order_reference.ML\<close>
+ML_file \<open>../jlit.ML\<close>
+ML_file \<open>../jclause_pos.ML\<close>
+ML_file \<open>../jeha_log.ML\<close>
+ML_file \<open>../jclause.ML\<close>
 ML_file \<open>../jeha_index.ML\<close>
 
 declare [[speccheck_max_success = 100]]
@@ -66,10 +71,10 @@ ML \<open>
     , @{term_pat "f(?x) :: int"}
     , @{term "\<lambda> x . d"}
     ]
-  val keys = map (FeatureTrie.compute_key fps) terms
-  val index = fold (FeatureTrie.insert_term fps) terms FeatureTrie.empty
+  val keys = map (Term_Index.compute_key fps) terms
+  val index = fold (Term_Index.insert_term fps) terms Term_Index.empty
   (* val _ =
-    FeatureTrie.fold
+    Term_Index.fold
       (K true)
       [Jeha_Index.FOFree "f", Jeha_Index.AnonymousVar]
       (fn t => K (writeln (Jeha_Common.pretty_term @{context} t)))
@@ -131,11 +136,11 @@ ML \<open>
   fun unify_retrieve (s, t) =
     let
       val fps = [[]]
-      val index = FeatureTrie.insert_term fps s FeatureTrie.empty
+      val index = Term_Index.insert_term fps s Term_Index.empty
     in
       (((if is_some (Seq.pull (Unify.unifiers (Context.Proof @{context}, Envir.init, [(s, t)])))
         then (
-          if 0 = length (FeatureTrie.get_unifiables fps t index)
+          if 0 = length (Term_Index.get_unifiables fps t index)
             then (false; error "bad")
             else (writeln ("GOOD (|s|, |t|) = (" ^ @{make_string} (size_of_term s) ^ ", " ^ @{make_string} (size_of_term t) ^ ")"); true)
           )
@@ -160,6 +165,25 @@ ML \<open>
 
 ML \<open>
   fun type_checks t = (type_of t; false) handle _ => true
+\<close>
+
+ML \<open>
+  fun digest_nongreen f _ t acc =
+    let val (head, args) = strip_comb t in
+    if 0 = length args
+      then (acc, false)
+    else if JTerm.can_have_green_args head
+      then (f head acc, false)
+    else (fold f (head :: args) acc, true)
+    end
+  val t = @{term_pat "f (?x (c (\<lambda>z. z) ?y))"}
+  (* val t = @{term "f c"} *)
+  val l1 = JTerm.fold_preorder_augmented (digest_nongreen cons) t []
+  val l2 = JTerm.fold_non_greens cons t []
+\<close>
+
+ML_command \<open>
+  check_dynamic @{context} "ALL t. sort Term_Ord.term_ord (JTerm.fold_preorder_augmented (digest_nongreen cons) t []) = sort Term_Ord.term_ord (JTerm.fold_non_greens cons t [])"
 \<close>
 
 ML_command \<open>
