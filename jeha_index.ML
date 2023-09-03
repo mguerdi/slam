@@ -61,6 +61,11 @@ a variable or the head's type's return type (domain) is a TVar
 *)
 fun return_is_tvar T = is_TVar (body_type T)
 
+(* FIXME: figure out if considering TVar return types as variables is necessary.
+We're not doing \<eta>-expansion so it might not be *)
+(* regarding \<eta> long/short:
+https://github.com/leanprover-community/duper/blob/ff6e7e5aadc6f9b3080fa3454d993a296d7484c9/Duper/Fingerprint.lean#L130
+I'm not sure if I believe this. *)
 fun is_var_head _ (Var _) = true
   | is_var_head Ts (Bound i) = return_is_tvar (nth Ts i)
   | is_var_head _ (Abs _) = error "abs head encountered (not beta-normal)"
@@ -89,10 +94,6 @@ fun feature_at Ts p (Abs (_, T, t)) = feature_at (T::Ts) p t
         then InvalidPosition
       else feature_at Ts is (nth args (i-1))
       end
-
-(* regarding \<eta> long/short:
-https://github.com/leanprover-community/duper/blob/ff6e7e5aadc6f9b3080fa3454d993a296d7484c9/Duper/Fingerprint.lean#L130
-I'm not sure if I believe this. *)
 
 fun could_unify (f1, f2) =
   let
@@ -268,22 +269,54 @@ sig
   type feature_fun
   (* Only FOFree or FOConst as first arg! *)
   val compute_key : feature_fun list -> JClause.T -> key
-  val symbols_with_max_depth : term -> int Termtab.table
-  val symbols_with_min_depth : term -> int Termtab.table
+  val add_term_symbols_with_max_depth : term -> int Termtab.table -> int Termtab.table
+  val add_lit_symbols_with_max_depth : JLit.T -> int Termtab.table -> int Termtab.table
+  val num_positive : feature_fun
+  val num_negative : feature_fun
+  val max_depth_in_positive : feature_fun
+  val max_depth_in_negative : feature_fun
 end;
 
 (* FIXME: aggregate features (i.e. all depths) into sets, maps like zipperposition's FV_Tree.ml *)
 
+datatype ('a, 'b) RecFold = RecFold of 'a -> (('a, 'b) RecFold -> 'b) -> 'b
+
+fun foldr f acc xs = Basics.fold f xs acc
+
+(* fun zip xs =
+  let 
+    fun g e2 r2 e1 r1 = (e1,e2) :: (r1 r2)
+    fun f e r x = x e r
+  in
+    foldr f (K []) xs o foldr g (fn _ => fn _ => [])
+  end *)
+
+(* 'a list -> 'b list -> ('a * 'b) list *)
+fun zip xs =
+  let
+    fun g e2 r2 e1 r1 = (e1,e2) :: (r1 (RecFold r2))
+    fun f e r (RecFold x) = x e r
+  in
+    foldr f (K []) xs o RecFold o foldr g (fn _ => fn _ => [])
+  end
 
 structure Subsumption_Index : SUBSUMPTION_INDEX =
 struct
   datatype subsumption_feature =
-    Number of int
-  | Map of int Termtab.table
+    IntFeature of int
+  | MapFeature of int Termtab.table
 
-  fun subsumption_ord (left : subsumption_feature, right : subsumption_feature) = error ""
+  (* This is only to be able to use tables as keys in a table. The key
+  compatibility comparisons (that also compare two tables) are defined below. *)
+  fun table_ord value_ord (t1, t2) = error ""
 
-  structure Subsumption_Index_Trie =
+
+  fun subsumption_ord (IntFeature n, IntFeature m) = int_ord (n, m)
+    (* FIXME: *)
+    | subsumption_ord (MapFeature n, MapFeature m) = error "subsumption_ord: unimplemented"
+    | subsumption_ord _ = error "subsumption_ord: Can't compare IntFeature to MapFeature."
+
+  structure Subsumption_Index_Trie : JEHA_TRIE =
     Jeha_Trie(structure FeatureTable =
       Table(type key = subsumption_feature val ord = subsumption_ord)
     );
@@ -294,10 +327,18 @@ struct
   
   (* features *)
   (* independent of signature *)
-  val num_positive = JClause.literals #> filter JLit.is_positive #> length
-  val num_negative = JClause.literals #> filter (not o JLit.is_positive) #> length
-  (* signature dependent (FIXME) *)
-  
+  val num_positive =
+    JClause.literals
+    #> filter JLit.is_positive
+    #> length
+    #> IntFeature
+
+  val num_negative =
+    JClause.literals
+    #> filter (not o JLit.is_positive)
+    #> length
+    #> IntFeature
+
   (* do we need something like symbol present / not present?
   Or is this already covered by max_depth of symbol etc.?
 
@@ -308,36 +349,63 @@ struct
   *)
 
   (* compare zipperposition FV_tree.ML:182 (symbols_depth) *)
-  (* FIXME: collect all features with one traversal *)
-  fun symbols_with_depth combine t =
+  (* FIXME: Collect all features with one traversal: depth map, multiset,
+  weight. OR: only compute features once they're needed? Unclear which one is
+  better. *)
+  fun add_term_symbols_with_depth combine t =
     let
-      fun add_term (info : JTerm.subterm_info) t depth_map = 
-          let
-            val { lvl = lvl, depth = depth, ... } = info
-            val depth_without_lambdas = depth - lvl
-            val is_leaf = JTerm.is_variable_headed t
-            val depth_map =
-              (* FIXME: the way we fold, a head is at a lower depth if it has
-              arguments than if it stands alone *)
-              if is_Free t orelse is_Const t (* => not is_leaf *)
-                then Termtab.map_entry t (combine depth_without_lambdas) depth_map
-                else depth_map
-          in
-            (* FIXME: Can we count typed Bound as a symbol "in the same way"
-            that fingerprint indexing does? *)
+      fun add_term depth (Abs(_,_,t)) = add_term depth t (* same depth *)
+        | add_term depth (t as _$_) =
             (* FIXME: do we consider head with polymorphic return types to be
             variables? like above. Probably no *)
-            (depth_map, is_leaf)
-          end
+            if JTerm.is_variable_headed t then I else
+            let
+              val (head, args) = strip_comb t
+            in
+              (* head symbol has current depth *)
+              add_term depth head
+              (* args are one level deeper*)
+              #> Basics.fold (add_term (depth + 1)) args
+            end
+        | add_term _ (Var _) = I
+        (* FIXME: Can we count typed Bound as a symbol "in the same way" that
+        fingerprint indexing does?
+        Idea: encode Bound i : T as Bound i $ dummy_pattern T *)
+        | add_term _ (Bound _) = I
+        (* Const and Free *)
+        | add_term depth t = Termtab.map_entry t (combine depth)
     in
-      JTerm.fold_preorder_augmented add_term t Termtab.empty
+      (* starting depth of 1 allows us to use 0 as default for symbols that
+      aren't present *)
+      add_term 1 t
     end
 
-  val symbols_with_max_depth = symbols_with_depth (curry Int.max)
+  val add_term_symbols_with_max_depth = add_term_symbols_with_depth (curry Int.max)
 
-  val symbols_with_min_depth = symbols_with_depth (curry Int.min)
+  fun add_lit_symbols_with_max_depth (s, t, _) =
+    add_term_symbols_with_max_depth s #> add_term_symbols_with_max_depth t
+
+  val max_depth_in_positive =
+    JClause.literals
+    #> filter JLit.is_positive
+    #> (fn ls => Basics.fold add_lit_symbols_with_max_depth ls Termtab.empty)
+    #> MapFeature
+
+  val max_depth_in_negative =
+    JClause.literals
+    #> filter (not o JLit.is_positive)
+    #> (fn ls => Basics.fold add_lit_symbols_with_max_depth ls Termtab.empty)
+    #> MapFeature
 
   fun compute_key features clause = map (fn f => f clause) features
+
+  val features_funs = 
+    [ num_positive
+    , num_negative
+    , max_depth_in_positive
+    , max_depth_in_negative
+    ]
+
 end;
 
 (* FIXME: same structure again but with flat int features *)

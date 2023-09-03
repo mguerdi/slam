@@ -82,7 +82,7 @@ ML \<open>
       () *)
 \<close>
 
-declare [[speccheck_max_success = 10]]
+declare [[speccheck_max_success = 100]]
 declare [[speccheck_num_counterexamples = 30]]
 declare [[show_types = true]]
 
@@ -165,25 +165,6 @@ ML \<open>
 
 ML \<open>
   fun type_checks t = (type_of t; false) handle _ => true
-\<close>
-
-ML \<open>
-  fun digest_nongreen f _ t acc =
-    let val (head, args) = strip_comb t in
-    if 0 = length args
-      then (acc, false)
-    else if JTerm.can_have_green_args head
-      then (f head acc, false)
-    else (fold f (head :: args) acc, true)
-    end
-  val t = @{term_pat "f (?x (c (\<lambda>z. z) ?y))"}
-  (* val t = @{term "f c"} *)
-  val l1 = JTerm.fold_preorder_augmented (digest_nongreen cons) t []
-  val l2 = JTerm.fold_non_greens cons t []
-\<close>
-
-ML_command \<open>
-  check_dynamic @{context} "ALL t. sort Term_Ord.term_ord (JTerm.fold_preorder_augmented (digest_nongreen cons) t []) = sort Term_Ord.term_ord (JTerm.fold_non_greens cons t [])"
 \<close>
 
 ML_command \<open>
