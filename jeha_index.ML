@@ -161,8 +161,9 @@ end;
 
 signature JEHA_TRIE =
 sig
-  type 'a T (* The Trie itself *)
   structure FeatureTable : TABLE;
+  (* The Trie itself *)
+  datatype 'a T = Leaf of 'a list | Node of ('a T) FeatureTable.table
   type key = FeatureTable.key list
   val empty: 'a T
   val insert : (key * 'a) -> 'a T -> 'a T
@@ -267,14 +268,16 @@ signature SUBSUMPTION_INDEX =
 sig
   include JEHA_TRIE
   type feature_fun
-  (* Only FOFree or FOConst as first arg! *)
-  val compute_key : feature_fun list -> JClause.T -> key
+  (* Stores the problem signature, based on that the feature functions and the
+  trie. *)
+  type index
   val add_term_symbols_with_max_depth : term -> int Termtab.table -> int Termtab.table
   val add_lit_symbols_with_max_depth : JLit.T -> int Termtab.table -> int Termtab.table
   val num_positive : feature_fun
   val num_negative : feature_fun
-  val max_depth_in_positive : feature_fun
-  val max_depth_in_negative : feature_fun
+  val max_depth_in_positive : JClause.T -> int Termtab.table
+  val max_depth_in_negative : JClause.T -> int Termtab.table
+  val fold_subsumed : int list -> (term -> 'a -> 'a) -> index -> 'a -> 'a
 end;
 
 (* FIXME: aggregate features (i.e. all depths) into sets, maps like zipperposition's FV_Tree.ml *)
@@ -302,28 +305,36 @@ fun zip xs =
 
 structure Subsumption_Index : SUBSUMPTION_INDEX =
 struct
-  datatype subsumption_feature =
-    IntFeature of int
-  | MapFeature of int Termtab.table
 
-  (* This is only to be able to use tables as keys in a table. The key
-  compatibility comparisons (that also compare two tables) are defined below. *)
-  fun table_ord value_ord (t1, t2) = error ""
-
-
-  fun subsumption_ord (IntFeature n, IntFeature m) = int_ord (n, m)
-    (* FIXME: *)
-    | subsumption_ord (MapFeature n, MapFeature m) = error "subsumption_ord: unimplemented"
-    | subsumption_ord _ = error "subsumption_ord: Can't compare IntFeature to MapFeature."
+  (*
+  Why I decided against int Termtab.table features:
+  * Loss of prefix sharing? Idea: each term has a pretty unique "map of all
+    maximal symbol depth"s. But unclear if there are some tradeoffs here that
+    work out in favour of tables as features.
+  * Need to compare tables, for use as keys in a table
+    * compatibility order (forall) is unsuited (not total)
+    => need to implement an additional order on tables
+    => can't use trick where during index traversal we can immediately prune all
+    branches that don't work, instead of having to look at every single one
+    (This works now because the order used in the table implementation is the
+    same as the order used for the compatibility check, namely int_ord).
+    * the typical order for comparing tables (rust, zipperposition) needs a zip,
+      which is tricky given only the functions TABLE
+  *)
+  type subsumption_feature = int
 
   structure Subsumption_Index_Trie : JEHA_TRIE =
     Jeha_Trie(structure FeatureTable =
-      Table(type key = subsumption_feature val ord = subsumption_ord)
+      Table(type key = subsumption_feature val ord = int_ord)
     );
 
   open Subsumption_Index_Trie
 
   type feature_fun = JClause.T -> FeatureTable.key
+
+  type index =
+    { compute_features : feature_fun list,
+      trie : (int list) Subsumption_Index_Trie.T }
   
   (* features *)
   (* independent of signature *)
@@ -331,13 +342,11 @@ struct
     JClause.literals
     #> filter JLit.is_positive
     #> length
-    #> IntFeature
 
   val num_negative =
     JClause.literals
     #> filter (not o JLit.is_positive)
     #> length
-    #> IntFeature
 
   (* do we need something like symbol present / not present?
   Or is this already covered by max_depth of symbol etc.?
@@ -389,23 +398,45 @@ struct
     JClause.literals
     #> filter JLit.is_positive
     #> (fn ls => Basics.fold add_lit_symbols_with_max_depth ls Termtab.empty)
-    #> MapFeature
 
   val max_depth_in_negative =
     JClause.literals
     #> filter (not o JLit.is_positive)
     #> (fn ls => Basics.fold add_lit_symbols_with_max_depth ls Termtab.empty)
-    #> MapFeature
 
-  fun compute_key features clause = map (fn f => f clause) features
+  fun make_features_fun (symbols : term list) = fn clause =>
+    let
+      (* traverse once *)
+      val max_depth_in_negative = max_depth_in_negative clause
+      val max_depth_in_positive = max_depth_in_positive clause
+      (* lookup *)
+      val add_max_depth_in_positive = Basics.fold
+        (fn s => fn fs =>
+          (Termtab.lookup max_depth_in_positive s |> the_default 0) :: fs)
+        symbols
+      val add_max_depth_in_negative = Basics.fold
+        (fn s => fn fs =>
+          (Termtab.lookup max_depth_in_negative s |> the_default 0) :: fs)
+        symbols
+    in
+      []
+      |> add_max_depth_in_positive
+      |> add_max_depth_in_negative
+      |> cons (num_positive clause)
+      |> cons (num_negative clause)
+    end
 
-  val features_funs = 
-    [ num_positive
-    , num_negative
-    , max_depth_in_positive
-    , max_depth_in_negative
-    ]
+  (* symbols should be a list of Const _ and Free _ *)
+  fun make_index symbols =
+    { compute_features = make_features_fun symbols,
+      trie = Subsumption_Index_Trie.empty }
+
+  (* FIXME: get rid of the key terminology in favour of lists. Try to hide
+  table keys a bit. *)
+
+  fun fold_subsumed [] f (Leaf ts) = Basics.fold f ts
+    | fold_subsumed (x::xs) f (Node branches) = error "fold_subsumed: unimplemented"
+        (* we need to check all nodes whose features are smaller or equal *)
+
 
 end;
-
-(* FIXME: same structure again but with flat int features *)
