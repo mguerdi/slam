@@ -277,7 +277,8 @@ sig
   val num_negative : feature_fun
   val max_depth_in_positive : JClause.T -> int Termtab.table
   val max_depth_in_negative : JClause.T -> int Termtab.table
-  val fold_subsumed : int list -> (term -> 'a -> 'a) -> index -> 'a -> 'a
+  val fold_subsumed : int list -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
+  val fold_subsuming : int list -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
 end;
 
 (* FIXME: aggregate features (i.e. all depths) into sets, maps like zipperposition's FV_Tree.ml *)
@@ -314,10 +315,10 @@ struct
   * Need to compare tables, for use as keys in a table
     * compatibility order (forall) is unsuited (not total)
     => need to implement an additional order on tables
-    => can't use trick where during index traversal we can immediately prune all
+    (=> can't use trick where during index traversal we can immediately prune all
     branches that don't work, instead of having to look at every single one
     (This works now because the order used in the table implementation is the
-    same as the order used for the compatibility check, namely int_ord).
+    same as the order used for the compatibility check, namely int_ord).)
     * the typical order for comparing tables (rust, zipperposition) needs a zip,
       which is tricky given only the functions TABLE
   *)
@@ -435,8 +436,21 @@ struct
   table keys a bit. *)
 
   fun fold_subsumed [] f (Leaf ts) = Basics.fold f ts
-    | fold_subsumed (x::xs) f (Node branches) = error "fold_subsumed: unimplemented"
-        (* we need to check all nodes whose features are smaller or equal *)
-
+    | fold_subsumed (x::xs) f (Node branches) =
+        (* we need to check all branches whose feature is smaller or equal to x *)
+        (* fold starts from the smallest element, compare min *)
+        FeatureTable.fold
+          (fn (y, branch) =>
+            (* FIXME: use stop bool to not have to check y > x anymore? But this
+            works best in conjunction with binary search. *)
+            if y > x then I else fold_subsumed xs f branch)
+          branches
+  
+  fun fold_subsuming [] f (Leaf ts) = Basics.fold f ts
+    | fold_subsuming (x::xs) f (Node branches) =
+        FeatureTable.fold
+          (fn (y, branch) =>
+            if y < x then I else fold_subsuming xs f branch)
+          branches
 
 end;
