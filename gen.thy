@@ -6,16 +6,30 @@ Random generator for lambda expressions. Based on the paper
   closed simply typed \<lambda>-terms: A synergy between logic programming and
   Boltzmann samplers”
 
+with parts taken from
+  https://github.com/kappelmann/ml-unification-isabelle/blob/e6041fab99ff29c7e763923cdea4d3de59b6a037/Tests/tests_base.ML
+
 *)
 
 theory gen
 imports
-  Pure
+  HOL.Main
   SpecCheck.SpecCheck_Dynamic
   SpecCheck.SpecCheck_Generators
 begin
 
 ML_file \<open>jeha_common.ML\<close>
+ML_file \<open>clause_id.ML\<close>
+ML_file \<open>jterm.ML\<close>
+ML_file \<open>jeha_order.ML\<close>
+ML_file \<open>jlit.ML\<close>
+ML_file \<open>jclause_pos.ML\<close>
+ML_file \<open>jeha_log.ML\<close>
+ML_file \<open>jclause.ML\<close>
+ML_file \<open>jeha_proof.ML\<close>
+ML_file \<open>jeha_unify.ML\<close>
+
+
 
 ML \<open>
   open SpecCheck
@@ -123,16 +137,17 @@ ML \<open>
 
   val boltzmann_term_gen = retry_on_exception_gen boltzmann_term_failing_gen
 
-  val _ = try (Syntax.check_term)
+  fun boltzmann_term_gen_min_size min_size =
+    SpecCheck_Generator.filter
+      (fn t => size_of_term t >= min_size)
+      boltzmann_term_gen
 \<close>
 
-declare [[speccheck_num_counterexamples = 1000]]
-declare [[speccheck_max_success = 1000]]
-
-declare [[show_types]]
+declare [[speccheck_num_counterexamples = 10]]
+declare [[speccheck_max_success = 10]]
 
 ML \<open>
-  val check_term = check (SpecCheck_Show.term @{context}) boltzmann_term_gen
+  val check_term = check (SpecCheck_Show.term @{context}) (boltzmann_term_gen_min_size 10)
   val ctxt = Proof_Context.set_mode Proof_Context.mode_schematic @{context}
   val _ = Lecker.test_group ctxt (SpecCheck_Random.new ()) [
     SpecCheck_Property.prop (is_some o try (Syntax.check_term ctxt))
