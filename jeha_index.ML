@@ -307,21 +307,6 @@ fun zip xs =
 structure Subsumption_Index : SUBSUMPTION_INDEX =
 struct
 
-  (*
-  Why I decided against int Termtab.table features:
-  * Loss of prefix sharing? Idea: each term has a pretty unique "map of all
-    maximal symbol depth"s. But unclear if there are some tradeoffs here that
-    work out in favour of tables as features.
-  * Need to compare tables, for use as keys in a table
-    * compatibility order (forall) is unsuited (not total)
-    => need to implement an additional order on tables
-    (=> can't use trick where during index traversal we can immediately prune all
-    branches that don't work, instead of having to look at every single one
-    (This works now because the order used in the table implementation is the
-    same as the order used for the compatibility check, namely int_ord).)
-    * the typical order for comparing tables (rust, zipperposition) needs a zip,
-      which is tricky given only the functions TABLE
-  *)
   type subsumption_feature = int
 
   structure Subsumption_Index_Trie : JEHA_TRIE =
@@ -433,7 +418,7 @@ struct
       trie = Subsumption_Index_Trie.empty }
 
   (* FIXME: get rid of the key terminology in favour of lists. Try to hide
-  table keys a bit. *)
+  tables a bit. *)
 
   fun fold_subsumed [] f (Leaf ts) = Basics.fold f ts
     | fold_subsumed (x::xs) f (Node branches) =
@@ -454,3 +439,21 @@ struct
           branches
 
 end;
+
+(*
+default features:
+* num positive
+* num negative
+* sum_of_depths
+* max depth in positive (non boolean)
+* max depth in negative (non boolean)
+* count in positive
+* count in negative
+
+Zipperposition
+* superposition.ml uses FV_tree, via proofState.ml
+* the only use of FeatureVector.ml namely via of_signature in superposition.ml
+  is commented out
+
+
+*)

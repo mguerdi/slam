@@ -453,7 +453,7 @@ fun infer_eq_neq_outer_claus c i =
 (*
 fun impl_infer_sup precheck ctxt (d, (lp, cp), (c, u_pos)) =
   let
-    (* rename *)
+    (* rename, FIXME: let caller decide this *)
     val d = JClause.incr_indexes (JClause.maxidx c + 1) d
     val env = Envir.empty (JClause.maxidx_of2 (c, d))
     (* unpack *)

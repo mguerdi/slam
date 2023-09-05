@@ -112,6 +112,7 @@ fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Jeha_Common.map_some (cons 
     end
   | disagreement_tpos_of2 (t, u) = if t aconv u then NONE else SOME []
 
+(* FIXME: Add length args > 0 and change to is_variable_headed_comb ? *)
 fun is_variable_headed t =
   let
     val (head, _) = strip_comb t
