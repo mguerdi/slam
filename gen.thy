@@ -40,11 +40,11 @@ ML \<open>
   (* Precomputed from the paper, presumably increasing the probability of
   boltzmann_index leads to smaller terms. Weaker effect when increasing the
   probability of boltzmann_lambda. *)
-  fun boltzmann_index r = r < 0.1 (* 0.35700035696434995 *);
+  fun boltzmann_index r = r < (* 0.1 *) 0.35700035696434995;
   fun boltzmann_lambda r = r < 0.6525813160382378;
   (* The probability p of de Bruijn index 0, generally Bound j has the
   probability (1-p)^j * p (geometric distribution) *)
-  fun boltzmann_leaf r = r < 0.9 (* 0.7044190409261122 *);
+  fun boltzmann_leaf r = r < (* 0.9 *) 0.7044190409261122;
 
   (* (rng state, env, maxidx) *)
   type term_state = SpecCheck_Random.rand * Type.tyenv * int;
@@ -55,7 +55,11 @@ ML \<open>
       val (r, s) = range_real (0.0, 1.0) s
     in
       if boltzmann_leaf r
-        then ((s, Sign.typ_unify (Proof_Context.theory_of ctxt) (T, typ) env), Bound 0)
+        then
+          (
+            ((s, Sign.typ_unify (Proof_Context.theory_of ctxt) (T, typ) env), Bound 0)
+            (* handle Type.TUNIFY => error ("pick_index: TUNIFY: " ^ Jeha_Common.pretty_typ ctxt T ^ "=" ^ Jeha_Common.pretty_typ ctxt typ ^ " in " ^ Jeha_Common.pretty_tyenv ctxt (fst env)) *)
+          )
         else
           let val (state, Bound i) = pick_index ctxt Ts typ (s, env) in
             (state, Bound (i+1))
@@ -75,6 +79,7 @@ ML \<open>
         : (SpecCheck_Random.rand * (Type.tyenv * int)) * term =
     let
       val (r, s) = range_real (0.0, 1.0) s
+      (* val _ = writeln (@{make_string} r) *)
     in
       if boltzmann_index r
         then pick_index ctxt binder_types typ (s, (typ_env, maxidx))
@@ -112,13 +117,14 @@ ML \<open>
           (state, function $ arg)
         end
     end
-  
+
   val boltzmann_term_gen : (term, SpecCheck_Random.rand) gen_state = fn s =>
     let
+      val s = SpecCheck_Random.next s
       val (maxidx, T) = gen_tyvar @{context} ~1
       val ((s, (typ_env, maxidx)), t) =
         (ran_typable @{context} [] T (s, (Vartab.empty, maxidx))
-          (* handle Type.TUNIFY => (writeln "TUNIFY" ; ((s, (Vartab.empty, maxidx)), Term.dummy)) *)
+           handle Type.TUNIFY => (writeln "TUNIFY" ; ((s, (Vartab.empty, maxidx)), Term.dummy))
         ) 
           handle (ERROR msg) =>
             (writeln ("ERROR: " ^ msg); ((s, (Vartab.empty, maxidx)), Term.dummy))
