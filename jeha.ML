@@ -386,11 +386,14 @@ fun is_redundant ctxt active c =
   let fun trace_subsumed unit subsumed =
     subsumed andalso
       (Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+    val all_disabled = Config.get ctxt Jeha_Common.disable_all
+    val _ = if all_disabled then writeln "REDUNDANCY CHECKS DISABLED" else ()
+    fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K false
   in
   (* forward subsumption: does any active clause subsume c? *)
   exists
-    (fn ac => equality_subsumes ctxt (ac, c)
-      orelse trace_subsumed ac (Jeha_Subsumption.subsumes (Context.Proof ctxt) (ac, c)))
+    (fn ac => if_cfg Jeha_Common.rule_equality_subsumption (equality_subsumes ctxt (ac, c))
+      orelse if_cfg Jeha_Common.rule_clause_subsumption (trace_subsumed ac (Jeha_Subsumption.subsumes (Context.Proof ctxt) (ac, c))))
     active
   end
 
@@ -970,7 +973,12 @@ fun forward_simplify ctxt cheap active given_clause =
     val active_units = Seq.filter (fn c => JClause.length c = 1) (Seq.of_list active)
     val active_units_all_orientations : (JClause.T * JLit.lpos) Seq.seq =
       Jeha_Common.seq_cartesian_product active_units (Seq.of_list [JLit.Left, JLit.Right])
-    val rn_rp_rules = Seq.of_list [simp_rewrite_negative_lits, simp_rewrite_positive_lits]
+    val all_disabled = Config.get ctxt Jeha_Common.disable_all
+    val _ = if all_disabled then writeln "ALL SIMPLIFICATIONS DISABLED!!!" else ()
+    fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K Seq.empty
+    val rn_rp_rules = Seq.append
+      (if_cfg Jeha_Common.rule_rewrite_negative_lits (Seq.single simp_rewrite_negative_lits))
+      (if_cfg Jeha_Common.rule_rewrite_positive_lits (Seq.single simp_rewrite_positive_lits))
     fun first_successful_rewrite c =
       let
         val green_targets : (JClause.T * JClause.full_pos) Seq.seq = Seq.map (pair c) (Seq.of_list (JClause.green_full_poss_of c))
@@ -979,14 +987,16 @@ fun forward_simplify ctxt cheap active given_clause =
         val rn_rp_rewrites : JClause.T Seq.seq =
           Jeha_Common.seq_cartesian_product rn_rp_rules unit_target_pairs
           |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target)
-        val ps_rewrites : JClause.T Seq.seq =
+        val ps_rewrites : JClause.T Seq.seq = if_cfg Jeha_Common.rule_positive_simplify_reflect (
           Jeha_Common.seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
-        val ns_rewrites : JClause.T Seq.seq =
+        )
+        val ns_rewrites : JClause.T Seq.seq = if_cfg Jeha_Common.rule_negative_simplify_reflect (
           Jeha_Common.seq_cartesian_product active_units_all_orientations (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (oriented_unit, target) => simp_negative_simplify_reflect ctxt oriented_unit target)
+        )
         val dd_dr_rewrites : JClause.T Seq.seq =
-            Seq.map_filter (fn f => f c) (Seq.of_list [simp_delete_duplicated_lits ctxt, simp_delete_resolved_lits ctxt])
+            Seq.map_filter (fn f => f c) (Seq.append (if_cfg Jeha_Common.rule_delete_duplicated_lits (Seq.single (simp_delete_duplicated_lits ctxt))) (if_cfg Jeha_Common.rule_delete_resolved_lits (Seq.single (simp_delete_resolved_lits ctxt))))
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
         Seq.empty
@@ -1067,21 +1077,24 @@ fun infer_clauses ctxt active given_clause =
       Jeha_Common.cartesian_product
         given_clause_lpos_cpos_pairs
         given_clause_lpos_cpos_pairs
+    val all_disabled = Config.get ctxt Jeha_Common.disable_all
+    val _ = if all_disabled then writeln "ALL DISABLED!!!!" else ()
+    fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K []
   in
-    maps (uncurry (infer_sup ctxt)) eq_target_pairs
+    (if_cfg Jeha_Common.rule_sup (maps (uncurry (infer_sup ctxt)) eq_target_pairs))
     (* ERes, EFact have already been performed for the active clauses *)
-    @ maps (infer_eres ctxt given_clause) given_clause_cposs
-    @ maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs
-    @ maps (infer_arg_cong ctxt given_clause) given_clause_cposs
-    @ maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs
-    @ maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
-    @ maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)
+    @ (if_cfg Jeha_Common.rule_e_res (maps (infer_eres ctxt given_clause) given_clause_cposs))
+    @ (if_cfg Jeha_Common.rule_e_fact (maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs))
+    @ (if_cfg Jeha_Common.rule_arg_cong (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
+    @ (if_cfg Jeha_Common.rule_bool_hoist (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_false_elim (maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs))
+    @ (if_cfg Jeha_Common.rule_bool_rw (maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_eq_hoist (maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_neq_hoist (maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_forall_hoist (maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_exists_hoist (maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_forall_rw (maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_exists_rw (maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
   end
 
 datatype step_result = Unsat | MaybeSat | Next 
