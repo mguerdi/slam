@@ -62,7 +62,7 @@ setup \<open> type_pat_setup \<close>
 
 ML \<open>
   (* probability of generating a constant *)
-  val prob_of_constant = 0.3
+  val prob_of_constant = (* 0.3 *) 0.0
   (* Precomputed, from the paper, presumably increasing the probability of
   boltzmann_index leads to smaller terms. Weaker effect when increasing the
   probability of boltzmann_lambda. *)
@@ -70,22 +70,35 @@ ML \<open>
   fun rescale r = (1.0 - prob_of_constant) * r + prob_of_constant
   fun boltzmann_constant r = r < prob_of_constant
   fun boltzmann_index r = r < rescale 0.35700035696434995;
-  fun boltzmann_lambda r = r < rescale 0.6 (* 0.6525813160382378 *);
+  fun boltzmann_lambda r = r < rescale (* 0.6 *) 0.6525813160382378;
   (* The probability p of de Bruijn index 0, generally Bound j has the
   probability (1-p)^j * p (geometric distribution) *)
-  fun boltzmann_leaf r = r < rescale 0.65 (* 0.7044190409261122 *);
+  fun boltzmann_leaf r = r < rescale (* 0.65 *) 0.7044190409261122;
 \<close>
 
 ML \<open>
-  (* Adds unused additional state to a generator. Allows us to reuse existing generators. *)
+  (* Adds unused additional state to a generator. Allows us to reuse existing
+  generators. *)
   val lift_gen : ('a, 's) SpecCheck_Gen_Types.gen_state -> ('a, 'b * 's) SpecCheck_Gen_Types.gen_state =
     fn gen => (fn (b, s) => let val (a, s) = gen s in (a, (b, s)) end)
+  type unif_state = (Proof.context * Type.tyenv * int)
+  val add_unif : (typ * typ) -> unif_state -> unif_state =
+    fn T_pair => fn (ctxt, typ_env, maxidx) =>
+      let
+        val (typ_env, maxidx) =
+          Sign.typ_unify
+            (Proof_Context.theory_of ctxt)
+            T_pair
+            (typ_env, maxidx)
+      in
+        (ctxt, typ_env, maxidx)
+      end
   (* Like gen but with unification state. *)
-  type 'a unif_gen = ('a, (Proof.context * typ list * Type.tyenv * int * typ) * SpecCheck_Random.rand) SpecCheck_Gen_Types.gen_state
+  type 'a unif_gen = ('a, unif_state * SpecCheck_Random.rand) SpecCheck_Gen_Types.gen_state
   val fresh_type_indexname : indexname unif_gen =
-    fn ((ctxt, Ts, typ_env, maxidx, T), s) =>
-      ((Name.aT, maxidx), ((ctxt, Ts, typ_env, maxidx + 1, T), s))
-  val defaultS : sort unif_gen = fn (s as ((ctxt, _, _, _, _), _)) =>
+    fn ((ctxt, typ_env, maxidx), s) =>
+      ((Name.aT, maxidx), ((ctxt, typ_env, maxidx + 1), s))
+  val defaultS : sort unif_gen = fn (s as ((ctxt, _, _), _)) =>
     (Sign.defaultS (Proof_Context.theory_of ctxt), s)
   val fresh_tvar : typ unif_gen =
     SpecCheck_Gen_Term.tvar
@@ -93,24 +106,50 @@ ML \<open>
       defaultS
   (* Each term generator guarantees that it generates a term whose type unifies
   with the type T in the type environment it returns (unless it fails). *)
-  (* FIXME: broken. We don't need to return Ts or T! But how? They depend on the state... *)
-  (*
-  fun bound ((_, [], _, _), _) = error "bound: not below lambda"
-    | bound ((ctxt, bT::bound_Ts, typ_env, maxidx, T), s) =
-        let val (r, s) = SpecCheck_Random.real_unit s in
+  fun term Ts T s =
+    let
+      val (r, s) = lift_gen (SpecCheck_Generator.range_real (0.0, 1.0)) s
+    in
+      if boltzmann_index r
+        then bound Ts T s
+      else if boltzmann_lambda r
+        then abs Ts T s
+      else app Ts T s
+    end
+  and bound [] _ _ = error "bound: not below lambda"
+    | bound (bT::bound_Ts) T (unif_s, rng_s) =
+        let val (r, rng_s) = SpecCheck_Random.real_unit rng_s in
           if boltzmann_index r
-            then
-              let
-                val (typ_env, maxidx) = Sign.typ_unify (Proof_Context.theory_of ctxt) (bT, T) (typ_env, maxidx)
-              in
-                (Bound 0, ((ctxt, bT::bound_Ts, typ_env, maxidx, T), s))
-              end
+            then (Bound 0, (add_unif (bT, T) unif_s, rng_s))
             else
-              (* FIXME: increase Bound, reset Ts *)
-              bound ((ctxt, bound_Ts, typ_env, maxidx, T), s)
+              SpecCheck_Generator.map
+                (fn Bound i => Bound (i + 1))
+                (bound bound_Ts T)
+                (unif_s, rng_s)
         end
-  *)
-  (* val abs : typ_unif_gen = *)
+  and abs Ts T s =
+    let
+      val (arg_T, s) = fresh_tvar s
+      val (return_T, s) = fresh_tvar s
+      val (unif_s, rng_s) = s
+      val s = ()
+      val unif_s = add_unif (arg_T --> return_T, T) unif_s
+    in
+      SpecCheck_Generator.map
+        (fn t => Abs (Name.uu_, arg_T, t))
+        (term (arg_T :: Ts) return_T)
+        (unif_s, rng_s)
+    end
+  and app Ts T s =
+    let
+      val (arg_T, s) = fresh_tvar s
+      val fun_T = arg_T --> T
+    in
+      SpecCheck_Generator.map
+        op$
+        (SpecCheck_Generator.zip (term Ts fun_T) (term Ts arg_T))
+        s
+    end
 \<close>
 
 ML \<open>
@@ -173,6 +212,13 @@ ML \<open>
         ((s, (typ_env, maxidx)) : SpecCheck_Random.rand * (Type.tyenv * int))
         : (SpecCheck_Random.rand * (Type.tyenv * int)) * term =
     let
+      val (t, ((_, typ_env, maxidx), s)) =
+        term binder_types typ ((ctxt, typ_env, maxidx), s)
+    in
+      ((s, (typ_env, maxidx)), t)
+    end
+
+    (* let
       val (r, s) = SpecCheck_Generator.range_real (0.0, 1.0) s
     in
       if boltzmann_constant r
@@ -212,7 +258,7 @@ ML \<open>
         in
           (state, function $ arg)
         end
-    end
+    end *)
 
   type boltzmann_config =
     { T : typ, free_names : string list, const_names : string list, min_size : int }
@@ -256,21 +302,22 @@ ML \<open>
 
 \<close>
 
-declare [[speccheck_num_counterexamples = 10]]
-declare [[speccheck_max_success = 10]]
+declare [[speccheck_num_counterexamples = 100]]
+declare [[speccheck_max_success = 100]]
 
 (* declare [[show_types]] *)
 
 ML \<open>
-  (* val check_term = SpecCheck.check (SpecCheck_Show.term @{context}) (boltzmann_term_gen_min_size 0) *)
-  val check_term =
+  val check_term = SpecCheck.check (SpecCheck_Show.term @{context}) boltzmann_term_gen
+  (* val check_term = SpecCheck.check (SpecCheck_Show.term @{context}) (boltzmann_term_gen_min_size 5) *)
+  (* val check_term =
     SpecCheck.check
       (SpecCheck_Show.term @{context})
       (
         SpecCheck_Generator.map
           (fn t => JTerm.ensure_lambda_under_q (HOLogic.all_const (body_type (fastype_of t)) $ t))
           (min_size_gen 5 (boltzmann_term_of_type_gen @{typ_pat "(?'a => bool)"}))
-      )
+      ) *)
   val ctxt = Proof_Context.set_mode Proof_Context.mode_schematic @{context}
   val _ = Lecker.test_group ctxt (SpecCheck_Random.new ()) [
     SpecCheck_Property.prop (K false) (* (is_some o try (Syntax.check_term ctxt)) *)
@@ -281,7 +328,7 @@ ML \<open>
 declare [[speccheck_num_counterexamples = 10]]
 declare [[speccheck_max_success = 10]]
 
-ML \<open>
+(* ML \<open>
   fun show_termpair ctxt =
     let val pretty_term = Syntax.pretty_term ctxt
     in SpecCheck_Show.zip pretty_term pretty_term end
@@ -322,6 +369,6 @@ ML \<open>
         | NONE => []))
         )
     |> Pretty.enum "\n" "[" "]"
-\<close>
+\<close> *)
 
 end
