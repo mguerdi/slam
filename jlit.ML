@@ -19,6 +19,8 @@ sig
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
   val kbo : T * T -> Jeha_Order.partial_order
+  val pretty_lit' : Proof.context -> T -> Pretty.T
+  val pretty_lit : Proof.context -> T -> string
 end;
 
 structure JLit : JLIT =
@@ -97,5 +99,8 @@ fun kbo (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
     then Jeha_Common.map_some rev_order (kbo (uv, st))
   (* same signs *)
   else Jeha_Order.mk_multiset_order_of_strict Jeha_Order.kbo ([s, t], [u, v])
+
+  fun pretty_lit' ctxt = Jeha_Common.pretty_term' ctxt o term_of
+  val pretty_lit = Pretty.string_of oo pretty_lit'
 
 end;

@@ -5,6 +5,7 @@ sig
   val trace_msg : Proof.context -> (unit -> string) -> unit
   val verbose_of : Proof.context -> Proof.context
   val pretty_term : Proof.context -> term -> string
+  val pretty_term' : Proof.context -> term -> Pretty.T
   val pretty_typ : Proof.context -> typ -> string
   val pretty_terms : Proof.context -> term list -> string
   val pretty_tyenv : Proof.context -> Type.tyenv -> string
@@ -100,14 +101,17 @@ fun verbose_of ctxt = config_put_many_bool ctxt
 and config_put_many_bool ctxt options =
   List.foldr (fn (option, ctxt) => Config.put option true ctxt) ctxt options
 
-fun pretty_term ctxt t = Syntax.pretty_term ctxt t |> Pretty.string_of
+fun pretty_term' ctxt t = Syntax.pretty_term ctxt t 
+val pretty_term = Pretty.string_of oo pretty_term'
 
-fun pretty_typ ctxt T = Syntax.pretty_typ ctxt T |> Pretty.string_of
+fun pretty_typ' ctxt T = Syntax.pretty_typ ctxt T
+val pretty_typ = Pretty.string_of oo pretty_typ'
 
-fun pretty_terms ctxt terms =
+fun pretty_terms' ctxt terms =
   terms
   |> map (Syntax.pretty_term ctxt)
-  |> Pretty.commas |> Pretty.block |> Pretty.string_of
+  |> Pretty.commas |> Pretty.block
+val pretty_terms = Pretty.string_of oo pretty_terms'
 
 fun pretty_helper aux env = env
   |> Vartab.dest
