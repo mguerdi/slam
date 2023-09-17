@@ -25,6 +25,8 @@ sig
         ('a * 'a -> partial_order) -> ('a list) * ('a list) -> partial_order
   val idxs_of_maximal_elements : ('a * 'a -> partial_order) -> 'a list -> (int * bool) list
   val is_maximal : ('a * 'a -> partial_order) -> bool -> 'a -> 'a list -> bool
+  val multiset_eq : ('a * 'a -> bool) -> ('a list * 'a list) -> bool
+  val multiset_is_greater_reference : ('a * 'a -> bool) -> ('a * 'a -> bool) -> ('a list * 'a list) -> bool
 end;
 
 structure Jeha_Order: JEHA_ORDER =
@@ -377,14 +379,41 @@ and tckbolex below_lam vb wb [] [] = (vb, wb, SOME EQUAL)
 
 val kbo = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term [])
 
+fun multiset_eq a_eq (m, n) = submultiset a_eq (m, n) andalso submultiset a_eq (n, m)
+
+fun multiset_is_greater_reference a_g a_eq (m, n) =
+  let
+    (* val a_eq = a_ord #> curry op= EQUAL *)
+    (* x - y *)
+    fun sub x y = fold (remove1 a_eq) y x
+  in
+    (* M = N *)
+    not (multiset_eq a_eq (m, n)) andalso
+    forall (fn x => exists (fn y => a_g (y, x)) (sub m n)) (sub n m)
+  end
+
 (* Baader and Nipkow - Term rewriting and all that, Lemma 2.5.6: For strict orders:
-    M > N iff. M \<noteq> N \<and> \<forall> m \<in> N-M. \<exists> m \<in> M-N. m > n *)
+    M > N iff. M \<noteq> N \<and> \<forall> m \<in> N-M. \<exists> m \<in> M-N. m > n
+M < N := N > M *)
 (* FIXME: test against a reference implementation *)
 fun mk_multiset_order_of_strict a_ord (m, n) =
+  if multiset_is_greater_reference (a_ord #> curry op= (SOME GREATER)) (a_ord #> curry op= (SOME EQUAL)) (m, n)
+    then SOME GREATER
+  (* NOTE: The next line is not the same as the line below it! *)
+  (*      multiset_is_greater_reference (a_ord #> curry op= (SOME LESS))    (a_ord #> curry op= (SOME EQUAL)) (m, n) *)
+  else if multiset_is_greater_reference (a_ord #> curry op= (SOME GREATER)) (a_ord #> curry op= (SOME EQUAL)) (n, m)
+    then SOME LESS
+  else if multiset_eq (a_ord #> curry op= (SOME EQUAL)) (m, n)
+    then SOME EQUAL
+  else NONE
+
+(* FIXME: broken, doesn't even consder the case where an element appears twice *)
+(*
   let
     fun a_eq (x, y) = SOME EQUAL = a_ord (x, y)
     val m_minus_n = fold (remove1 a_eq) n m
     val n_minus_m = fold (remove1 a_eq) m n
+    (* FIXME: what if empty? *)
     val for_m_exists = map (K false) m
     val for_n_exists = map (K false) n
   in
@@ -413,6 +442,7 @@ fun mk_multiset_order_of_strict a_ord (m, n) =
           else NONE
         end
   end
+*)
 
 (* returns the indices of the maximal elements, marked as strict / non-strict by true / false resp. *)
 fun idxs_of_maximal_elements a_ord xs =
