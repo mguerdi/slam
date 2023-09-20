@@ -492,7 +492,7 @@ fun is_maximal a_ord strict x xs =
             (* y is strictly greater than x, so x can't be maximal *)
             SOME GREATER => (false, occurrences)
           | SOME EQUAL => (true, occurrences + 1)
-          | SOME LESS => (true, occurrences + 1)
+          | SOME LESS => (true, occurrences)
           | NONE => (true, occurrences)
           (* early abort *)
           else (false, occurrences))
