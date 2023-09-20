@@ -18,8 +18,8 @@ structure Random = SpecCheck_Random
 ML_file \<open>../jeha_common.ML\<close>
 ML_file \<open>../jterm.ML\<close>
 ML_file \<open>../clause_id.ML\<close>
-ML_file \<open>../jeha_order.ML\<close>
 ML_file \<open>../jeha_order_reference.ML\<close>
+ML_file \<open>../jeha_order.ML\<close>
 ML_file \<open>../jlit.ML\<close>
 ML_file \<open>../jclause_pos.ML\<close>
 ML_file \<open>../jeha_log.ML\<close>
@@ -171,12 +171,14 @@ ML_command \<open>
   check_dynamic @{context} "ALL s t. not (type_checks s) orelse not (type_checks t) orelse is_some (Unify.matcher ctxt [s] [t])"
 \<close>
 
+declare [[speccheck_max_success = 10000000]]
 ML_command \<open>
-check_dynamic @{context} "ALL s t. type_checks t orelse type_checks s orelse (Jeha_Order.kbo (s, t) = Jeha_Order_Reference.kbo (s, t))"
+check_dynamic @{context} "ALL s t. type_checks t orelse type_checks s orelse (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
 \<close>
 
+declare [[speccheck_max_success = 10]]
 ML_command \<open>
-check_dynamic @{context} "ALL s t. (Jeha_Order.kbo (s, t) = Jeha_Order_Reference.kbo (s, t))"
+check_dynamic @{context} "ALL s t. (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
 \<close>
 
 (*
@@ -302,11 +304,182 @@ check_dynamic @{context} "ALL t. loose_bvar (t, 0)"
 
 (* strictness of kbo *)
 ML_command \<open>
-check_dynamic @{context} "ALL s t. Jeha_Common.map_some rev_order (Jeha_Order.kbo (t, s)) = Jeha_Order.kbo (s, t)"
+check_dynamic @{context} "ALL s t. Jeha_Common.map_some rev_order (Jeha_Order.kbo_fast (t, s)) = Jeha_Order.kbo_fast (s, t)"
 \<close>
 
 ML_command \<open>
-check_dynamic @{context} "ALL s t. (SOME EQUAL = Jeha_Order.kbo (s, t)) = (s aconv t)"
+check_dynamic @{context} "ALL s t. (SOME EQUAL = Jeha_Order.kbo_fast (s, t)) = (s aconv t)"
+\<close>
+
+(* literals *)
+ML \<open>
+  datatype 'a with_bot = Bot | It of 'a
+  fun bot_ord _ (Bot, Bot) = SOME EQUAL
+    | bot_ord _ (Bot, _) = SOME LESS
+    | bot_ord _ (_, Bot) = SOME GREATER
+    | bot_ord cmp (It s, It t) = cmp (s, t)
+  fun bot_eq cmp (x, y) = (SOME EQUAL) = bot_ord ((fn b => if b then SOME EQUAL else NONE) o cmp) (x, y)
+  fun ms_of_lit (s, t, true) = [[It s], [It t]]
+    | ms_of_lit (s, t, false) = [[It s, Bot], [It t, Bot]]
+  val ms_lit_eq = apply2 ms_of_lit #> (Jeha_Order.multiset_eq (Jeha_Order.multiset_eq (bot_eq (op aconv))))
+  val ms_lit_g =
+    apply2 ms_of_lit
+    #>
+    Jeha_Order.multiset_is_greater_reference
+      (Jeha_Order.multiset_is_greater_reference
+        (bot_ord Jeha_Order.kbo_fast #> curry op= (SOME GREATER))
+        (bot_eq (op aconv)))
+      (Jeha_Order.multiset_eq (bot_eq (op aconv)))
+  fun are_equal_lit_ords (l, r) =
+    case JLit.kbo (l, r) of
+      SOME LESS => ms_lit_g (r, l)
+    | SOME GREATER => ms_lit_g (l, r)
+    | SOME EQUAL => ms_lit_eq (l, r)
+    | NONE => true (* FIXME *)
+\<close>
+
+ML \<open>
+  val ms_lit_generic_eq = apply2 ms_of_lit #> (Jeha_Order.multiset_eq (Jeha_Order.multiset_eq (bot_eq op=)))
+  fun ms_lit_generic_g cmp =
+    apply2 ms_of_lit
+    #>
+    Jeha_Order.multiset_is_greater_reference
+      (Jeha_Order.multiset_is_greater_reference
+        (bot_ord cmp #> curry op= (SOME GREATER))
+        (bot_eq op=))
+      (Jeha_Order.multiset_eq (bot_eq op=))
+  fun are_equal_lit_generic_ords cmp (l, r) =
+    case JLit.kbo_generic cmp (l, r) of
+      SOME LESS => ms_lit_generic_g cmp (r, l)
+    | SOME GREATER => ms_lit_generic_g cmp (l, r)
+    | SOME EQUAL => ms_lit_generic_eq (l, r)
+    | NONE => true (* FIXME *)
+  val are_equal_lit_int_ords = are_equal_lit_generic_ords (SOME o int_ord)
+\<close>
+
+declare [[speccheck_max_success = 1000000]]
+ML_command \<open>
+  val small_int_gen = Gen.range_int (~100, 100)
+  val lit_int_gen =
+    Gen.zip small_int_gen small_int_gen
+    |> Gen.zip (Gen.bernoulli 0.5)
+    |> Gen.map (fn (b, (s, t)) => (s, t, b))
+  val show_lit_int = @{make_string} #> Pretty.str
+  val check_lit_int_pair = check (Show.zip show_lit_int show_lit_int) (Gen.zip lit_int_gen lit_int_gen)
+  val lit_test = Lecker.test_group @{context} (Random.new ()) [
+    Prop.prop (are_equal_lit_int_ords) |> check_lit_int_pair "some lits"
+  ]
+\<close>
+
+declare [[speccheck_max_success = 100000]]
+ML \<open>
+  fun term_num_args_gen nv ni weights num_args_gen h i =
+    Gen.zip (Gen.aterm' (Gen.nonneg nv) (Gen.nonneg ni) weights) (num_args_gen h i)
+  fun term_gen ctxt nv ni weights num_args_gen =
+    let val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
+    in
+      Gen.term_tree (term_num_args_gen nv ni weights num_args_gen)
+      |> Gen.map (try (singleton (Variable.polymorphic ctxt') o Syntax.check_term ctxt'))
+      |> Gen.filter is_some
+      |> Gen.map the
+    end
+  fun term_gen' ctxt nv ni weights max_h max_args =
+    term_gen ctxt nv ni weights (num_args_gen max_h max_args)
+  val term_gen_set = term_gen' @{context} 2 2 (1, 1, 1, 0) 4 4
+  val tpair_gen = Gen.zip term_gen_set term_gen_set
+  val eq_gen = Gen.map HOLogic.mk_eq tpair_gen
+  val lit_gen =
+    eq_gen
+    |> Gen.zip (Gen.bernoulli 0.5)
+    |> Gen.map (fn (b, t) => (if b then I else HOLogic.mk_not) t)
+    |> Gen.map JLit.of_term
+  (* val show_lit = JLit.pretty_lit' @{context} *)
+  val show_lit = @{make_string} #> Pretty.str
+  val check_lit = check show_lit lit_gen
+  val check_lit_pair = check (Show.zip show_lit show_lit) (Gen.zip lit_gen lit_gen)
+  val lit_test = Lecker.test_group @{context} (Random.new ()) [
+    Prop.prop (are_equal_lit_ords) |> check_lit_pair "some lits"
+  ]
+\<close>
+
+ML \<open>
+  val bad_lits =
+    apply2
+      JLit.of_term
+      (@{term_pat "(a :: ?'a) = a"}, @{term_pat "(b :: ?'a) = ?c"})
+  val mss = apply2 ms_of_lit bad_lits
+  val b = ms_lit_g bad_lits
+  val b' = ms_lit_g (swap bad_lits)
+  val b'' = JLit.kbo bad_lits
+\<close>
+
+declare [[speccheck_max_success = 10]]
+(* multiset order *)
+
+ML \<open>
+  val int_list_eq = Jeha_Order.multiset_eq op=
+  val int_list_list_eq = Jeha_Order.multiset_eq int_list_eq
+  val int_list_g = Jeha_Order.multiset_is_greater_reference op> op=
+  val int_list_list_g = Jeha_Order.multiset_is_greater_reference int_list_g int_list_eq
+  val int_list_ord = Jeha_Order.mk_multiset_order_of_strict (SOME o int_ord)
+  val int_list_list_ord = Jeha_Order.mk_multiset_order_of_strict int_list_ord 
+  fun are_equal (l, r) =
+    case int_list_list_ord (l, r) of
+      SOME LESS => int_list_list_g (r, l)
+    | SOME GREATER => int_list_list_g (l, r)
+    | SOME EQUAL => int_list_list_eq (l, r)
+    | NONE => (writeln "should be total"; false)
+  val failure = ([[]], [])
+  val b = int_list_list_g failure
+  val b' = int_list_list_ord failure
+  (* val non_total = ([[], [], [2124004389]], [[1798102523], [], []]) *)
+  val non_total = ([[], [2]], [[], [1]])
+  val bad = int_list_list_ord non_total
+  val also_bad = int_list_list_ord (swap non_total)
+  val g = int_list_list_g non_total
+  val g' = int_list_list_g (swap non_total)
+  val empty_less = int_list_ord ([], [1])
+  val empty_less' = int_list_ord ([1], [])
+  val int_list_g_not_total = ([3, 2], [10])
+  val dzz = int_list_g int_list_g_not_total
+  val dzz' = int_list_g (swap int_list_g_not_total)
+  fun sub x y = fold (remove1 op=) y x
+  val fa = forall (fn x => exists (fn y => op> (y, x)) [10]) [2, 3]
+\<close>
+
+ML \<open>
+  val empty_vs_single = int_list_ord ([], [1])
+  val single_vs_empty = int_list_ord ([1], [])
+\<close>
+
+(* BAD: *)
+declare [[speccheck_max_success = 100000]]
+ML_command \<open>
+check_dynamic @{context} "ALL l r. NONE <> int_list_list_ord (l, r)"
+\<close>
+
+declare [[speccheck_max_success = 10000]]
+ML_command \<open>
+check_dynamic @{context} "ALL l r. (int_list_g (l, r) = not (int_list_g (r, l))) orelse int_list_eq (l, r)"
+\<close>
+
+declare [[speccheck_max_success = 10000]]
+ML_command \<open>
+check_dynamic @{context} "ALL l r. (int_list_list_g (l, r) = not (int_list_list_g (r, l))) orelse int_list_list_eq (l, r)"
+\<close>
+
+declare [[speccheck_max_success = 1000000]]
+ML_command \<open>
+check_dynamic @{context} "ALL l r. NONE <> int_list_ord (l, r)"
+\<close>
+
+(* ML_command \<open>
+check_dynamic @{context} "ALL l r. (int_list ord 
+\<close> *)
+
+declare [[speccheck_max_success = 10]]
+ML_command \<open>
+check_dynamic @{context} "ALL l r. are_equal (l, r)"
 \<close>
 
 ML \<open>

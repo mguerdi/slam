@@ -21,6 +21,7 @@ sig
   val no_pos_balances : var_balance -> bool
   val no_neg_balances : var_balance -> bool
   val kbo : term * term -> partial_order
+  val kbo_fast : term * term -> partial_order
   val mk_multiset_order_of_strict :
         ('a * 'a -> partial_order) -> ('a list) * ('a list) -> partial_order
   val idxs_of_maximal_elements : ('a * 'a -> partial_order) -> 'a list -> (int * bool) list
@@ -377,7 +378,7 @@ and tckbolex below_lam vb wb [] [] = (vb, wb, SOME EQUAL)
             end
       end
 
-(* val kbo = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term []) *)
+val kbo_fast = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term [])
 val kbo = Jeha_Order_Reference.kbo
 
 fun multiset_eq a_eq (m, n) = submultiset a_eq (m, n) andalso submultiset a_eq (n, m)
