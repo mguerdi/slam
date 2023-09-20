@@ -2,6 +2,7 @@
 
 signature JEHA_ORDER_REFERENCE =
 sig
+  type partial_order = order option
   (* copy pasted *)
   type weight = int * int
   val plus_weight : weight -> weight -> weight
@@ -30,11 +31,13 @@ sig
   val lex_greater : (''a * ''a -> bool) -> (''a list * ''a list) -> bool
   val fo_kbo_greater : (fo_term * fo_term) -> bool
 
-  val kbo : (term * term) -> Jeha_Order.partial_order
+  val kbo : (term * term) -> partial_order
 end;
 
 structure Jeha_Order_Reference: JEHA_ORDER_REFERENCE =
 struct
+
+type partial_order = order option
 
 (* copy pasted *)
 infix 6 +++

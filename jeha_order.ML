@@ -377,7 +377,8 @@ and tckbolex below_lam vb wb [] [] = (vb, wb, SOME EQUAL)
             end
       end
 
-val kbo = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term [])
+(* val kbo = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term []) *)
+val kbo = Jeha_Order_Reference.kbo
 
 fun multiset_eq a_eq (m, n) = submultiset a_eq (m, n) andalso submultiset a_eq (n, m)
 
