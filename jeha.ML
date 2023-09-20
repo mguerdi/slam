@@ -1079,22 +1079,24 @@ fun infer_clauses ctxt active given_clause =
         given_clause_lpos_cpos_pairs
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
     val _ = if all_disabled then writeln "ALL DISABLED!!!!" else ()
-    fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K []
+    (* a bit contrived to make it lazy *)
+    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else []
   in
-    (if_cfg Jeha_Common.rule_sup (maps (uncurry (infer_sup ctxt)) eq_target_pairs))
+    []
+    @ (if_cfg Jeha_Common.rule_sup (fn _ => (maps (uncurry (infer_sup ctxt)) eq_target_pairs)))
     (* ERes, EFact have already been performed for the active clauses *)
-    @ (if_cfg Jeha_Common.rule_e_res (maps (infer_eres ctxt given_clause) given_clause_cposs))
-    @ (if_cfg Jeha_Common.rule_e_fact (maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs))
-    @ (if_cfg Jeha_Common.rule_arg_cong (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
-    @ (if_cfg Jeha_Common.rule_bool_hoist (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
-    @ (if_cfg Jeha_Common.rule_false_elim (maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs))
-    @ (if_cfg Jeha_Common.rule_bool_rw (maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
-    @ (if_cfg Jeha_Common.rule_eq_hoist (maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
-    @ (if_cfg Jeha_Common.rule_neq_hoist (maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
-    @ (if_cfg Jeha_Common.rule_forall_hoist (maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
-    @ (if_cfg Jeha_Common.rule_exists_hoist (maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
-    @ (if_cfg Jeha_Common.rule_forall_rw (maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
-    @ (if_cfg Jeha_Common.rule_exists_rw (maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+    @ (if_cfg Jeha_Common.rule_e_res (fn _ => (maps (infer_eres ctxt given_clause) given_clause_cposs)))
+    @ (if_cfg Jeha_Common.rule_e_fact (fn _ => (maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs)))
+    @ (if_cfg Jeha_Common.rule_arg_cong (fn _ => (maps (infer_arg_cong ctxt given_clause) given_clause_cposs)))
+    @ (if_cfg Jeha_Common.rule_bool_hoist (fn _ => (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    @ (if_cfg Jeha_Common.rule_false_elim (fn _ => (maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs)))
+    @ (if_cfg Jeha_Common.rule_bool_rw (fn _ => (maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    @ (if_cfg Jeha_Common.rule_eq_hoist (fn _ => (maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    @ (if_cfg Jeha_Common.rule_neq_hoist (fn _ => (maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    @ (if_cfg Jeha_Common.rule_forall_hoist (fn _ => (maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    @ (if_cfg Jeha_Common.rule_exists_hoist (fn _ => (maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    @ (if_cfg Jeha_Common.rule_forall_rw (fn _ => (maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    @ (if_cfg Jeha_Common.rule_exists_rw (fn _ => (maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause))))
   end
 
 datatype step_result = Unsat | MaybeSat | Next 
