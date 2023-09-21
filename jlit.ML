@@ -51,7 +51,7 @@ fun of_term t =
 
 fun aconv ((s, t, b), (s', t', b')) =
   b = b' andalso
-    (Term.aconv (s, s') andalso Term.aconv (t, t') orelse Term.aconv (s, t') andalso Term.aconv (t, t'))
+    (Term.aconv (s, s') andalso Term.aconv (t, t') orelse Term.aconv (s, t') andalso Term.aconv (t, s'))
 
 fun swap (s, t, b) = (t, s, b)
 
