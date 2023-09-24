@@ -3,6 +3,8 @@ signature JEHA_COMMON =
 sig
   val trace : bool Config.T
   val trace_msg : Proof.context -> (unit -> string) -> unit
+  val term_pat_setup : theory -> theory
+  val type_pat_setup : theory -> theory
   val verbose_of : Proof.context -> Proof.context
   val pretty_term : Proof.context -> term -> string
   val pretty_term' : Proof.context -> term -> Pretty.T
@@ -14,6 +16,10 @@ sig
   val map_some : ('a -> 'b) -> 'a option -> 'b option
   val seq_cartesian_product : 'a Seq.seq -> 'b Seq.seq -> ('a * 'b) Seq.seq
   val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
+  (* Config option to turn smashing unifiers off. The incomplete unifiers are
+  discarded! *)
+  val disable_smash_unifiers : bool Config.T
+  val max_number_of_steps : int Config.T
   (* Config options to turn rules on and off. *)
   val rule_sup : bool Config.T
   val rule_fluid_sup : bool Config.T
@@ -51,6 +57,37 @@ end
 structure Jeha_Common : JEHA_COMMON =
 struct
 
+(* From the cookbook. Use
+
+setup \<open> Jeha_Common.term_pat_setup \<close>
+
+setup \<open> Jeha_Common.type_pat_setup \<close>
+
+in .thy files. *)
+val term_pat_setup =
+let
+  val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
+
+  fun term_pat (ctxt, str) =
+    str |> Proof_Context.read_term_pattern ctxt |> ML_Syntax.print_term |> ML_Syntax.atomic
+in
+  ML_Antiquotation.inline @{binding "term_pat"} (parser >> term_pat)
+end
+
+val type_pat_setup =
+let
+  val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
+
+  fun typ_pat (ctxt, str) =
+    let
+      val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
+    in
+      str |> Syntax.read_typ ctxt' |> ML_Syntax.print_typ |> ML_Syntax.atomic
+    end
+in
+  ML_Antiquotation.inline @{binding "typ_pat"} (parser >> typ_pat)
+end
+
 (* for tracing *)
 fun I x = x
 
@@ -58,6 +95,10 @@ fun I x = x
 val trace = Attrib.setup_config_bool \<^binding>\<open>jeha_trace\<close> (K false)
 val verbose = Attrib.setup_config_bool \<^binding>\<open>jeha_verbose\<close> (K true)
 fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
+
+val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_smash_unifiers\<close> (K false)
+(* FIXME: remove or better default *)
+val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>jeha_max_number_of_steps\<close> (K 300)
 
 (* NOTE: The rules aren't actually all turned off unless disable_all is set. *)
 val rule_default = false

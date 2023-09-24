@@ -872,6 +872,7 @@ fun impl_forall_exists_hoist is_forall ctxt c u_pos =
   let
     val maxidx = JClause.maxidx c
     val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt))
+    (* FIXME: use variable name from the quantifiers Abs. *)
     val fresh_x = Var (("x", maxidx + 1), fresh_typ)
     val fresh_predicate = Var (("y_faexhoist", maxidx + 1), fresh_typ --> @{typ bool})
 
@@ -932,7 +933,7 @@ fun impl_infer_forall_exists_rw is_forall ctxt clause u_pos =
     val pattern = quantifier $ fresh_predicate
   in
       impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt clause u_pos pattern false insert_for_u NONE
-      |> map (fn (unifier, clause) => clause |> JClause.set_origin (
+      |> map (fn (unifier, c) => c |> JClause.set_origin (
           (if is_forall then Jeha_Log.ForallRw else Jeha_Log.ExistsRw)
             { premise = JClause.id clause, subterm = u_pos, substitution = unifier }))
   end)
@@ -1209,7 +1210,7 @@ fun try_saturate context prems =
       Runtime.exn_trace (fn () =>
         given_clause_loop
           true
-          { context = context, countdown = 300, passive = (init_passive_set clauses), active = [], archive = [] }
+          { context = context, countdown = Config.get context Jeha_Common.max_number_of_steps , passive = (init_passive_set clauses), active = [], archive = [] }
       )
   in
     (result, final_state)
