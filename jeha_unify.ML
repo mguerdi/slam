@@ -21,9 +21,10 @@ fun give_to_undefined t =
   let
     val T = fastype_of t handle TERM e => (writeln ("BIG ERROR (TERM)" ^ @{make_string} t); raise TERM e)
   in
-    (* FIXME: there is a function with this type, maybe better than undefined *)
-    Const (@{const_name undefined}, T --> @{typ unit}) $ t
-      
+    (* FIXME: there might be a better approach *)
+    (* use dummyT instead of unit to depend on less of HOL *)
+    Const (@{const_name undefined}, T --> dummyT) $ t
+
   end
 
 fun silence_context ctxt =
