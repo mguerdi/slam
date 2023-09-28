@@ -8,13 +8,13 @@ Metis example featuring message authentication.
 section \<open>Metis Example Featuring Message Authentication\<close>
 
 theory Message
-imports Main
+imports Main "../jeha"
 begin
 
-declare [[metis_new_skolem]]
+declare [[jeha_trace]]
 
 lemma strange_Un_eq [simp]: "A \<union> (B \<union> A) = B \<union> A"
-by (metis Un_commute Un_left_absorb)
+by (jeha Un_commute Un_left_absorb)
 
 type_synonym key = nat
 
@@ -25,7 +25,7 @@ consts
 specification (invKey)
   invKey [simp]: "invKey (invKey K) = K"
   invKey_symmetric: "all_symmetric --> invKey = id"
-by (metis id_apply)
+by (jeha id_apply)
 
 
 text\<open>The inverse of a symmetric key is itself; that of a public key
@@ -78,26 +78,26 @@ inductive_set
 lemma parts_mono: "G \<subseteq> H ==> parts(G) \<subseteq> parts(H)"
 apply auto
 apply (erule parts.induct)
-   apply (metis parts.Inj rev_subsetD)
-  apply (metis parts.Fst)
- apply (metis parts.Snd)
-by (metis parts.Body)
+   apply (jeha parts.Inj rev_subsetD)
+  apply (jeha parts.Fst)
+ apply (jeha parts.Snd)
+by (jeha parts.Body)
 
 text\<open>Equations hold because constructors are injective.\<close>
 lemma Friend_image_eq [simp]: "(Friend x \<in> Friend`A) = (x\<in>A)"
-by (metis agent.inject image_iff)
+by (jeha agent.inject image_iff)
 
 lemma Key_image_eq [simp]: "(Key x \<in> Key`A) = (x \<in> A)"
-by (metis image_iff msg.inject(4))
+by (jeha image_iff msg.inject(4))
 
 lemma Nonce_Key_image_eq [simp]: "Nonce x \<notin> Key`A"
-by (metis image_iff msg.distinct(23))
+by (jeha image_iff msg.distinct(23))
 
 
 subsubsection\<open>Inverse of keys\<close>
 
 lemma invKey_eq [simp]: "(invKey K = invKey K') = (K = K')"
-by (metis invKey)
+by (jeha invKey)
 
 
 subsection\<open>keysFor operator\<close>
@@ -198,7 +198,7 @@ done
 
 lemma parts_insert2:
      "parts (insert X (insert Y H)) = parts {X} \<union> parts {Y} \<union> parts H"
-by (metis Un_commute Un_empty_left Un_empty_right Un_insert_left Un_insert_right parts_Un)
+by (jeha Un_commute Un_empty_left Un_empty_right Un_insert_left Un_insert_right parts_Un)
 
 
 lemma parts_UN_subset1: "(\<Union>x\<in>A. parts(H x)) \<subseteq> parts(\<Union>x\<in>A. H x)"
@@ -234,15 +234,15 @@ by blast
 
 lemma parts_subset_iff [simp]: "(parts G \<subseteq> parts H) = (G \<subseteq> parts H)"
 apply (rule iffI)
-apply (metis Un_absorb1 Un_subset_iff parts_Un parts_increasing)
-apply (metis parts_idem parts_mono)
+apply (jeha Un_absorb1 Un_subset_iff parts_Un parts_increasing)
+apply (jeha parts_idem parts_mono)
 done
 
 lemma parts_trans: "[| X\<in> parts G;  G \<subseteq> parts H |] ==> X\<in> parts H"
 by (blast dest: parts_mono)
 
 lemma parts_cut: "[|Y\<in> parts (insert X G);  X\<in> parts H|] ==> Y\<in> parts(G \<union> H)"
-by (metis (no_types) Un_insert_left Un_insert_right insert_absorb le_supE
+by (jeha (no_types) Un_insert_left Un_insert_right insert_absorb le_supE
           parts_Un parts_idem parts_increasing parts_trans)
 
 subsubsection\<open>Rewrite rules for pulling out atomic messages\<close>
@@ -306,8 +306,8 @@ done
 lemma msg_Nonce_supply: "\<exists>N. \<forall>n. N\<le>n --> Nonce n \<notin> parts {msg}"
 apply (induct_tac "msg")
 apply (simp_all add: parts_insert2)
-apply (metis Suc_n_not_le_n)
-apply (metis le_trans linorder_linear)
+apply (jeha Suc_n_not_le_n)
+apply (jeha le_trans linorder_linear)
 done
 
 subsection\<open>Inductive relation "analz"\<close>
@@ -355,8 +355,8 @@ lemmas not_parts_not_analz = analz_subset_parts [THEN contra_subsetD]
 
 lemma parts_analz [simp]: "parts (analz H) = parts H"
 apply (rule equalityI)
-apply (metis analz_subset_parts parts_subset_iff)
-apply (metis analz_increasing parts_mono)
+apply (jeha analz_subset_parts parts_subset_iff)
+apply (jeha analz_increasing parts_mono)
 done
 
 
@@ -507,7 +507,7 @@ by (drule analz_mono, blast)
 declare analz_trans[intro]
 
 lemma analz_cut: "[| Y\<in> analz (insert X H);  X\<in> analz H |] ==> Y\<in> analz H"
-by (metis analz_idem analz_increasing analz_mono insert_absorb insert_mono insert_subset)
+by (jeha analz_idem analz_increasing analz_mono insert_absorb insert_mono insert_subset)
 
 text\<open>This rewrite rule helps in the simplification of messages that involve
   the forwarding of unknown components (X).  Without it, removing occurrences
@@ -522,7 +522,7 @@ lemma analz_subset_cong:
      "[| analz G \<subseteq> analz G'; analz H \<subseteq> analz H' |]
       ==> analz (G \<union> H) \<subseteq> analz (G' \<union> H')"
 apply simp
-apply (metis Un_absorb2 Un_commute Un_subset_iff Un_upper1 Un_upper2 analz_mono)
+apply (jeha Un_absorb2 Un_commute Un_subset_iff Un_upper1 Un_upper2 analz_mono)
 done
 
 
@@ -595,7 +595,7 @@ lemma synth_Un: "synth(G) \<union> synth(H) \<subseteq> synth(G \<union> H)"
 by (intro Un_least synth_mono Un_upper1 Un_upper2)
 
 lemma synth_insert: "insert X (synth H) \<subseteq> synth(insert X H)"
-by (metis insert_iff insert_subset subset_insertI synth.Inj synth_mono)
+by (jeha insert_iff insert_subset subset_insertI synth.Inj synth_mono)
 
 subsubsection\<open>Idempotence and transitivity\<close>
 
@@ -615,7 +615,7 @@ lemma synth_trans: "[| X\<in> synth G;  G \<subseteq> synth H |] ==> X\<in> synt
 by (drule synth_mono, blast)
 
 lemma synth_cut: "[| Y\<in> synth (insert X H);  X\<in> synth H |] ==> Y\<in> synth H"
-by (metis insert_absorb insert_mono insert_subset synth_idem synth_increasing synth_mono)
+by (jeha insert_absorb insert_mono insert_subset synth_idem synth_increasing synth_mono)
 
 lemma Agent_synth [simp]: "Agent A \<in> synth H"
 by blast
@@ -645,17 +645,17 @@ lemma parts_synth [simp]: "parts (synth H) = parts H \<union> synth H"
 apply (rule equalityI)
 apply (rule subsetI)
 apply (erule parts.induct)
-apply (metis UnCI)
-apply (metis MPair_synth UnCI UnE insert_absorb insert_subset parts.Fst parts_increasing)
-apply (metis MPair_synth UnCI UnE insert_absorb insert_subset parts.Snd parts_increasing)
-apply (metis Body Crypt_synth UnCI UnE insert_absorb insert_subset parts_increasing)
-apply (metis Un_subset_iff parts_increasing parts_mono synth_increasing)
+apply (jeha UnCI)
+apply (jeha MPair_synth UnCI UnE insert_absorb insert_subset parts.Fst parts_increasing)
+apply (jeha MPair_synth UnCI UnE insert_absorb insert_subset parts.Snd parts_increasing)
+apply (jeha Body Crypt_synth UnCI UnE insert_absorb insert_subset parts_increasing)
+apply (jeha Un_subset_iff parts_increasing parts_mono synth_increasing)
 done
 
 lemma analz_analz_Un [simp]: "analz (analz G \<union> H) = analz (G \<union> H)"
 apply (rule equalityI)
-apply (metis analz_idem analz_subset_cong order_eq_refl)
-apply (metis analz_increasing analz_subset_cong order_eq_refl)
+apply (jeha analz_idem analz_subset_cong order_eq_refl)
+apply (jeha analz_increasing analz_subset_cong order_eq_refl)
 done
 
 declare analz_mono [intro] analz.Fst [intro] analz.Snd [intro] Un_least [intro]
@@ -664,20 +664,20 @@ lemma analz_synth_Un [simp]: "analz (synth G \<union> H) = analz (G \<union> H) 
 apply (rule equalityI)
 apply (rule subsetI)
 apply (erule analz.induct)
-apply (metis UnCI UnE Un_commute analz.Inj)
-apply (metis MPair_synth UnCI UnE Un_commute analz.Fst analz.Inj)
-apply (metis MPair_synth UnCI UnE Un_commute analz.Inj analz.Snd)
+apply (jeha UnCI UnE Un_commute analz.Inj)
+apply (jeha MPair_synth UnCI UnE Un_commute analz.Fst analz.Inj)
+apply (jeha MPair_synth UnCI UnE Un_commute analz.Inj analz.Snd)
 apply (blast intro: analz.Decrypt)
 apply blast
 done
 
 lemma analz_synth [simp]: "analz (synth H) = analz H \<union> synth H"
 proof -
-  have "\<forall>x\<^sub>2 x\<^sub>1. synth x\<^sub>1 \<union> analz (x\<^sub>1 \<union> x\<^sub>2) = analz (synth x\<^sub>1 \<union> x\<^sub>2)" by (metis Un_commute analz_synth_Un)
-  hence "\<forall>x\<^sub>1. synth x\<^sub>1 \<union> analz x\<^sub>1 = analz (synth x\<^sub>1 \<union> {})" by (metis Un_empty_right)
-  hence "\<forall>x\<^sub>1. synth x\<^sub>1 \<union> analz x\<^sub>1 = analz (synth x\<^sub>1)" by (metis Un_empty_right)
-  hence "\<forall>x\<^sub>1. analz x\<^sub>1 \<union> synth x\<^sub>1 = analz (synth x\<^sub>1)" by (metis Un_commute)
-  thus "analz (synth H) = analz H \<union> synth H" by metis
+  have "\<forall>x\<^sub>2 x\<^sub>1. synth x\<^sub>1 \<union> analz (x\<^sub>1 \<union> x\<^sub>2) = analz (synth x\<^sub>1 \<union> x\<^sub>2)" by (jeha Un_commute analz_synth_Un)
+  hence "\<forall>x\<^sub>1. synth x\<^sub>1 \<union> analz x\<^sub>1 = analz (synth x\<^sub>1 \<union> {})" by (jeha Un_empty_right)
+  hence "\<forall>x\<^sub>1. synth x\<^sub>1 \<union> analz x\<^sub>1 = analz (synth x\<^sub>1)" by (jeha Un_empty_right)
+  hence "\<forall>x\<^sub>1. analz x\<^sub>1 \<union> synth x\<^sub>1 = analz (synth x\<^sub>1)" by (jeha Un_commute)
+  thus "analz (synth H) = analz H \<union> synth H" by jeha
 qed
 
 
@@ -687,10 +687,10 @@ lemma parts_insert_subset_Un: "X \<in> G ==> parts(insert X H) \<subseteq> parts
 proof -
   assume "X \<in> G"
   hence "\<forall>x\<^sub>1. G \<subseteq> x\<^sub>1 \<longrightarrow> X \<in> x\<^sub>1 " by auto
-  hence "\<forall>x\<^sub>1. X \<in> G \<union> x\<^sub>1" by (metis Un_upper1)
-  hence "insert X H \<subseteq> G \<union> H" by (metis Un_upper2 insert_subset)
-  hence "parts (insert X H) \<subseteq> parts (G \<union> H)" by (metis parts_mono)
-  thus "parts (insert X H) \<subseteq> parts G \<union> parts H" by (metis parts_Un)
+  hence "\<forall>x\<^sub>1. X \<in> G \<union> x\<^sub>1" by (jeha Un_upper1)
+  hence "insert X H \<subseteq> G \<union> H" by (jeha Un_upper2 insert_subset)
+  hence "parts (insert X H) \<subseteq> parts (G \<union> H)" by (jeha parts_mono)
+  thus "parts (insert X H) \<subseteq> parts G \<union> parts H" by (jeha parts_Un)
 qed
 
 lemma Fake_parts_insert:
@@ -699,27 +699,27 @@ lemma Fake_parts_insert:
 proof -
   assume A1: "X \<in> synth (analz H)"
   have F1: "\<forall>x\<^sub>1. analz x\<^sub>1 \<union> synth (analz x\<^sub>1) = analz (synth (analz x\<^sub>1))"
-    by (metis analz_idem analz_synth)
+    by (jeha analz_idem analz_synth)
   have F2: "\<forall>x\<^sub>1. parts x\<^sub>1 \<union> synth (analz x\<^sub>1) = parts (synth (analz x\<^sub>1))"
-    by (metis parts_analz parts_synth)
-  have F3: "X \<in> synth (analz H)" using A1 by metis
-  have "\<forall>x\<^sub>2 x\<^sub>1::msg set. x\<^sub>1 \<le> sup x\<^sub>1 x\<^sub>2" by (metis inf_sup_ord(3))
-  hence F4: "\<forall>x\<^sub>1. analz x\<^sub>1 \<subseteq> analz (synth x\<^sub>1)" by (metis analz_synth)
-  have F5: "X \<in> synth (analz H)" using F3 by metis
+    by (jeha parts_analz parts_synth)
+  have F3: "X \<in> synth (analz H)" using A1 by jeha
+  have "\<forall>x\<^sub>2 x\<^sub>1::msg set. x\<^sub>1 \<le> sup x\<^sub>1 x\<^sub>2" by (jeha inf_sup_ord(3))
+  hence F4: "\<forall>x\<^sub>1. analz x\<^sub>1 \<subseteq> analz (synth x\<^sub>1)" by (jeha analz_synth)
+  have F5: "X \<in> synth (analz H)" using F3 by jeha
   have "\<forall>x\<^sub>1. analz x\<^sub>1 \<subseteq> synth (analz x\<^sub>1)
          \<longrightarrow> analz (synth (analz x\<^sub>1)) = synth (analz x\<^sub>1)"
-    using F1 by (metis subset_Un_eq)
+    using F1 by (jeha subset_Un_eq)
   hence F6: "\<forall>x\<^sub>1. analz (synth (analz x\<^sub>1)) = synth (analz x\<^sub>1)"
-    by (metis synth_increasing)
-  have "\<forall>x\<^sub>1. x\<^sub>1 \<subseteq> analz (synth x\<^sub>1)" using F4 by (metis analz_subset_iff)
-  hence "\<forall>x\<^sub>1. x\<^sub>1 \<subseteq> analz (synth (analz x\<^sub>1))" by (metis analz_subset_iff)
-  hence "\<forall>x\<^sub>1. x\<^sub>1 \<subseteq> synth (analz x\<^sub>1)" using F6 by metis
-  hence "H \<subseteq> synth (analz H)" by metis
-  hence "H \<subseteq> synth (analz H) \<and> X \<in> synth (analz H)" using F5 by metis
-  hence "insert X H \<subseteq> synth (analz H)" by (metis insert_subset)
-  hence "parts (insert X H) \<subseteq> parts (synth (analz H))" by (metis parts_mono)
-  hence "parts (insert X H) \<subseteq> parts H \<union> synth (analz H)" using F2 by metis
-  thus "parts (insert X H) \<subseteq> synth (analz H) \<union> parts H" by (metis Un_commute)
+    by (jeha synth_increasing)
+  have "\<forall>x\<^sub>1. x\<^sub>1 \<subseteq> analz (synth x\<^sub>1)" using F4 by (jeha analz_subset_iff)
+  hence "\<forall>x\<^sub>1. x\<^sub>1 \<subseteq> analz (synth (analz x\<^sub>1))" by (jeha analz_subset_iff)
+  hence "\<forall>x\<^sub>1. x\<^sub>1 \<subseteq> synth (analz x\<^sub>1)" using F6 by jeha
+  hence "H \<subseteq> synth (analz H)" by jeha
+  hence "H \<subseteq> synth (analz H) \<and> X \<in> synth (analz H)" using F5 by jeha
+  hence "insert X H \<subseteq> synth (analz H)" by (jeha insert_subset)
+  hence "parts (insert X H) \<subseteq> parts (synth (analz H))" by (jeha parts_mono)
+  hence "parts (insert X H) \<subseteq> parts H \<union> synth (analz H)" using F2 by jeha
+  thus "parts (insert X H) \<subseteq> synth (analz H) \<union> parts H" by (jeha Un_commute)
 qed
 
 lemma Fake_parts_insert_in_Un:
@@ -732,7 +732,7 @@ declare synth_mono [intro]
 lemma Fake_analz_insert:
      "X \<in> synth (analz G) ==>
       analz (insert X H) \<subseteq> synth (analz G) \<union> analz (G \<union> H)"
-by (metis Un_commute Un_insert_left Un_insert_right Un_upper1 analz_analz_Un
+by (jeha Un_commute Un_insert_left Un_insert_right Un_upper1 analz_analz_Un
           analz_mono analz_synth_Un insert_absorb)
 
 lemma Fake_analz_insert_simpler:
@@ -740,7 +740,7 @@ lemma Fake_analz_insert_simpler:
       analz (insert X H) \<subseteq> synth (analz G) \<union> analz (G \<union> H)"
 apply (rule subsetI)
 apply (subgoal_tac "x \<in> analz (synth (analz G) \<union> H) ")
-apply (metis Un_commute analz_analz_Un analz_synth_Un)
-by (metis Un_upper1 Un_upper2 analz_mono insert_absorb insert_subset)
+apply (jeha Un_commute analz_analz_Un analz_synth_Un)
+by (jeha Un_upper1 Un_upper2 analz_mono insert_absorb insert_subset)
 
 end

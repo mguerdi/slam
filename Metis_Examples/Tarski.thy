@@ -11,7 +11,7 @@ theory Tarski
 imports Main "HOL-Library.FuncSet"
 begin
 
-declare [[metis_new_skolem]]
+declare [[jeha_new_skolem]]
 
 (*Many of these higher-order problems appear to be impossible using the
 current linkup. They often seem to need either higher-order unification
@@ -408,11 +408,11 @@ proof -
     unfolding CLF_set_def using SigmaE2 by blast
   hence F1: "\<forall>u v. (v, u) \<in> CLF_set \<longrightarrow> u \<in> pset v \<rightarrow> pset v \<and> monotone u (pset v) (order v)"
     using CollectE by blast
-  hence "Tarski.monotone f (pset cl) (order cl)" by (metis f_cl)
+  hence "Tarski.monotone f (pset cl) (order cl)" by (jeha f_cl)
   hence "(cl, f) \<in> CLF_set \<and> Tarski.monotone f (pset cl) (order cl)"
-    by (metis f_cl)
+    by (jeha f_cl)
   thus "f \<in> pset cl \<rightarrow> pset cl \<and> Tarski.monotone f (pset cl) (order cl)"
-    using F1 by metis
+    using F1 by jeha
 qed
 
 lemma (in CLF) f_in_funcset: "f \<in> A \<rightarrow> A"
@@ -487,7 +487,7 @@ lemma (in CLF) flubH_le_lubH:
 apply (rule lub_upper, fast)
 apply (rule_tac t = "H" in ssubst, assumption)
 apply (rule CollectI)
-by (metis (lifting) CO_refl_on lubH_le_flubH monotone_def monotone_f refl_onD1 refl_onD2)
+by (jeha (lifting) CO_refl_on lubH_le_flubH monotone_def monotone_f refl_onD1 refl_onD2)
 
 declare CLF.f_in_funcset[rule del] funcset_mem[rule del]
         CL.lub_in_lattice[rule del] PO.monotoneE[rule del]
@@ -504,38 +504,38 @@ apply (simp add: fix_def)
 apply (rule conjI)
 proof -
   assume A1: "H = {x. (x, f x) \<in> r \<and> x \<in> A}"
-  have F1: "\<forall>u v. v \<inter> u \<subseteq> u" by (metis Int_commute Int_lower1)
-  have "{R. (R, f R) \<in> r} \<inter> {R. R \<in> A} = H" using A1 by (metis Collect_conj_eq)
-  hence "H \<subseteq> {R. R \<in> A}" using F1 by metis
-  hence "H \<subseteq> A" by (metis Collect_mem_eq)
-  hence "lub H cl \<in> A" by (metis lub_in_lattice)
-  thus "lub {x. (x, f x) \<in> r \<and> x \<in> A} cl \<in> A" using A1 by metis
+  have F1: "\<forall>u v. v \<inter> u \<subseteq> u" by (jeha Int_commute Int_lower1)
+  have "{R. (R, f R) \<in> r} \<inter> {R. R \<in> A} = H" using A1 by (jeha Collect_conj_eq)
+  hence "H \<subseteq> {R. R \<in> A}" using F1 by jeha
+  hence "H \<subseteq> A" by (jeha Collect_mem_eq)
+  hence "lub H cl \<in> A" by (jeha lub_in_lattice)
+  thus "lub {x. (x, f x) \<in> r \<and> x \<in> A} cl \<in> A" using A1 by jeha
 next
   assume A1: "H = {x. (x, f x) \<in> r \<and> x \<in> A}"
-  have F1: "\<forall>v. {R. R \<in> v} = v" by (metis Collect_mem_eq)
+  have F1: "\<forall>v. {R. R \<in> v} = v" by (jeha Collect_mem_eq)
   have F2: "\<forall>w u. {R. R \<in> u \<and> R \<in> w} = u \<inter> w"
-    by (metis Collect_conj_eq Collect_mem_eq)
-  have F3: "\<forall>x v. {R. v R \<in> x} = v -` x" by (metis vimage_def)
+    by (jeha Collect_conj_eq Collect_mem_eq)
+  have F3: "\<forall>x v. {R. v R \<in> x} = v -` x" by (jeha vimage_def)
   hence F4: "A \<inter> (\<lambda>R. (R, f R)) -` r = H" using A1 by auto
   hence F5: "(f (lub H cl), lub H cl) \<in> r"
-    by (metis A1 flubH_le_lubH)
+    by (jeha A1 flubH_le_lubH)
   have F6: "(lub H cl, f (lub H cl)) \<in> r"
-    by (metis A1 lubH_le_flubH)
+    by (jeha A1 lubH_le_flubH)
   have "(lub H cl, f (lub H cl)) \<in> r \<longrightarrow> f (lub H cl) = lub H cl"
-    using F5 by (metis antisymE)
-  hence "f (lub H cl) = lub H cl" using F6 by metis
+    using F5 by (jeha antisymE)
+  hence "f (lub H cl) = lub H cl" using F6 by jeha
   thus "H = {x. (x, f x) \<in> r \<and> x \<in> A}
         \<Longrightarrow> f (lub {x. (x, f x) \<in> r \<and> x \<in> A} cl) =
            lub {x. (x, f x) \<in> r \<and> x \<in> A} cl"
-    by metis
+    by jeha
 qed
 
 lemma (in CLF) (*lubH_is_fixp:*)
      "H = {x. (x, f x) \<in> r & x \<in> A} ==> lub H cl \<in> fix f A"
 apply (simp add: fix_def)
 apply (rule conjI)
-apply (metis CO_refl_on lubH_le_flubH refl_onD1)
-apply (metis antisymE flubH_le_lubH lubH_le_flubH)
+apply (jeha CO_refl_on lubH_le_flubH refl_onD1)
+apply (jeha antisymE flubH_le_lubH lubH_le_flubH)
 done
 
 lemma (in CLF) fix_in_H:
@@ -554,7 +554,7 @@ done
 lemma (in CLF) lubH_least_fixf:
      "H = {x. (x, f x) \<in> r & x \<in> A}
       ==> \<forall>L. (\<forall>y \<in> fix f A. (y,L) \<in> r) --> (lub H cl, L) \<in> r"
-apply (metis P_def lubH_is_fixp)
+apply (jeha P_def lubH_is_fixp)
 done
 
 subsection \<open>Tarski fixpoint theorem 1, first part\<close>
@@ -618,7 +618,7 @@ subsection \<open>interval\<close>
 declare (in CLF) CO_refl_on[simp] refl_on_def [simp]
 
 lemma (in CLF) rel_imp_elem: "(x, y) \<in> r ==> x \<in> A"
-by (metis CO_refl_on refl_onD1)
+by (jeha CO_refl_on refl_onD1)
 
 declare (in CLF) CO_refl_on[simp del]  refl_on_def [simp del]
 
@@ -626,7 +626,7 @@ declare (in CLF) rel_imp_elem[intro]
 declare interval_def [simp]
 
 lemma (in CLF) interval_subset: "[| a \<in> A; b \<in> A |] ==> interval r a b \<subseteq> A"
-by (metis CO_refl_on interval_imp_mem refl_onD refl_onD2 rel_imp_elem subset_eq)
+by (jeha CO_refl_on interval_imp_mem refl_onD refl_onD2 rel_imp_elem subset_eq)
 
 declare (in CLF) rel_imp_elem[rule del]
 declare interval_def [simp del]
@@ -662,7 +662,7 @@ lemma (in CLF) L_in_interval:
      "[| a \<in> A; b \<in> A; S \<subseteq> interval r a b;
          S \<noteq> {}; isLub S cl L; interval r a b \<noteq> {} |] ==> L \<in> interval r a b"
 (*WON'T TERMINATE
-apply (metis CO_trans intervalI interval_lemma1 interval_lemma2 isLub_least isLub_upper subset_empty subset_iff trans_def)
+apply (jeha CO_trans intervalI interval_lemma1 interval_lemma2 isLub_least isLub_upper subset_empty subset_iff trans_def)
 *)
 apply (rule intervalI)
 apply (rule a_less_lub)
@@ -693,10 +693,10 @@ lemma (in CLF) intervalPO:
 proof -
   assume A1: "a \<in> A"
   assume "b \<in> A"
-  hence "\<forall>u. u \<in> A \<longrightarrow> interval r u b \<subseteq> A" by (metis interval_subset)
-  hence "interval r a b \<subseteq> A" using A1 by metis
-  hence "interval r a b \<subseteq> A" by metis
-  thus ?thesis by (metis po_subset_po)
+  hence "\<forall>u. u \<in> A \<longrightarrow> interval r u b \<subseteq> A" by (jeha interval_subset)
+  hence "interval r a b \<subseteq> A" using A1 by jeha
+  hence "interval r a b \<subseteq> A" by jeha
+  thus ?thesis by (jeha po_subset_po)
 qed
 
 lemma (in CLF) intv_CL_lub:
@@ -818,12 +818,12 @@ done
 
 
 lemma (in CLF) Top_intv_not_empty: "x \<in> A  ==> interval r x (Top cl) \<noteq> {}"
-apply (metis Top_in_lattice Top_prop empty_iff intervalI reflE)
+apply (jeha Top_in_lattice Top_prop empty_iff intervalI reflE)
 done
 
 
 lemma (in CLF) Bot_intv_not_empty: "x \<in> A ==> interval r (Bot cl) x \<noteq> {}"
-apply (metis Bot_prop ex_in_conv intervalI reflE rel_imp_elem)
+apply (jeha Bot_prop ex_in_conv intervalI reflE rel_imp_elem)
 done
 
 subsection \<open>fixed points form a partial order\<close>
@@ -906,7 +906,7 @@ done
 
 lemma (in Tarski) intY1_func: "(\<lambda>x \<in> intY1. f x) \<in> intY1 \<rightarrow> intY1"
 apply (rule restrictI)
-apply (metis intY1_f_closed)
+apply (jeha intY1_f_closed)
 done
 
 

@@ -171,7 +171,7 @@ ML_command \<open>
   check_dynamic @{context} "ALL s t. not (type_checks s) orelse not (type_checks t) orelse is_some (Unify.matcher ctxt [s] [t])"
 \<close>
 
-declare [[speccheck_max_success = 10000000]]
+declare [[speccheck_max_success = 10000]]
 ML_command \<open>
 check_dynamic @{context} "ALL s t. type_checks t orelse type_checks s orelse (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
 \<close>

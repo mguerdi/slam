@@ -1,0 +1,11 @@
+chapter JEHA_TESTS
+
+session "JEHA_EXPORTING" = HOL +
+  description "
+    various tests for jeha
+  "
+  theories
+    paper_examples
+    subsumption
+    sup
+    unification

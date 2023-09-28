@@ -11,7 +11,7 @@ theory Trans_Closure
 imports Main
 begin
 
-declare [[metis_new_skolem]]
+declare [[jeha_new_skolem]]
 
 type_synonym addr = nat
 
@@ -34,12 +34,12 @@ proof -
   assume A2: "\<forall>y. f b = Intg y \<longrightarrow> y \<noteq> x"
   assume A3: "(a, b) \<in> R\<^sup>*"
   assume A4: "(b, c) \<in> R\<^sup>*"
-  have F1: "f c \<noteq> f b" using A2 A1 by metis
-  have F2: "\<forall>u. (b, u) \<in> R \<longrightarrow> (a, u) \<in> R\<^sup>*" using A3 by (metis transitive_closure_trans(6))
-  have F3: "\<exists>x. (b, x b c R) \<in> R \<or> c = b" using A4 by (metis converse_rtranclE)
-  have "c \<noteq> b" using F1 by metis
-  hence "\<exists>u. (b, u) \<in> R" using F3 by metis
-  thus "\<exists>c. (b, c) \<in> R \<and> (a, c) \<in> R\<^sup>*" using F2 by metis
+  have F1: "f c \<noteq> f b" using A2 A1 by jeha
+  have F2: "\<forall>u. (b, u) \<in> R \<longrightarrow> (a, u) \<in> R\<^sup>*" using A3 by (jeha transitive_closure_trans(6))
+  have F3: "\<exists>x. (b, x b c R) \<in> R \<or> c = b" using A4 by (jeha converse_rtranclE)
+  have "c \<noteq> b" using F1 by jeha
+  hence "\<exists>u. (b, u) \<in> R" using F3 by jeha
+  thus "\<exists>c. (b, c) \<in> R \<and> (a, c) \<in> R\<^sup>*" using F2 by jeha
 qed
 
 lemma "\<lbrakk>f c = Intg x; \<forall>y. f b = Intg y \<longrightarrow> y \<noteq> x; (a, b) \<in> R\<^sup>*; (b,c) \<in> R\<^sup>*\<rbrakk>
@@ -50,15 +50,15 @@ proof -
   assume A2: "\<forall>y. f b = Intg y \<longrightarrow> y \<noteq> x"
   assume A3: "(a, b) \<in> R\<^sup>*"
   assume A4: "(b, c) \<in> R\<^sup>*"
-  have "b \<noteq> c" using A1 A2 by metis
-  hence "\<exists>x\<^sub>1. (b, x\<^sub>1) \<in> R" using A4 by (metis converse_rtranclE)
-  thus "\<exists>c. (b, c) \<in> R \<and> (a, c) \<in> R\<^sup>*" using A3 by (metis transitive_closure_trans(6))
+  have "b \<noteq> c" using A1 A2 by jeha
+  hence "\<exists>x\<^sub>1. (b, x\<^sub>1) \<in> R" using A4 by (jeha converse_rtranclE)
+  thus "\<exists>c. (b, c) \<in> R \<and> (a, c) \<in> R\<^sup>*" using A3 by (jeha transitive_closure_trans(6))
 qed
 
 lemma "\<lbrakk>f c = Intg x; \<forall>y. f b = Intg y \<longrightarrow> y \<noteq> x; (a, b) \<in> R\<^sup>*; (b, c) \<in> R\<^sup>*\<rbrakk>
        \<Longrightarrow> \<exists>c. (b, c) \<in> R \<and> (a, c) \<in> R\<^sup>*"
 apply (erule_tac x = b in converse_rtranclE)
- apply metis
-by (metis transitive_closure_trans(6))
+ apply jeha
+by (jeha transitive_closure_trans(6))
 
 end
