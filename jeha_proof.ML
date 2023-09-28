@@ -6,7 +6,7 @@ sig
   (* val hol_thm_of_clause : Proof.context -> (int -> JClause.T) -> int -> thm *)
   (* elaborates a \<lambda>oSup inference into a series of more smaller proof steps *)
   (* val fun proof_steps_of_inference : Jeha_Log.inference -> proof_step *)
-  val reconstruct_with_auto : Proof.context -> (int -> JClause.T) -> int -> thm
+  val reconstruct_with_metis : Proof.context -> (int -> JClause.T) -> int -> thm
   val instantiate : Proof.context -> Envir.env -> thm -> thm
 end;
 
@@ -53,8 +53,18 @@ fun instantiate ctxt env thm =
   in
     Thm.instantiate (TVars.make instsT, Vars.make insts) thm
   end
+  
+(* 
+A B
+--- I   
+ C
+ 
+A => B => C
 
-fun reconstruct_with_auto ctxt (clause_db : int -> JClause.T) clause_id =
+Idea: Pass A and B as lemmas to metis!
+*)
+
+fun reconstruct_with_metis ctxt (clause_db : int -> JClause.T) clause_id =
   let
     val conclusion = hol_of_clause ctxt (clause_db clause_id)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "START PROOF")
@@ -65,12 +75,13 @@ fun reconstruct_with_auto ctxt (clause_db : int -> JClause.T) clause_id =
       |> clause_db
       |> JClause.origin
       |> Jeha_Log.premises
-      |> map (reconstruct_with_auto ctxt clause_db)
+      |> map (reconstruct_with_metis ctxt clause_db)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Premises: " ^ (Jeha_Common.pretty_terms ctxt (map Thm.prop_of premises)))
-    val premises_imply_conclusion = Drule.implies_intr_list (map Thm.cprop_of premises) (Goal.init conclusion)
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of premises_imply_conclusion)))
+    (* val premises_imply_conclusion = Drule.implies_intr_list (map Thm.cprop_of premises) (Goal.init conclusion) *)
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.term_of conclusion)))
     val SOME (proved_conclusion, _) =
-      Clasimp.auto_tac ctxt premises_imply_conclusion
+      Metis_Tactic.metis_tac [] "" ctxt premises 0 (Goal.init conclusion)
+    (* Clasimp.auto_tac ctxt premises_imply_conclusion *)
       |> Seq.pull
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Proved conclusion: " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of proved_conclusion)))
   in

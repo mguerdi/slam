@@ -1219,7 +1219,7 @@ fun try_saturate context prems =
 fun make_clause_db state clause_id =
   (* FIXME include archive *)
   let
-    val SOME clause = find_first (JClause.id #> curry (op =) clause_id) (#active state)
+    val SOME clause = find_first (JClause.id #> curry (op =) clause_id) ((#active state) @ (#archive state))
   in
     clause
   end

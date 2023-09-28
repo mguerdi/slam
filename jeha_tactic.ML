@@ -20,8 +20,8 @@ type jeha_options = string list
 
 val dump = Unsynchronized.ref []
 
-fun reconstruct_proof _ = error "reconstruct_proof unimplmeneted (suspected of Enter MATCH)"
-(*      (state as
+fun reconstruct_proof
+      (state as
         { context = context,
           countdown = _,
           passive = passive,
@@ -36,11 +36,10 @@ fun reconstruct_proof _ = error "reconstruct_proof unimplmeneted (suspected of E
       |> Jeha_Common.map_some JClause.id
     val clause_db = Jeha.make_clause_db state
     val false_proved =
-      Jeha_Proof.reconstruct_with_auto context clause_db false_id
+      Jeha_Proof.reconstruct_with_metis context clause_db false_id
   in
     Seq.single (Goal.protect 0 false_proved)
   end
-*)
 
 fun jeha_tac options ctxt ths i st0 =
   let
@@ -63,10 +62,10 @@ fun jeha_tac options ctxt ths i st0 =
         HOL/Tools/Quotient/quotient_tacs.ML) *)
         case (Jeha.try_saturate context (prems @ atomized_ths)
             handle Jeha.JEHA_EXCEPTION (e, state) => handle_exception (e, state)) of
-          (Unsat, final_state) => ALLGOALS (Skip_Proof.cheat_tac context) st
-            (* (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
+          (Unsat, final_state) => (* ALLGOALS (Skip_Proof.cheat_tac context) st *)
+            (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
             (* we provide #False *)
-            reconstruct_proof final_state st *)
+            reconstruct_proof final_state st
         | (MaybeSat, final_state) => Seq.empty
         | (Next, final_state) => error "Bug: Next in final result")
       ) ctxt i'
