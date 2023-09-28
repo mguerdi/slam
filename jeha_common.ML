@@ -52,6 +52,8 @@ sig
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
   val disable_all : bool Config.T
+  datatype ('a, 'b) either = Left of 'a | Right of 'b
+  val get_left : ('a, 'b) either -> 'a option
   val assert_results_eq : ('a -> ''b) -> ('a -> ''b) -> 'a -> ''b
 end
 
@@ -187,6 +189,11 @@ fun seq_cartesian_product xs ys =
 
 fun cartesian_product [] _ = []
   | cartesian_product (x :: xs) ys = map (pair x) ys @ cartesian_product xs ys
+
+datatype ('a, 'b) either = Left of 'a | Right of 'b
+
+fun get_left (Left x) = SOME x
+  | get_left (Right _) = NONE
 
 (* Test that two functions give the same result and return that value. *)
 fun assert_results_eq g f x =
