@@ -21,6 +21,7 @@ begin
 ML_file \<open>jeha_common.ML\<close>
 ML_file \<open>clause_id.ML\<close>
 ML_file \<open>jterm.ML\<close>
+ML_file \<open>jeha_order_reference.ML\<close>
 ML_file \<open>jeha_order.ML\<close>
 ML_file \<open>jlit.ML\<close>
 ML_file \<open>jclause_pos.ML\<close>
@@ -76,81 +77,7 @@ ML \<open>
   fun boltzmann_leaf r = r < rescale (* 0.65 *) 0.7044190409261122;
 \<close>
 
-ML \<open>
-  (* Adds unused additional state to a generator. Allows us to reuse existing
-  generators. *)
-  val lift_gen : ('a, 's) SpecCheck_Gen_Types.gen_state -> ('a, 'b * 's) SpecCheck_Gen_Types.gen_state =
-    fn gen => (fn (b, s) => let val (a, s) = gen s in (a, (b, s)) end)
-  type unif_state = (Proof.context * Type.tyenv * int)
-  val add_unif : (typ * typ) -> unif_state -> unif_state =
-    fn T_pair => fn (ctxt, typ_env, maxidx) =>
-      let
-        val (typ_env, maxidx) =
-          Sign.typ_unify
-            (Proof_Context.theory_of ctxt)
-            T_pair
-            (typ_env, maxidx)
-      in
-        (ctxt, typ_env, maxidx)
-      end
-  (* Like gen but with unification state. *)
-  type 'a unif_gen = ('a, unif_state * SpecCheck_Random.rand) SpecCheck_Gen_Types.gen_state
-  val fresh_type_indexname : indexname unif_gen =
-    fn ((ctxt, typ_env, maxidx), s) =>
-      ((Name.aT, maxidx), ((ctxt, typ_env, maxidx + 1), s))
-  val defaultS : sort unif_gen = fn (s as ((ctxt, _, _), _)) =>
-    (Sign.defaultS (Proof_Context.theory_of ctxt), s)
-  val fresh_tvar : typ unif_gen =
-    SpecCheck_Gen_Term.tvar
-      fresh_type_indexname
-      defaultS
-  (* Each term generator guarantees that it generates a term whose type unifies
-  with the type T in the type environment it returns (unless it fails). *)
-  fun term Ts T s =
-    let
-      val (r, s) = lift_gen (SpecCheck_Generator.range_real (0.0, 1.0)) s
-    in
-      if boltzmann_index r
-        then bound Ts T s
-      else if boltzmann_lambda r
-        then abs Ts T s
-      else app Ts T s
-    end
-  and bound [] _ _ = error "bound: not below lambda"
-    | bound (bT::bound_Ts) T (unif_s, rng_s) =
-        let val (r, rng_s) = SpecCheck_Random.real_unit rng_s in
-          if boltzmann_index r
-            then (Bound 0, (add_unif (bT, T) unif_s, rng_s))
-            else
-              SpecCheck_Generator.map
-                (fn Bound i => Bound (i + 1))
-                (bound bound_Ts T)
-                (unif_s, rng_s)
-        end
-  and abs Ts T s =
-    let
-      val (arg_T, s) = fresh_tvar s
-      val (return_T, s) = fresh_tvar s
-      val (unif_s, rng_s) = s
-      val s = ()
-      val unif_s = add_unif (arg_T --> return_T, T) unif_s
-    in
-      SpecCheck_Generator.map
-        (fn t => Abs (Name.uu_, arg_T, t))
-        (term (arg_T :: Ts) return_T)
-        (unif_s, rng_s)
-    end
-  and app Ts T s =
-    let
-      val (arg_T, s) = fresh_tvar s
-      val fun_T = arg_T --> T
-    in
-      SpecCheck_Generator.map
-        op$
-        (SpecCheck_Generator.zip (term Ts fun_T) (term Ts arg_T))
-        s
-    end
-\<close>
+ML_file \<open>jeha_gen_term.ML\<close>
 
 ML \<open>
   (* (rng state, env, maxidx) *)
@@ -213,7 +140,7 @@ ML \<open>
         : (SpecCheck_Random.rand * (Type.tyenv * int)) * term =
     let
       val (t, ((_, typ_env, maxidx), s)) =
-        term binder_types typ ((ctxt, typ_env, maxidx), s)
+        Jeha_Gen_Term.term binder_types typ ((ctxt, typ_env, maxidx), s)
     in
       ((s, (typ_env, maxidx)), t)
     end
