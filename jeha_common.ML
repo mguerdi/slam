@@ -52,6 +52,7 @@ sig
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
   val disable_all : bool Config.T
+  val assert_results_eq : ('a -> ''b) -> ('a -> ''b) -> 'a -> ''b
 end
 
 structure Jeha_Common : JEHA_COMMON =
@@ -186,5 +187,16 @@ fun seq_cartesian_product xs ys =
 
 fun cartesian_product [] _ = []
   | cartesian_product (x :: xs) ys = map (pair x) ys @ cartesian_product xs ys
+
+(* Test that two functions give the same result and return that value. *)
+fun assert_results_eq g f x =
+  let
+    val y = f x
+  in
+    if y = g x
+      then y
+    else
+      error "assert_results_eq: not equal"
+  end
 
 end
