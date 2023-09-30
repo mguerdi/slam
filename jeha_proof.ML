@@ -33,6 +33,7 @@ fun hol_of_clause ctxt c =
       JClause.literals c
       |> map (fn (s, t, b) => (s, t, not b))
       |> map JLit.term_of
+      |> map HOLogic.mk_Trueprop
   in
     Logic.list_implies (negated_literals, @{prop "False"})
     |> Thm.cterm_of ctxt
@@ -74,19 +75,29 @@ fun reconstruct_with_metis ctxt (clause_db : int -> JClause.T) clause_id =
       clause_id
       |> clause_db
       |> JClause.origin
-      |> Jeha_Log.premises
-      |> map (reconstruct_with_metis ctxt clause_db)
+      |> get_premises ctxt clause_db
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Premises: " ^ (Jeha_Common.pretty_terms ctxt (map Thm.prop_of premises)))
     (* val premises_imply_conclusion = Drule.implies_intr_list (map Thm.cprop_of premises) (Goal.init conclusion) *)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.term_of conclusion)))
     val SOME (proved_conclusion, _) =
-      Metis_Tactic.metis_tac [] "" ctxt premises 0 (Goal.init conclusion)
+      Metis_Tactic.metis_tac
+        []
+        ATP_Proof_Reconstruct.default_metis_lam_trans
+        ctxt
+        premises
+        (* ONE BASED INDEXING! *)
+        1
+        (Goal.init conclusion)
     (* Clasimp.auto_tac ctxt premises_imply_conclusion *)
       |> Seq.pull
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Proved conclusion: " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of proved_conclusion)))
   in
     Goal.conclude proved_conclusion
   end
+
+and get_premises _ _ (Jeha_Log.Axiom { thm = thm }) = [thm]
+  | get_premises ctxt clause_db origin =
+      origin |> Jeha_Log.premises |> map (reconstruct_with_metis ctxt clause_db)
 
 
 (*
