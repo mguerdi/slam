@@ -3,6 +3,7 @@ signature JEHA_COMMON =
 sig
   val trace : bool Config.T
   val trace_msg : Proof.context -> (unit -> string) -> unit
+  val proof_reconstruction : bool Config.T
   val term_pat_setup : theory -> theory
   val type_pat_setup : theory -> theory
   val verbose_of : Proof.context -> Proof.context
@@ -98,6 +99,8 @@ fun I x = x
 val trace = Attrib.setup_config_bool \<^binding>\<open>jeha_trace\<close> (K false)
 val verbose = Attrib.setup_config_bool \<^binding>\<open>jeha_verbose\<close> (K true)
 fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
+
+val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K false)
 
 val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_smash_unifiers\<close> (K false)
 (* FIXME: remove or better default *)

@@ -62,10 +62,12 @@ fun jeha_tac options ctxt ths i st0 =
         HOL/Tools/Quotient/quotient_tacs.ML) *)
         case (Jeha.try_saturate context (prems @ atomized_ths)
             handle Jeha.JEHA_EXCEPTION (e, state) => handle_exception (e, state)) of
-          (Unsat, final_state) => (* ALLGOALS (Skip_Proof.cheat_tac context) st *)
-            (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
-            (* we provide #False *)
-            reconstruct_proof final_state st
+          (Unsat, final_state) =>
+            if Config.get context Jeha_Common.proof_reconstruction
+              then reconstruct_proof final_state st
+              (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
+              (* we provide #False *)
+              else ALLGOALS (Skip_Proof.cheat_tac context) st
         | (MaybeSat, final_state) => Seq.empty
         | (Next, final_state) => error "Bug: Next in final result")
       ) ctxt i'
