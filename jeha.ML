@@ -1053,7 +1053,7 @@ fun forward_simplify ctxt cheap active given_clause =
     (* val _ = Jeha_Common.trace_msg ctxt (K "START REDUNDANCY CHECK") *)
   in
     if
-      is_redundant ctxt active given_clause
+      (not cheap andalso is_redundant ctxt active given_clause)
       (* FIXME: this is not specified in the E paper, so should we perform inferences with tautologies?? *)
       orelse is_trivial given_clause
         then
