@@ -7,7 +7,7 @@ begin
 declare [[jeha_trace]]
 
 lemma paper_example_25:
-  shows "?z a = False \<Longrightarrow> ?z b = True \<Longrightarrow> a = b"
+  shows "(\<And>z. z a = True \<Longrightarrow> z b = True) \<Longrightarrow> a = b"
   by (jeha)
 
 end
