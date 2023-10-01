@@ -1217,12 +1217,11 @@ fun try_saturate context prems =
   end
 
 fun make_clause_db state clause_id =
-  (* FIXME include archive *)
-  let
-    val SOME clause = find_first (JClause.id #> curry (op =) clause_id) ((#active state) @ (#archive state))
-  in
-    clause
-  end
+  case
+    find_first (fn c => JClause.id c = clause_id) ((#active state) @ (#archive state))
+  of
+    SOME clause => clause
+  | NONE => error ("No clause with id " ^ @{make_string} clause_id ^ " in active set or archive.")
 
 (*
 Question:

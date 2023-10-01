@@ -19,6 +19,8 @@ declare [[jeha_rule_e_res]]
 (* doesn't work without smash unifiers: *)
 (* declare [[jeha_disable_smash_unifiers]] *)
 
+declare [[jeha_proof_reconstruction]]
+declare [[metis_trace]]
 
 lemma paper_example_26:
   shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x)) \<noteq> False"

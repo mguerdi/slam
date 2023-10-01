@@ -55,15 +55,10 @@ fun instantiate ctxt env thm =
     Thm.instantiate (TVars.make instsT, Vars.make insts) thm
   end
   
-(* 
-A B
---- I   
- C
- 
-A => B => C
+val excluded_middle =  @{lemma "P \<Longrightarrow> \<not> P \<Longrightarrow> False" by (rule notE)}
 
-Idea: Pass A and B as lemmas to metis!
-*)
+(* some inference rules require additional lemmas *)
+fun get_lemmas _ = []
 
 fun reconstruct_with_metis ctxt (clause_db : int -> JClause.T) clause_id =
   let
@@ -75,30 +70,25 @@ fun reconstruct_with_metis ctxt (clause_db : int -> JClause.T) clause_id =
       clause_id
       |> clause_db
       |> JClause.origin
-      |> get_premises ctxt clause_db
+      |> get_prems_and_lemmas ctxt clause_db
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Premises: " ^ (Jeha_Common.pretty_terms ctxt (map Thm.prop_of premises)))
-    (* val premises_imply_conclusion = Drule.implies_intr_list (map Thm.cprop_of premises) (Goal.init conclusion) *)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.term_of conclusion)))
-    val SOME (proved_conclusion, _) =
-      Metis_Tactic.metis_tac
-        []
-        ATP_Proof_Reconstruct.default_metis_lam_trans
-        ctxt
-        premises
-        (* ONE BASED INDEXING! *)
-        1
-        (Goal.init conclusion)
-    (* Clasimp.auto_tac ctxt premises_imply_conclusion *)
+    val goal = Goal.init conclusion
+    (* from metis_tactic.ML *)
+    val method = METHOD oo Metis_Tactic.metis_method
+    (* FIXME: this returns a new proof context. What to do with it? *)
+    val SOME (Seq.Result (_, proved_conclusion), _) =
+      method ((NONE, NONE), premises) ctxt premises (ctxt, goal)
       |> Seq.pull
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Proved conclusion: " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of proved_conclusion)))
   in
     Goal.conclude proved_conclusion
   end
-
+and get_prems_and_lemmas ctxt clause_db origin =
+  get_premises ctxt clause_db origin @ get_lemmas origin
 and get_premises _ _ (Jeha_Log.Axiom { thm = thm }) = [thm]
   | get_premises ctxt clause_db origin =
       origin |> Jeha_Log.premises |> map (reconstruct_with_metis ctxt clause_db)
-
 
 (*
 fun hol_thm_of_clause ctxt (clause_db : int -> JClause.T) clause_id =

@@ -25,6 +25,9 @@ declare [[jeha_disable_all]]
 declare [[jeha_rule_sup]]
 declare [[jeha_rule_e_res]]
 
+declare [[jeha_proof_reconstruction]]
+declare [[metis_trace]]
+
 (* positive test cases *)
 
 lemma transitivity:
