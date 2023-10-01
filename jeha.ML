@@ -18,9 +18,13 @@ sig
   val bool_rw_non_var_rules : (term * term) list
   (* outer clausification *)
   val outer_clausify : bool -> term -> JClause.T -> JClause.T list
+  val is_trivial : JClause.T -> bool
+  val is_redundant : Proof.context -> JClause.T list -> JClause.T -> bool
   val simp_bool_outer_claus : JClause.T -> JClause.cpos -> JClause.T list
   val simp_rewrite_positive_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val simp_rewrite_negative_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
+  val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
+  val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
   val infer_eq_neq_outer_claus : JClause.T -> JClause.cpos -> JClause.T list
   val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
   val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
@@ -36,10 +40,13 @@ sig
   val infer_forall_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_exists_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T -> JClause.T list
+  val backward_simplify :
+    Proof.context -> JClause.T list -> JClause.T -> JClause.T list * JClause.T list * JClause.T list
   val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
   (* *)
   structure Passive_Set : HEAP
   val init_passive_set : JClause.T list -> Passive_Set.T
+  val seq_of_passive_set : Passive_Set.T -> JClause.T Seq.seq
   datatype step_result = Unsat | MaybeSat | Next 
   type prover_state =
     { context: Proof.context
@@ -54,6 +61,7 @@ sig
   val given_clause_step : prover_state -> step_result * prover_state
   val try_saturate : Proof.context -> thm list -> step_result * prover_state
   val make_clause_db : prover_state -> int -> JClause.T
+  val select_given_clause : Passive_Set.T -> JClause.T * Passive_Set.T
 end
 
 structure Jeha : JEHA =
@@ -115,6 +123,7 @@ fun contains_syntactic_complementaries [] = false
 
 (* Deletion of duplicated literals (DD) (Schulz) *)
 fun simp_delete_duplicated_lits ctxt c =
+  (* (writeln "DD"; *)
   let
     (* positions of duplicates in the clause, critically in reverse order *)
     val cposs_of_dups =
@@ -137,9 +146,11 @@ fun simp_delete_duplicated_lits ctxt c =
           "deleted duplicated literals in " ^ JClause.pretty_clause ctxt c);
         SOME (JClause.refresh_id () c'))
   end
+  (* ) *)
 
 (* Deletion of resolved literals (DR) (Schulz) *)
 fun simp_delete_resolved_lits ctxt c =
+  (* (writeln "DR"; *)
   let
     (* literal of the from s \<noteq> s *)
     fun is_false_disequation (s, t, is_positive) = not is_positive andalso s aconv t
@@ -156,12 +167,14 @@ fun simp_delete_resolved_lits ctxt c =
             (Jeha_Log.DeleteResolvedLits  { premise = JClause.id c })
         ))
   end
+  (* ) *)
 
 fun is_pos_unit { literals = [(_, _, true)], ... } = true
   | is_pos_unit _ = false
 
 (* Rewriting of positive (RP) or negative literals (RN) simplification (Schulz) *)
 fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as (_, _, target_cp)) =
+  (* (writeln (if positive then "RP" else "RN"); *)
   (* check unit_clause *)
   if not (is_pos_unit unit_clause) then NONE else
   (* check that to be rewritten literal is indeed positive / negative *)
@@ -236,6 +249,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     |> Seq.pull
     |> Jeha_Common.map_some #1
   end
+  (* ) *)
 
 (* Rewriting of positive literals (RP) simplification (Schulz) *)
 val simp_rewrite_positive_lits = impl_simp_rewrite_lits true
@@ -245,6 +259,7 @@ val simp_rewrite_negative_lits = impl_simp_rewrite_lits false
 
 (* Negative simplify-reflect (NS) simplification (Schulz) *)
 fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, target_cp) =
+  (* (writeln "NS"; *)
   if is_pos_unit unit_clause then NONE else
   (* check that to be deleted literal is indeed positive *)
   if not (true = #3 (JClause.lit_at target_cp target_clause)) then NONE else
@@ -275,6 +290,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
       end
       else NONE
   end
+  (* ) *)
 
 (* given terms s, t, the longest common position p s.t. s, t are equal except
 for their subtrees at p *)
@@ -341,6 +357,7 @@ fun literal_can_match_single_disagreement
       s = t              R
 *)
 fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
+  (* (writeln "PS"; *)
   if not (is_pos_unit unit_clause) then NONE else
   (* check that to be deleted literal is indeed negative *)
   if not (false = #3 (JClause.lit_at target_cp target_clause)) then NONE else
@@ -365,6 +382,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
       end
       else NONE
   end
+  (* ) *)
 
 (* Equality subsumption (ES) redundancy check (Schulz) *)
 fun equality_subsumes ctxt (unit_clause, target_clause) =
@@ -431,8 +449,6 @@ fun simp_bool_outer_claus c i =
     outer_clausify b s c'
   end
 
-fun find_simp_bool_outer_clause c = error "find_simp_bool_outer_clause unimplemented"
-
 (* EqOuterClaus and NeqOuterClaus inferences *)
 fun infer_eq_neq_outer_claus c i =
   let
@@ -489,24 +505,30 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     if is_Var u andalso JClause.occurs_deeply u c then [] else (* 2. *)
     (* FIXME: 3. variable condition ... *)
     let
+      (* val _ = writeln ("Sup: " ^ JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c )*)
       val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
+      (* val _ = writeln ("Sup: " ^ Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u )*)
       val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
       fun build_conclusion unifier =
         let
           val (c, d) = (c, d) |> apply2 (JClause.norm_beta_eta_qeta_env unifier)
           val u_eligible = JClause.is_eligible_full_pos c u_pos
+          (* val _ = writeln ("Sup: u eligible=" ^ @{make_string} u_eligible) *)
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
           val tt'_eligible = JClause.is_eligible_cpos d cp
+          (* val _ = writeln ("Sup: tt' eligible=" ^ @{make_string} tt'_eligible)*)
           (* FIXME: according to the thesis this is skipped for performance
           reasons, would explain the difficulty in understanding zipperpositions
           implementation *)
           val c_comp_d = JClause.kbo (c, d)
+          (* val _ = writeln ("c_comp_d " ^ @{make_string} c_comp_d) *)
           val d' = JClause.delete_lit_at cp d
           (* this relies on normalization not destroying green / top level positions, i.e.
           (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
           val (t, t', _) = JLit.orient lp (JClause.lit_at cp d)
           val ct' = JClause.map_at_full_pos u_pos (K t') c
           val t_comp_t' = Jeha_Order.kbo (t, t')
+          (* val _ = writeln ("t_comp_t' " ^ @{make_string} t_comp_t') *)
         in
           (* order restrictions *)
           if SOME LESS = t_comp_t' orelse SOME EQUAL = t_comp_t' then NONE else (* 5. *)
@@ -701,6 +723,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
 (* FIXME: apply as simplification if unifier is the identity *)
 fun infer_false_elim ctxt c (lp, cp) =
   let
+    (* val _ = writeln ("in False_elim with" ^ @{make_string} (lp, cp)) *)
     val (s, s', b) = JClause.lit_at cp c |> JLit.orient lp
     val unifiers = if not b then Seq.empty else
       Jeha_Unify.smash_unifiers
@@ -931,6 +954,8 @@ fun impl_infer_forall_exists_rw is_forall ctxt clause u_pos =
       (if is_forall then HOLogic.all_const else HOLogic.exists_const) fresh_typ
     (* \<forall> y / \<exists> y*)
     val pattern = quantifier $ fresh_predicate
+
+    (* val _ = writeln ("FaExRw past more with u_pos" ^ @{make_string} u_pos ) *)
   in
       impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt clause u_pos pattern false insert_for_u NONE
       |> map (fn (unifier, c) => c |> JClause.set_origin (
@@ -975,7 +1000,7 @@ fun forward_simplify ctxt cheap active given_clause =
     val active_units_all_orientations : (JClause.T * JLit.lpos) Seq.seq =
       Jeha_Common.seq_cartesian_product active_units (Seq.of_list [JLit.Left, JLit.Right])
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
-    val _ = if all_disabled then writeln "ALL SIMPLIFICATIONS DISABLED!!!" else ()
+    (* val _ = if all_disabled then writeln "ALL SIMPLIFICATIONS DISABLED!!!" else () *)
     fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K Seq.empty
     val rn_rp_rules = Seq.append
       (if_cfg Jeha_Common.rule_rewrite_negative_lits (Seq.single simp_rewrite_negative_lits))
@@ -997,7 +1022,7 @@ fun forward_simplify ctxt cheap active given_clause =
           |> Seq.map_filter (fn (oriented_unit, target) => simp_negative_simplify_reflect ctxt oriented_unit target)
         )
         val dd_dr_rewrites : JClause.T Seq.seq =
-            Seq.map_filter (fn f => f c) (Seq.append (if_cfg Jeha_Common.rule_delete_duplicated_lits (Seq.single (simp_delete_duplicated_lits ctxt))) (if_cfg Jeha_Common.rule_delete_resolved_lits (Seq.single (simp_delete_resolved_lits ctxt))))
+          Seq.map_filter (fn f => f c) (Seq.append (if_cfg Jeha_Common.rule_delete_duplicated_lits (Seq.single (simp_delete_duplicated_lits ctxt))) (if_cfg Jeha_Common.rule_delete_resolved_lits (Seq.single (simp_delete_resolved_lits ctxt))))
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
         Seq.empty
@@ -1012,6 +1037,7 @@ fun forward_simplify ctxt cheap active given_clause =
     (* FIXME: can this lead to a fixed-point (and not terminate)? No, even RP with unit s\<approx>t and \<sigma> a
     unifier of s and t as well, violates s\<sigma> > t\<sigma>*)
     fun full_rewrite c countdown =
+      (* ( writeln ("rewrite step " ^ @{make_string} countdown ^ " of " ^ JClause.pretty_clause ctxt c); *)
       if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
       (* let val _ = Jeha_Common.trace_msg ctxt (fn () => (if cheap then "cheap " else "") ^ "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in *)
       case first_successful_rewrite c of
@@ -1021,8 +1047,10 @@ fun forward_simplify ctxt cheap active given_clause =
           let val _ = Jeha_Common.trace_msg ctxt (fn () => "done rewriting " ^ JClause.pretty_clause ctxt c ^ ".") in
           c
           end
+      (* ) *)
       (* end *)
     val given_clause = full_rewrite given_clause 10
+    (* val _ = Jeha_Common.trace_msg ctxt (K "START REDUNDANCY CHECK") *)
   in
     if
       is_redundant ctxt active given_clause
@@ -1079,7 +1107,7 @@ fun infer_clauses ctxt active given_clause =
         given_clause_lpos_cpos_pairs
         given_clause_lpos_cpos_pairs
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
-    val _ = if all_disabled then writeln "ALL DISABLED!!!!" else ()
+    (* val _ = if all_disabled then writeln "ALL DISABLED!!!!" else () *)
     (* a bit contrived to make it lazy *)
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else []
   in
@@ -1153,6 +1181,7 @@ fun given_clause_step { context, countdown, passive, active, archive } =
             (* simplify actives with given clause *)
             (* FIXME: remove direct descendants of redundant_actives and simplified_actives from
             passive set, or: do what's described in the E 2.3 paper (deleting at activation time) *)
+            (* val _ = Jeha_Common.trace_msg context (K "START BACKWARD SIMPLIFICATION") *)
             val (redundant_active, simplified_active, unsimplifiable_active) =
               backward_simplify context active given_clause
             val archive = redundant_active @ archive
@@ -1160,16 +1189,19 @@ fun given_clause_step { context, countdown, passive, active, archive } =
             val active = given_clause :: unsimplifiable_active
             (* perform all possible inferences between given_clause and active set NOTE: also
             computes inferences between given_clause and itself! *)
+            (* val _ = Jeha_Common.trace_msg context (K "START INFERRING NEW CLAUSES") *)
             val inferred_clauses = infer_clauses context active given_clause
             (* val _ = trace_msg_clauses "inferred: " inferred_clauses *)
             (* clauses to be added to passive set *)
+            (* val _ = Jeha_Common.trace_msg context (K "START CHEAP SIMPLIFICATION") *)
             val new_clauses =
               simplified_active @ inferred_clauses
               (* cheap_simplify *)
               |> maps (forward_simplify context true active)
               (* |> (fn cheap_simplified => (trace_msg_clauses "cheap_simplified: " cheap_simplified; cheap_simplified)) *)
               |> filter (not o is_trivial)
-            val _ = trace_msg_clauses "new_clauses: " new_clauses
+            (* val _ = Jeha_Common.trace_msg context (K "END CHEAP SIMPLIFICATION") *)
+            (* val _ = trace_msg_clauses "new_clauses: " new_clauses *)
             (* add inferred clauses to passive set *)
             val passive = add_new_clauses passive new_clauses
             (* tracing *)

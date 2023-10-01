@@ -189,6 +189,11 @@ fun seq_cartesian_product xs ys =
   case Seq.pull xs of
     SOME (x, xs) => Seq.append (Seq.map (pair x) ys) (seq_cartesian_product xs ys)
   | NONE => Seq.empty
+  (* Seq.make (fn () =>
+    case Seq.pull xs of
+      SOME (x, xs) => Seq.pull (Seq.append (Seq.map (pair x) ys) (seq_cartesian_product xs ys))
+    | NONE => NONE
+  ) *)
 
 fun cartesian_product [] _ = []
   | cartesian_product (x :: xs) ys = map (pair x) ys @ cartesian_product xs ys

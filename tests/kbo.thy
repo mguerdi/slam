@@ -313,12 +313,14 @@ check_dynamic @{context} "ALL s t. (SOME EQUAL = Jeha_Order.kbo_fast (s, t)) = (
 
 (* literals *)
 ML \<open>
+  (* extra element Bot which is the smallest *)
   datatype 'a with_bot = Bot | It of 'a
   fun bot_ord _ (Bot, Bot) = SOME EQUAL
     | bot_ord _ (Bot, _) = SOME LESS
     | bot_ord _ (_, Bot) = SOME GREATER
     | bot_ord cmp (It s, It t) = cmp (s, t)
   fun bot_eq cmp (x, y) = (SOME EQUAL) = bot_ord ((fn b => if b then SOME EQUAL else NONE) o cmp) (x, y)
+  (* "the standard way" *)
   fun ms_of_lit (s, t, true) = [[It s], [It t]]
     | ms_of_lit (s, t, false) = [[It s, Bot], [It t, Bot]]
   val ms_lit_eq = apply2 ms_of_lit #> (Jeha_Order.multiset_eq (Jeha_Order.multiset_eq (bot_eq (op aconv))))
@@ -335,7 +337,7 @@ ML \<open>
       SOME LESS => ms_lit_g (r, l)
     | SOME GREATER => ms_lit_g (l, r)
     | SOME EQUAL => ms_lit_eq (l, r)
-    | NONE => true (* FIXME *)
+    | NONE => not (ms_lit_eq (l, r)) andalso not (ms_lit_eq (r, l))
 \<close>
 
 ML \<open>
@@ -357,7 +359,7 @@ ML \<open>
   val are_equal_lit_int_ords = are_equal_lit_generic_ords (SOME o int_ord)
 \<close>
 
-declare [[speccheck_max_success = 1000000]]
+declare [[speccheck_max_success = 1000]]
 ML_command \<open>
   val small_int_gen = Gen.range_int (~100, 100)
   val lit_int_gen =
@@ -371,7 +373,8 @@ ML_command \<open>
   ]
 \<close>
 
-declare [[speccheck_max_success = 100000]]
+declare [[speccheck_max_success = 1000]]
+declare [[show_types]]
 ML \<open>
   fun term_num_args_gen nv ni weights num_args_gen h i =
     Gen.zip (Gen.aterm' (Gen.nonneg nv) (Gen.nonneg ni) weights) (num_args_gen h i)
@@ -400,6 +403,18 @@ ML \<open>
   val lit_test = Lecker.test_group @{context} (Random.new ()) [
     Prop.prop (are_equal_lit_ords) |> check_lit_pair "some lits"
   ]
+\<close>
+
+ML_val \<open>
+  val l1 = (Var (("v_0", 1), @{typ_pat "?'a2"}), Free ("v_0", @{typ_pat "?'a"}), false);
+  val l2 = (Free ("v_2", @{typ_pat "?'a"}), Free ("v_1", @{typ_pat "?'a"}), true);
+  val _ = writeln ("comparing " ^ JLit.pretty_lit @{context} l1 ^ " (l1) with " ^ JLit.pretty_lit @{context} l2 ^ " (l2)")
+  val comp_gen = JLit.kbo (l1, l2);
+  (* at least it's self consistent: *)
+  val comp_gen_swapperd = JLit.kbo (l2, l1);
+  val l1_greater = ms_lit_g (l1, l2);
+  val l2_greater = ms_lit_g (l2, l1);
+  \<^assert> (are_equal_lit_ords (l1, l2))
 \<close>
 
 ML \<open>

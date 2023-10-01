@@ -19,6 +19,10 @@ sig
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
   val kbo : T * T -> Jeha_Order.partial_order
+  val kbo_generic :
+    (('a * 'a) -> Jeha_Order.partial_order) ->
+    (('a * 'a * bool) * ('a * 'a * bool)) ->
+    Jeha_Order.partial_order
   val pretty_lit' : Proof.context -> T -> Pretty.T
   val pretty_lit : Proof.context -> T -> string
 end;
@@ -100,7 +104,29 @@ fun kbo (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
   (* same signs *)
   else Jeha_Order.mk_multiset_order_of_strict Jeha_Order.kbo ([s, t], [u, v])
 
-  fun pretty_lit' ctxt = Jeha_Common.pretty_term' ctxt o term_of
-  val pretty_lit = Pretty.string_of oo pretty_lit'
+(* see notes in info/master/kbo/build/main.pdf *)
+fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
+  if not st_pos andalso uv_pos
+    (* compare negative to positive (note: never equal) *)
+    then
+      (* FIXME: merge the two traversals into one *)
+      if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
+          the_default false (Jeha_Common.map_some is_greater_equal (cmp (m, n)))))
+        (* negative > positive iff. \<forall>\<dots>\<exists>\<dots> m \<ge> n *)
+        then SOME GREATER
+      else if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
+                the_default false (Jeha_Common.map_some is_less (cmp (m, n)))))
+        (* negative < positive iff. \<forall>\<dots>\<exists>\<dots> m > n *)
+        then SOME LESS
+      else NONE
+  else if st_pos andalso not uv_pos
+    (* compare positive to negative by swapping and reversing the result *)
+    then Jeha_Common.map_some rev_order (kbo_generic cmp (uv, st))
+  (* same signs *)
+  else Jeha_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
+
+fun pretty_lit' ctxt = Jeha_Common.pretty_term' ctxt o term_of
+
+val pretty_lit = Pretty.string_of oo pretty_lit'
 
 end;
