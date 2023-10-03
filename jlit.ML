@@ -83,47 +83,31 @@ fun occurs_deeply_in x (l, r, _) = JTerm.occurs_deeply_in x l orelse JTerm.occur
 
 fun maxidx_of (s, t, _) = Int.max (apply2 maxidx_of_term (s, t))
 
-(* see notes in info/master/kbo/build/main.pdf *)
-fun kbo (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
+fun kbo_generic_different_signs_greater cmp ((s, t, st_pos), (u, v, uv_pos)) =
+  (* different signs => never equal *)
   if not st_pos andalso uv_pos
-    (* compare negative to positive (note: never equal) *)
-    then
-      (* FIXME: merge the two traversals into one *)
-      if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-          the_default false (Jeha_Common.map_some is_greater_equal (Jeha_Order.kbo (m, n)))))
-        (* negative > positive iff. \<forall>\<dots>\<exists>\<dots> m \<ge> n *)
-        then SOME GREATER
-      else if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-                the_default false (Jeha_Common.map_some is_less (Jeha_Order.kbo (m, n)))))
-        (* negative < positive iff. \<forall>\<dots>\<exists>\<dots> m > n *)
-        then SOME LESS
-      else NONE
+    (* negative > positive iff. \<forall>\<dots>\<exists>\<dots> m \<ge> n *)
+    then [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
+          the_default false (Jeha_Common.map_some is_greater_equal (cmp (m, n)))))
   else if st_pos andalso not uv_pos
-    (* compare positive to negative by swapping and reversing the result *)
-    then Jeha_Common.map_some rev_order (kbo (uv, st))
-  (* same signs *)
-  else Jeha_Order.mk_multiset_order_of_strict Jeha_Order.kbo ([s, t], [u, v])
+    (* positive > negative iff. \<forall>\<dots>\<exists>\<dots> m > n *)
+    then [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
+          the_default false (Jeha_Common.map_some is_greater (cmp (m, n)))))
+  else error "kbo_generic_different_signs_greater: same signs"
 
 (* see notes in info/master/kbo/build/main.pdf *)
 fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
-  if not st_pos andalso uv_pos
-    (* compare negative to positive (note: never equal) *)
+  if st_pos = not uv_pos
     then
-      (* FIXME: merge the two traversals into one *)
-      if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-          the_default false (Jeha_Common.map_some is_greater_equal (cmp (m, n)))))
-        (* negative > positive iff. \<forall>\<dots>\<exists>\<dots> m \<ge> n *)
+      if kbo_generic_different_signs_greater cmp (st, uv)
         then SOME GREATER
-      else if [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-                the_default false (Jeha_Common.map_some is_less (cmp (m, n)))))
-        (* negative < positive iff. \<forall>\<dots>\<exists>\<dots> m > n *)
+      else if kbo_generic_different_signs_greater cmp (uv, st)
         then SOME LESS
       else NONE
-  else if st_pos andalso not uv_pos
-    (* compare positive to negative by swapping and reversing the result *)
-    then Jeha_Common.map_some rev_order (kbo_generic cmp (uv, st))
-  (* same signs *)
+  (* fall back to multiset comparison *)
   else Jeha_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
+
+val kbo = kbo_generic Jeha_Order.kbo
 
 fun pretty_lit' ctxt = Jeha_Common.pretty_term' ctxt o term_of
 
