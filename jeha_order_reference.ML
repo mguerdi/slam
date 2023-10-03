@@ -137,8 +137,6 @@ datatype fo_term =
   (* first arg is a fluid term or a Var or a dummy_pattern with a TVar with dummy sort as type *)
 | FOVar of term * bool (* z\<^sub>t, z\<^sub>t' with false, true resp. *)
 
-(* name apart terms and types, i.e. Const, Free, Var, Type, TFree, TVar by
-prefixing constructor names *)
 fun type_to_fo_term (Type (name, Ts)) = FOApp (FOType name, map type_to_fo_term Ts)
   | type_to_fo_term (TFree (name, Ss)) = FOApp (FOTFree (name, Ss), [])
   (* TVar encoded as Const ("Pure.dummy_pattern", T) with sort replaced by dummy sort [""] *)
@@ -263,33 +261,41 @@ fun counts_greater_equal ((s_counts_above, s_counts_below), (t_counts_above, t_c
   end
 
 (* lam > db > quantifier > symbols > bot > top *)
-fun fo_prec_greater (FOLam, FOLam) = false
-  | fo_prec_greater (FOLam, _) = true
-  | fo_prec_greater (_, FOLam) = false
-  | fo_prec_greater (FODeBruijn i, FODeBruijn j) = i > j
-  | fo_prec_greater (FODeBruijn _, _) = true
-  | fo_prec_greater (_, FODeBruijn _) = false
-  | fo_prec_greater (FOForall, FOForall) = false
-  | fo_prec_greater (FOForall, _) = true
-  | fo_prec_greater (_, FOForall) = false
-  | fo_prec_greater (FOExists, FOExists) = false
-  | fo_prec_greater (FOExists, _) = true
-  | fo_prec_greater (_, FOExists) = false
-  | fo_prec_greater (FOForallPrime, FOForallPrime) = false
-  | fo_prec_greater (FOForallPrime, _) = true
-  | fo_prec_greater (_, FOForallPrime) = false
-  | fo_prec_greater (FOExistsPrime, FOExistsPrime) = false
-  | fo_prec_greater (FOExistsPrime, _) = true
-  | fo_prec_greater (_, FOExistsPrime) = false
-  | fo_prec_greater (FOConst (f, _), FOConst (g, _)) = GREATER = string_ord (f, g) 
-  | fo_prec_greater (FOConst _, _) = true
-  | fo_prec_greater (_, FOConst _) = false
-  | fo_prec_greater (FOFree (f, _), FOFree (g, _)) = GREATER = string_ord (f, g)
-  | fo_prec_greater (FOFree _, _) = true
-  | fo_prec_greater (_, FOFree _) = false
+fun prec_key FOLam = 11
+  | prec_key (FODeBruijn _) = 10
+  | prec_key FOForall = 9
+  | prec_key FOExists = 8
+  | prec_key FOForallPrime = 7
+  | prec_key FOExistsPrime = 6
+  | prec_key (FOConst (@{const_name "HOL.False"}, _)) = 3
+  | prec_key (FOConst (@{const_name "HOL.True"}, _)) = 2
+  | prec_key (FOConst _) = 5
+  | prec_key (FOFree _) = 4
+  (* these shouldn't ever be compared against the others *)
+  | prec_key (FOType _) = 1
+  | prec_key (FOTFree _) = 0
+
+fun fo_prec_greater st =
+  case int_ord (apply2 prec_key st) of
+    GREATER => true
+  | LESS => false
+  | EQUAL =>
+    case st of
+      (FODeBruijn i, FODeBruijn j) => i > j
+      (* FIXME: types? *)
+    | (FOConst (s, _), FOConst (t, _)) => GREATER = string_ord (s, t)
+    | (FOFree (s, _), FOFree (t, _)) => GREATER = string_ord (s, t)
+    | (FOType s, FOType t) => GREATER = string_ord (s, t)
+    | (FOTFree (s, _), FOTFree (t, _)) => GREATER = string_ord (s, t)
+    | (s, t) =>
+        if s <> t then
+          error ("fo_prec_greater: not the same constructors?" ^
+            @{make_string} (#1 st) ^ " and " ^ @{make_string} (#2 st))
+        else
+          false
 
 fun lex_greater a_ord ([], []) = false
-  | lex_greater a_ord (s::ss, t::ts) = 
+  | lex_greater a_ord (s::ss, t::ts) =
       (* FIXME: appropriate equality? *)
       if s = t
         then lex_greater a_ord (ss, ts)
