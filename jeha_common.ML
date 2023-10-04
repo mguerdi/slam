@@ -6,6 +6,7 @@ sig
   val proof_reconstruction : bool Config.T
   val term_pat_setup : theory -> theory
   val type_pat_setup : theory -> theory
+  val term_schem_setup : theory -> theory
   val verbose_of : Proof.context -> Proof.context
   val pretty_term : Proof.context -> term -> string
   val pretty_term' : Proof.context -> term -> Pretty.T
@@ -67,7 +68,9 @@ setup \<open> Jeha_Common.term_pat_setup \<close>
 
 setup \<open> Jeha_Common.type_pat_setup \<close>
 
-in .thy files. *)
+in .thy files.
+
+NOTE: @{term_pat "c :: 'a} gives type ?'a instead of 'a, see term_schem below *)
 val term_pat_setup =
 let
   val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
@@ -90,6 +93,28 @@ let
     end
 in
   ML_Antiquotation.inline @{binding "typ_pat"} (parser >> typ_pat)
+end
+
+(* See
+https://isabelle.zulipchat.com/#narrow/stream/336180-Archive-Mirror.3A-Isabelle-Users-Mailing-List/topic/.5Bisabelle.5D.20Work.20on.20a.20new.20theorem.20prover/near/294329598
+
+  "The @{term_pat} antiqutation is a bit strange. If you really mean to
+  refer to schematic terms, you should say so via
+  Proof_Context.mode_schematic, and not Proof_Context.mode_pattern."
+
+Use
+
+setup \<open> Jeha_Common.term_schem_setup \<close>
+
+in .thy files. *)
+val term_schem_setup =
+let
+  val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
+
+  fun term_schem (ctxt, str) =
+    str |> Proof_Context.read_term_schematic ctxt |> ML_Syntax.print_term |> ML_Syntax.atomic
+in
+  ML_Antiquotation.inline @{binding "term_schem"} (parser >> term_schem)
 end
 
 (* for tracing *)
