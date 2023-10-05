@@ -1,6 +1,6 @@
 theory "kbo"
 imports
-  HOL.Main
+  test_base
   SpecCheck.SpecCheck_Dynamic
 begin
 
@@ -14,148 +14,21 @@ structure Shrink = SpecCheck_Shrink
 structure Random = SpecCheck_Random
 \<close>
 
-
-ML_file \<open>../jeha_common.ML\<close>
-ML_file \<open>../jterm.ML\<close>
-ML_file \<open>../clause_id.ML\<close>
-ML_file \<open>../jeha_order_reference.ML\<close>
-ML_file \<open>../jeha_order.ML\<close>
-ML_file \<open>../jlit.ML\<close>
-ML_file \<open>../jclause_pos.ML\<close>
-ML_file \<open>../jeha_log.ML\<close>
-ML_file \<open>../jclause.ML\<close>
-ML_file \<open>../jeha_index.ML\<close>
-
 declare [[speccheck_max_success = 100]]
 declare [[speccheck_num_counterexamples = 30]]
 declare [[ML_print_depth = 100]]
 
 (* Antiquotations for term and type patterns from the cookbook. *)
-ML \<open>
-  val term_pat_setup =
-  let
-    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
+setup \<open> Jeha_Common.term_pat_setup \<close>
 
-    fun term_pat (ctxt, str) =
-      str |> Proof_Context.read_term_pattern ctxt |> ML_Syntax.print_term |> ML_Syntax.atomic
-  in
-    ML_Antiquotation.inline @{binding "term_pat"} (parser >> term_pat)
-  end
+setup \<open> Jeha_Common.type_pat_setup \<close>
 
-  val type_pat_setup =
-  let
-    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
-
-    fun typ_pat (ctxt, str) =
-      let
-        val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
-      in
-        str |> Syntax.read_typ ctxt' |> ML_Syntax.print_typ |> ML_Syntax.atomic
-      end
-  in
-    ML_Antiquotation.inline @{binding "typ_pat"} (parser >> typ_pat)
-  end
-\<close>
-
-setup \<open> term_pat_setup \<close>
-
-setup \<open> type_pat_setup \<close>
-
-ML \<open>
-  val fps = [[], [1]]
-  val terms =
-    [ @{term_pat "?x :: int"}
-    , @{term_pat "c :: int"}
-    , @{term_pat "d :: int"}
-    , @{term_pat "f(d) :: int"}
-    , @{term_pat "f(?x) :: int"}
-    , @{term "\<lambda> x . d"}
-    ]
-  val keys = map (Term_Index.compute_key fps) terms
-  val index = fold (Term_Index.insert_term fps) terms Term_Index.empty
-  (* val _ =
-    Term_Index.fold
-      (K true)
-      [Jeha_Index.FOFree "f", Jeha_Index.AnonymousVar]
-      (fn t => K (writeln (Jeha_Common.pretty_term @{context} t)))
-      index
-      () *)
-\<close>
+setup \<open> Jeha_Common.term_schem_setup \<close>
 
 declare [[speccheck_max_success = 100]]
 declare [[speccheck_num_counterexamples = 30]]
 declare [[show_types = true]]
 
-ML \<open>
-  fun term_num_args_gen nv ni weights num_args_gen h i =
-    Gen.zip (Gen.aterm' (Gen.nonneg nv) (Gen.nonneg ni) weights) (num_args_gen h i)
-
-  fun term_gen ctxt nv ni weights num_args_gen =
-    let val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
-    in
-      Gen.term_tree (term_num_args_gen nv ni weights num_args_gen)
-      |> Gen.map (try (singleton (Variable.polymorphic ctxt') o Syntax.check_term ctxt'))
-      |> Gen.filter is_some
-      |> Gen.map the
-    end
-
-  fun term_pair_gen ctxt nv ni weights num_args_gen =
-    let
-      val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
-      val term_gen = Gen.term_tree (term_num_args_gen nv ni weights num_args_gen)
-    in
-      Gen.zip term_gen term_gen
-      |> Gen.map (fn (s, t) => try (Variable.polymorphic ctxt' o Syntax.check_terms ctxt') [s, t])
-      |> Gen.filter is_some
-      |> Gen.map (fn SOME [s, t] => (s, t))
-    end
-
-  fun num_args_gen max_h max_args h _ = if h > max_h then Gen.return 0 else Gen.nonneg max_args
-
-  fun term_gen' ctxt nv ni weights max_h max_args =
-    term_gen ctxt nv ni weights (num_args_gen max_h max_args)
-  
-  fun term_pair_gen' ctxt nv ni weights max_h max_args =
-    term_pair_gen ctxt nv ni weights (num_args_gen max_h max_args)
-
-  (* *)
-  val term_gen_set = term_gen' @{context} 2 2 (1, 1, 1, 0) 4 4
-
-  (* (weight_const, weight_free, weight_var, weight_bound) *)
-  (* these weights achieve ~50 percent unifiability *)
-  val term_pair_gen_set = term_pair_gen' @{context} 2 2 (4,4,1,0) 4 4
-
-  val check_term = check (Show.term @{context}) term_gen_set
-
-  fun show_termpair ctxt =
-    let val pretty_term = Syntax.pretty_term ctxt
-    in SpecCheck_Show.zip pretty_term pretty_term end
-
-  val check_term_pair = check (show_termpair @{context}) term_pair_gen_set
-
-  fun unify_retrieve (s, t) =
-    let
-      val fps = [[]]
-      val index = Term_Index.insert_term fps s Term_Index.empty
-    in
-      (((if is_some (Seq.pull (Unify.unifiers (Context.Proof @{context}, Envir.init, [(s, t)])))
-        then (
-          if 0 = length (Term_Index.get_unifiables fps t index)
-            then (false; error "bad")
-            else (writeln ("GOOD (|s|, |t|) = (" ^ @{make_string} (size_of_term s) ^ ", " ^ @{make_string} (size_of_term t) ^ ")"); true)
-          )
-        else (writeln "VACUOUS"; true))
-      handle ListPair.UnequalLengths => (writeln "CAUGHT"; true))
-      handle TERM msg => (writeln ("TERM: " ^ fst msg ^ " (s,t) = " ^ Jeha_Common.pretty_terms @{context} [s,t]); true))
-      handle TYPE _ => (writeln "TYPE"; true)
-    end
-
-  val _ = Lecker.test_group @{context} (Random.new ()) [
-    (* Prop.prop (fn t => false) |> check_term "no loose bvars" *)
-    (* Prop.prop (K false) |> check_term_pair "some term pairs" *)
-    Prop.prop (unify_retrieve) |> check_term_pair "unifiables retrieved"
-  ]
-\<close>
 
 declare [[speccheck_num_counterexamples = 30]]
 
@@ -190,32 +63,66 @@ declare [[speccheck_max_success = 10]]
 declare [[speccheck_num_counterexamples = 30]]
 declare [[ML_print_depth = 100]]
 
-ML \<open>
+(* (O3) *) 
+ML_val \<open>
+  val ft = (@{term "False"}, @{term "True"});
+  val fo_ft = apply2 Jeha_Order_Reference.to_fo_term ft;
+  writeln (Jeha_Order_Reference.pretty_fo_term @{context} (#1 fo_ft));
+  writeln (Jeha_Order_Reference.pretty_fo_term @{context} (#2 fo_ft));
+  val t_g_f = Jeha_Order_Reference.fo_kbo_greater fo_ft;
+  val f_g_t = Jeha_Order_Reference.fo_kbo_greater (swap fo_ft); 
+  val false_kbo_true = Jeha_Order_Reference.kbo ft;
+  \<^assert> (SOME GREATER = false_kbo_true);
+  \<^assert> (SOME GREATER = Jeha_Order_Reference.kbo (@{term "a"}, @{term "False"}));
+\<close>
+
+ML_val \<open>
+  (* Reference KBO: eq and greater: Abs ("x", "'a", Abs ("y", "'a", Const ("HOL.eq", "'a \<Rightarrow> 'a \<Rightarrow> bool") $ Bound 0 $ Bound 1)) and Abs ("x", "'a", Abs ("y", "'a", Const ("HOL.eq", "'a \<Rightarrow> 'a \<Rightarrow> bool") $ Bound 0 $ Bound 1)) *)
+  val Ta = @{typ "'a"}
+  val t = Abs ("x", Ta, Abs ("y", Ta, Const ("HOL.eq", @{typ "'a \<Rightarrow> 'a \<Rightarrow> bool"}) $ Bound 0 $ Bound 1));
+  val s = @{term "\<lambda>x::'a. \<lambda>y::'a. y = x"};
+  \<^assert> (s = t);
+  val fo_t = Jeha_Order_Reference.to_fo_term t;
+  writeln (Jeha_Order_Reference.pretty_fo_term @{context} fo_t);
+  val u = @{term "\<lambda>x::'a. x"};
+  val fo_u = Jeha_Order_Reference.to_fo_term u;
+  val u_g_u = Jeha_Order_Reference.fo_kbo_greater (fo_u, fo_u);
+  val u_refl = Jeha_Order.kbo (u, u)
+\<close>
+
+(* First order translation *)
+ML_val \<open>
   (* \<forall> \<iota> (\<lambda>x. p y y (\<lambda>u. f y y (\<forall> \<iota> (\<lambda>v. u)))) *)
-  val example_term = @{term_pat "\<forall> x. p ?y ?y (\<lambda> u. f ?y ?y (\<forall> v. ?u))"}
-  val translated = Jeha_Order_Reference.to_fo_term example_term
+  val example_term = @{term_pat "\<forall> x. p ?y ?y (\<lambda> u. f ?y ?y (\<forall> v. ?u))"};
+  val translated = Jeha_Order_Reference.to_fo_term example_term;
   (* val _ = writeln (Jeha_Order_Reference.pretty_fo_term @{context} translated) *)
-  val ground_lambda = @{term "\<lambda>x. x"}
-  val might_be_fluid = JTerm.might_be_fluid ground_lambda
-  val ground_translated = Jeha_Order_Reference.to_fo_term ground_lambda
+  val ground_lambda = @{term "\<lambda>x. x"};
+  val might_be_fluid = JTerm.might_be_fluid ground_lambda;
+  \<^assert> (not might_be_fluid);
+  val ground_translated = Jeha_Order_Reference.to_fo_term ground_lambda;
   (* val _ = writeln (Jeha_Order_Reference.pretty_fo_term @{context} ground_translated) *)
-  val with_green_subterms = @{term_pat "(f :: 'a => 'b => 'c) ?x ((g :: 'd => 'e => 'b) ?y b)"}
-  val green_subterm_1 = @{term_pat "?x :: 'a"}
-  val green_subterm_2 = @{term_pat "(g :: 'd \<Rightarrow> 'e \<Rightarrow> 'b) ?y b"}
-  val green_subterm_3 = @{term_pat "b :: 'e"}
-  val with_green_subterms_translated = Jeha_Order_Reference.to_fo_term with_green_subterms
-  val _ = writeln ("with_green_subterms_translated:  " ^ Jeha_Order_Reference.pretty_fo_term @{context} with_green_subterms_translated)
-  val green_subterm_1_translated = Jeha_Order_Reference.to_fo_term green_subterm_1
-  val green_subterm_2_translated = Jeha_Order_Reference.to_fo_term green_subterm_2
-  val _ = writeln ("green_subterm_2: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_2_translated)
-  val green_subterm_3_translated = Jeha_Order_Reference.to_fo_term green_subterm_3
-  val _ = writeln ("green_subterm_3: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_3_translated)
-  val ge_1 = Jeha_Order_Reference.fo_kbo_greater (with_green_subterms_translated, green_subterm_1_translated)
-  val ge_2 = Jeha_Order_Reference.fo_kbo_greater (with_green_subterms_translated, green_subterm_2_translated)
-  val ge_3 = Jeha_Order_Reference.fo_kbo_greater (with_green_subterms_translated, green_subterm_3_translated)
-  (* g ?y b > b *)
-  val ge_23 = Jeha_Order_Reference.fo_kbo_greater (green_subterm_2_translated, green_subterm_3_translated)
-  val kbo_gyb_b = Jeha_Order_Reference.kbo (green_subterm_2, green_subterm_3)
+\<close>
+
+(* Green subterm property, (O2) in o\<lambda>Sup paper *)
+ML_val \<open>
+  val term = @{term_schem "(f :: 'a => 'b => 'c) ?x ((g :: 'd => 'e => 'b) ?y b)"};
+  val green_subterm_1 = @{term_schem "?x :: 'a"};
+  val green_subterm_2 = @{term_schem "(g :: 'd \<Rightarrow> 'e \<Rightarrow> 'b) ?y b"};
+  val green_subterm_3 = @{term_schem "b :: 'e"};
+  val term_translated = Jeha_Order_Reference.to_fo_term term;
+  val _ = writeln ("term_translated:  " ^ Jeha_Order_Reference.pretty_fo_term @{context} term_translated);
+  val green_subterm_1_translated = Jeha_Order_Reference.to_fo_term green_subterm_1;
+  val green_subterm_2_translated = Jeha_Order_Reference.to_fo_term green_subterm_2;
+  val _ = writeln ("green_subterm_2: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_2_translated);
+  val green_subterm_3_translated = Jeha_Order_Reference.to_fo_term green_subterm_3;
+  val _ = writeln ("green_subterm_3: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_3_translated);
+  fun kbo_greater s t = Jeha_Order_Reference.fo_kbo_greater (s, t); 
+  \<^assert> (kbo_greater term_translated green_subterm_1_translated);
+  \<^assert> (kbo_greater term_translated green_subterm_2_translated);
+  \<^assert> (kbo_greater term_translated green_subterm_3_translated);
+  (* g ?y b > b *);
+  \<^assert> (kbo_greater green_subterm_2_translated green_subterm_3_translated);
+  val kbo_gyb_b = Jeha_Order_Reference.kbo (green_subterm_2, green_subterm_3);
 \<close>
 
 ML \<open>
@@ -329,9 +236,10 @@ ML \<open>
     #>
     Jeha_Order.multiset_is_greater_reference
       (Jeha_Order.multiset_is_greater_reference
-        (bot_ord Jeha_Order.kbo_fast #> curry op= (SOME GREATER))
+        (bot_ord Jeha_Order.kbo #> curry op= (SOME GREATER))
         (bot_eq (op aconv)))
-      (Jeha_Order.multiset_eq (bot_eq (op aconv)))
+      (* (Jeha_Order.multiset_eq (bot_eq (op aconv))) *)
+      (Jeha_Order.multiset_eq (bot_eq (Jeha_Order.kbo #> curry op= (SOME EQUAL))))
   fun are_equal_lit_ords (l, r) =
     case JLit.kbo (l, r) of
       SOME LESS => ms_lit_g (r, l)
@@ -355,11 +263,29 @@ ML \<open>
       SOME LESS => ms_lit_generic_g cmp (r, l)
     | SOME GREATER => ms_lit_generic_g cmp (l, r)
     | SOME EQUAL => ms_lit_generic_eq (l, r)
-    | NONE => true (* FIXME *)
+    | NONE =>
+        not (
+          ms_lit_generic_g cmp (l, r) orelse
+          ms_lit_generic_g cmp (r, l) orelse
+          ms_lit_generic_eq (l, r)
+        )
   val are_equal_lit_int_ords = are_equal_lit_generic_ords (SOME o int_ord)
 \<close>
 
-declare [[speccheck_max_success = 1000]]
+ML_val \<open>
+  (* val (l1, l2) = ((2, 3, false), (4, 1, true));  *)
+  val (l1, l2) = ((1, 1, false), (2, 1, true)); 
+  val (l1_ms, l2_ms) = apply2 ms_of_lit (l1, l2);
+  (* NOTE multisets of true and false are always disjoint *)
+  val l1_g_l2 = ms_lit_generic_g (SOME o int_ord) (l1, l2);
+  val l2_g_l1 = ms_lit_generic_g (SOME o int_ord) (l2, l1);
+  val l1_kbo_l2 = JLit.kbo_generic (SOME o int_ord) (l1, l2);
+  val l2_kbo_l1 = JLit.kbo_generic (SOME o int_ord) (l2, l1);
+  \<^assert> (are_equal_lit_int_ords (l1, l2))
+\<close>
+
+
+declare [[speccheck_max_success = 100000]]
 ML_command \<open>
   val small_int_gen = Gen.range_int (~100, 100)
   val lit_int_gen =
@@ -375,43 +301,32 @@ ML_command \<open>
 
 declare [[speccheck_max_success = 1000]]
 declare [[show_types]]
+
 ML \<open>
-  fun term_num_args_gen nv ni weights num_args_gen h i =
-    Gen.zip (Gen.aterm' (Gen.nonneg nv) (Gen.nonneg ni) weights) (num_args_gen h i)
-  fun term_gen ctxt nv ni weights num_args_gen =
-    let val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
-    in
-      Gen.term_tree (term_num_args_gen nv ni weights num_args_gen)
-      |> Gen.map (try (singleton (Variable.polymorphic ctxt') o Syntax.check_term ctxt'))
-      |> Gen.filter is_some
-      |> Gen.map the
-    end
-  fun term_gen' ctxt nv ni weights max_h max_args =
-    term_gen ctxt nv ni weights (num_args_gen max_h max_args)
-  val term_gen_set = term_gen' @{context} 2 2 (1, 1, 1, 0) 4 4
-  val tpair_gen = Gen.zip term_gen_set term_gen_set
-  val eq_gen = Gen.map HOLogic.mk_eq tpair_gen
-  val lit_gen =
-    eq_gen
-    |> Gen.zip (Gen.bernoulli 0.5)
-    |> Gen.map (fn (b, t) => (if b then I else HOLogic.mk_not) t)
-    |> Gen.map JLit.of_term
   (* val show_lit = JLit.pretty_lit' @{context} *)
-  val show_lit = @{make_string} #> Pretty.str
-  val check_lit = check show_lit lit_gen
-  val check_lit_pair = check (Show.zip show_lit show_lit) (Gen.zip lit_gen lit_gen)
+  fun set_params gen = gen 2 2 (1, 1, 1, 0) 4 4
+  val term_gen_set = JGen.term_gen' @{context} |> set_params
+  val term_pair_gen_set = JGen.term_pair_gen' @{context} |> set_params
+  val lit_gen_set = JGen.lit_gen' @{context} |> set_params
+  val check_lit = check JGen.show_lit (lit_gen_set)
+  val check_lit_pair =
+    check (Show.zip JGen.show_lit JGen.show_lit) (Gen.zip lit_gen_set lit_gen_set)
   val lit_test = Lecker.test_group @{context} (Random.new ()) [
     Prop.prop (are_equal_lit_ords) |> check_lit_pair "some lits"
   ]
 \<close>
 
 ML_val \<open>
-  val l1 = (Var (("v_0", 1), @{typ_pat "?'a2"}), Free ("v_0", @{typ_pat "?'a"}), false);
-  val l2 = (Free ("v_2", @{typ_pat "?'a"}), Free ("v_1", @{typ_pat "?'a"}), true);
+  (* val (Ta, Tb) = (@{typ_pat "?'a"}, @{typ_pat "?'b"}); *)
+  val (Ta, Tb) = (@{typ "'a"}, @{typ "'b"})
+  val x = Var (("x", 0), Ta);
+  val [c, d, e] = map (fn n => Free (n, Ta)) ["c", "d", "e"] 
+  val l1 = (x, c, false); 
+  val l2 = (d, e, true);
   val _ = writeln ("comparing " ^ JLit.pretty_lit @{context} l1 ^ " (l1) with " ^ JLit.pretty_lit @{context} l2 ^ " (l2)")
   val comp_gen = JLit.kbo (l1, l2);
   (* at least it's self consistent: *)
-  val comp_gen_swapperd = JLit.kbo (l2, l1);
+  val comp_gen_swapped = JLit.kbo (l2, l1);
   val l1_greater = ms_lit_g (l1, l2);
   val l2_greater = ms_lit_g (l2, l1);
   \<^assert> (are_equal_lit_ords (l1, l2))
@@ -516,156 +431,6 @@ check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => SOME LESS <>
 
 ML_command \<open>
 check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => max >= x) xs) (map (fn (i, _) => nth xs i) (Jeha_Order.idxs_of_maximal_elements (SOME o int_ord) xs))"
-\<close>
-
-subsection \<open>Unit Tests and Exceptions\<close>
-
-ML \<open>
-  fun faulty_abs n =
-    if n < ~10000 then error "out of bounds"
-    else if n < 0 then ~n
-    else n
-\<close>
-
-ML_command \<open>
-let
-  val check_unit_int_pair = check_unit_tests (Show.zip Show.int Show.int)
-  fun correctness_tests ctxt s = Lecker.test_group ctxt s [
-      check_unit_int_pair  [(~10, 10), (0, 0), (10, 10)] "correctness small values"
-        (Prop.prop (fn (n, exp) => faulty_abs n = exp)),
-      check_unit_int_pair [(~999999999, 999999999), (999999999, 999999999)]
-        "correctness large values" (Prop.prop (fn (n, exp) => faulty_abs n = exp))
-    ]
-  fun exception_tests ctxt s =
-    let val exn_prop = Prop.expect_failure (ERROR "out of bounds") faulty_abs
-    in
-      Lecker.test_group ctxt s [
-        check_unit_tests Show.int [~10, 0, 10] "expect exception for small values" exn_prop,
-        check_unit_tests Show.int [~999999999, ~99999999999999] "expect exception for large values"
-          exn_prop
-      ]
-    end
-in
-  Lecker.test_group @{context} () [
-    check_unit_tests Show.int [~10, 0, 10] "is idempotent"
-      (Prop.prop (fn n => faulty_abs (faulty_abs n) = faulty_abs n)),
-    correctness_tests,
-    exception_tests
-  ]
-end
-\<close>
-
-subsection \<open>Randomised Tests\<close>
-
-ML_command \<open>
-let
-  val int_gen = Gen.range_int (~10000000, 10000000)
-  val size_gen = Gen.nonneg 10
-  val check_list = check_shrink (Show.list Show.int) (Shrink.list Shrink.int)
-    (Gen.list size_gen int_gen)
-  fun list_test (k, f, xs) =
-    AList.lookup (op=) (AList.map_entry (op=) k f xs) k = Option.map f (AList.lookup (op=) xs k)
-
-  val list_test_show = Show.zip3 Show.int Show.none (Show.list (Show.zip Show.int Show.int))
-  val list_test_gen = Gen.zip3 int_gen (Gen.function' int_gen)
-    (Gen.list size_gen (Gen.zip int_gen int_gen))
-in
-  Lecker.test_group @{context} (Random.new ()) [
-    Prop.prop (fn xs => rev xs = xs) |> check_list "rev = I",
-    Prop.prop (fn xs => rev (rev xs) = xs) |> check_list "rev o rev = I",
-    Prop.prop list_test |> check list_test_show list_test_gen "lookup map equiv map lookup"
-  ]
-end
-\<close>
-
-text \<open>The next three examples roughly correspond to the above test group (except that there's no
-shrinking). Compared to the string-based method, the method above is more flexible - you can change
-your generators, shrinking methods, and show instances - and robust - you are not reflecting strings
-(which might contain typos) but entering type-checked code. In exchange, it is a bit more work to
-set up the generators. However, in practice, one shouldn't rely on default generators in most cases
-anyway.\<close>
-
-ML_command \<open>
-check_dynamic @{context} "ALL xs. rev xs = xs";
-\<close>
-
-ML_command \<open>
-check_dynamic @{context} "ALL xs. rev (rev xs) = xs";
-\<close>
-
-subsection \<open>AList Specification\<close>
-
-ML_command \<open>
-(*map_entry applies the function to the element*)
-check_dynamic @{context} (implode
-  ["ALL k f xs. AList.lookup (op =) (AList.map_entry (op =) k f xs) k = ",
-   "Option.map f (AList.lookup (op =) xs k)"])
-\<close>
-
-ML_command \<open>
-(*update always results in an entry*)
-check_dynamic @{context} "ALL k v xs. AList.defined (op =) (AList.update (op =) (k, v) xs) k";
-\<close>
-
-ML_command \<open>
-(*update always writes the value*)
-check_dynamic @{context}
-  "ALL k v xs. AList.lookup (op =) (AList.update (op =) (k, v) xs) k = SOME v";
-\<close>
-
-ML_command \<open>
-(*default always results in an entry*)
-check_dynamic @{context} "ALL k v xs. AList.defined (op =) (AList.default (op =) (k, v) xs) k";
-\<close>
-
-ML_command \<open>
-(*delete always removes the entry*)
-check_dynamic @{context} "ALL k xs. not (AList.defined (op =) (AList.delete (op =) k xs) k)";
-\<close>
-
-ML_command \<open>
-(*default writes the entry iff it didn't exist*)
-check_dynamic @{context} (implode
-  ["ALL k v xs. (AList.lookup (op =) (AList.default (op =) (k, v) xs) k = ",
-   "(if AList.defined (op =) xs k then AList.lookup (op =) xs k else SOME v))"])
-\<close>
-
-subsection \<open>Examples on Types and Terms\<close>
-
-
-ML_command \<open>
-check_dynamic @{context} "ALL f g t. map_types (g o f) t = (map_types f o map_types g) t";
-\<close>
-
-ML_command \<open>
-check_dynamic @{context} "ALL f g t. map_types (f o g) t = (map_types f o map_types g) t";
-\<close>
-
-
-text \<open>One would think this holds:\<close>
-
-ML_command \<open>
-check_dynamic @{context} "ALL t ts. strip_comb (list_comb (t, ts)) = (t, ts)"
-\<close>
-
-text \<open>But it only holds with this precondition:\<close>
-
-ML_command \<open>
-check_dynamic @{context}
-  "ALL t ts. case t of _ $ _ => true | _ => strip_comb (list_comb (t, ts)) = (t, ts)"
-\<close>
-
-subsection \<open>Some surprises\<close>
-
-ML_command \<open>
-check_dynamic @{context} "ALL Ts t. type_of1 (Ts, t) = fastype_of1 (Ts, t)"
-\<close>
-
-
-ML_command \<open>
-val thy = \<^theory>;
-check_dynamic (Context.the_local_context ())
-  "ALL t u. if Pattern.matches thy (t, u) then Term.could_unify (t, u) else true"
 \<close>
 
 end
