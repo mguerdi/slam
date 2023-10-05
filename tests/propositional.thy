@@ -42,7 +42,7 @@ lemma or_pass_left:
   shows "A \<or> B \<Longrightarrow> (A \<Longrightarrow> C) \<Longrightarrow> C \<or> B"
   by (jeha)
 
-lemma or_pass_left:
+lemma or_pass_right:
   shows "A \<or> B \<Longrightarrow> (B \<Longrightarrow> C) \<Longrightarrow> A \<or> C"
   by (jeha)
 
