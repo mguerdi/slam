@@ -405,13 +405,21 @@ fun is_redundant ctxt active c =
     subsumed andalso
       (Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
-    val _ = if all_disabled then writeln "REDUNDANCY CHECKS DISABLED" else ()
-    fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K false
+    (* val _ = if all_disabled then writeln "REDUNDANCY CHECKS DISABLED" else () *)
+    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
+    fun equality_subsumed_by active_clause =
+      if_cfg
+        Jeha_Common.rule_equality_subsumption
+        (fn _ => equality_subsumes ctxt (active_clause, c))
+    fun clause_subsumed_by active_clause =
+      if_cfg
+        Jeha_Common.rule_clause_subsumption
+        (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (active_clause, c)
+          |> trace_subsumed active_clause)
   in
   (* forward subsumption: does any active clause subsume c? *)
   exists
-    (fn ac => if_cfg Jeha_Common.rule_equality_subsumption (equality_subsumes ctxt (ac, c))
-      orelse if_cfg Jeha_Common.rule_clause_subsumption (trace_subsumed ac (Jeha_Subsumption.subsumes (Context.Proof ctxt) (ac, c))))
+    (fn active_clause => equality_subsumed_by active_clause orelse clause_subsumed_by active_clause)
     active
   end
 
