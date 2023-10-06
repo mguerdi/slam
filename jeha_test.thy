@@ -1,85 +1,14 @@
 theory jeha_test
 
-imports Main HOL.Hilbert_Choice
+imports "tests/test_base" Main HOL.Hilbert_Choice
 
 begin
 
 notation (output) "Pure.prop" ("#_" [1000] 1000)
 
-(* Antiquotations for term and type patterns from the cookbook. *)
 ML \<open>
-  val term_pat_setup =
-  let
-    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
-
-    fun term_pat (ctxt, str) =
-      str |> Proof_Context.read_term_pattern ctxt |> ML_Syntax.print_term |> ML_Syntax.atomic
-  in
-    ML_Antiquotation.inline @{binding "term_pat"} (parser >> term_pat)
-  end
-
-  val type_pat_setup =
-  let
-    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
-
-    fun typ_pat (ctxt, str) =
-      let
-        val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
-      in
-        str |> Syntax.read_typ ctxt' |> ML_Syntax.print_typ |> ML_Syntax.atomic
-      end
-  in
-    ML_Antiquotation.inline @{binding "typ_pat"} (parser >> typ_pat)
-  end
-\<close>
-
-setup \<open> term_pat_setup \<close>
-
-setup \<open> type_pat_setup \<close>
-
-ML \<open>
-  fun verbose_of ctxt = config_put_many_bool ctxt
-    [show_types, show_brackets, show_markup, (* show_sorts, *) show_structs]
-  and config_put_many_bool ctxt options =
-    List.foldr (fn (option, ctxt) => Config.put option true ctxt) ctxt options
-  fun pretty_term ctxt t = Syntax.pretty_term ctxt t |> Pretty.string_of
-  fun pretty_terms ctxt terms =
-    terms
-    |> map (Syntax.pretty_term ctxt)
-    |> Pretty.commas |> Pretty.block |> Pretty.string_of
-  fun pretty_type ctxt typ = Pretty.string_of (Syntax.pretty_typ ctxt typ)
-\<close>
-
-ML \<open>
-  local
-    fun pp_pair (x, y) = Pretty.list "(" ")" [x, y]
-    fun pp_triple (x, y, z) = Pretty.list "(" ")" [x, y, z]
-    fun pp_list xs = Pretty.list "[" "]" xs
-    fun pp_str s = Pretty.str s
-    fun pp_qstr s = Pretty.quote (pp_str s)
-    fun pp_int i = pp_str (string_of_int i)
-    fun pp_sort S = pp_list (map pp_qstr S)
-    fun pp_constr a args = Pretty.block [pp_str a, Pretty.brk 1, args]
-  in
-  fun raw_pp_typ (TVar ((a, i), S)) = pp_constr "TVar" (pp_pair (pp_pair (pp_qstr a, pp_int i), pp_sort S))
-  | raw_pp_typ (TFree (a, S)) = pp_constr "TFree" (pp_pair (pp_qstr a, pp_sort S))
-  | raw_pp_typ (Type (a, tys)) =  pp_constr "Type" (pp_pair (pp_qstr a, pp_list (map raw_pp_typ tys)))
-  fun raw_pp_term  (Const (c, T)) = pp_constr "Const" (pp_pair (pp_qstr c, raw_pp_typ T))
-    | raw_pp_term (Free (x, T)) = pp_constr "Free" (pp_pair (pp_qstr x, raw_pp_typ T))
-    | raw_pp_term (Var ((x, i), T)) = pp_constr "Var" (pp_pair (pp_pair (pp_qstr x, pp_int i), raw_pp_typ T))
-    | raw_pp_term (Bound i) = pp_constr "Bound" (pp_int i)
-    | raw_pp_term (Abs(x, T, t)) = pp_constr "Abs" (pp_triple (pp_qstr x, raw_pp_typ T, raw_pp_term t))
-    | raw_pp_term (s $ t) = pp_constr "$" (pp_pair (raw_pp_term s, raw_pp_term t))
-  end;
-  ML_system_pp (fn _ => fn _ => Pretty.to_polyml o raw_pp_typ);
-  ML_system_pp (fn _ => fn _ => Pretty.to_polyml o raw_pp_term);
-  val some_typ = @{typ "'a \<Rightarrow> 'b"}
-  val _ = writeln (pretty_type @{context} some_typ)
-  val list_typ = @{typ "'a list"}
-  val _ = writeln (pretty_type @{context} some_typ)
-  val bool_typ = @{typ "bool"}
-  val int_typ = @{typ "int"}
-  val _ = writeln (pretty_type @{context} (Type ("Int.int", [])));
+  ML_system_pp (fn _ => fn _ => Pretty.to_polyml o Jeha_Common.raw_pp_typ);
+  ML_system_pp (fn _ => fn _ => Pretty.to_polyml o Jeha_Common.raw_pp_term);
   (* reset to default pretty printer *)
   ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_typ Theory.get_pure);
   ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_term Theory.get_pure);
@@ -88,20 +17,6 @@ ML \<open>
 declare [[ML_debugger = true]]
 declare [[ML_exception_trace = true]]
 declare [[ML_exception_debugger = true]]
-
-ML_file_debug \<open>jeha_common.ML\<close>
-ML_file_debug \<open>clause_id.ML\<close>
-ML_file_debug \<open>jterm.ML\<close>
-ML_file_debug \<open>jeha_order.ML\<close>
-ML_file_debug \<open>jlit.ML\<close>
-ML_file_debug \<open>jclause_pos.ML\<close>
-ML_file_debug \<open>jeha_log.ML\<close>
-ML_file_debug \<open>jclause.ML\<close>
-ML_file_debug \<open>jeha_proof.ML\<close>
-ML_file_debug \<open>jeha_unify.ML\<close>
-ML_file_debug \<open>jeha_subsumption.ML\<close>
-ML_file_debug \<open>jeha.ML\<close>
-ML_file_debug \<open>jeha_tactic.ML\<close>
 
 declare [[jeha_trace = true]]
 
@@ -167,13 +82,13 @@ ML \<open>
       val green_subterms = map (JTerm.subterm_at term) tposs;
       val non_green_subterms = JTerm.fold_non_greens cons term [];
     in
-      "term:\t\t" ^ pretty_term ctxt term ^ "\ngreens:\t\t" ^ pretty_terms ctxt green_subterms ^
-      "\nnongreens:\t" ^ pretty_terms @{context} non_green_subterms
+      "term:\t\t" ^ Jeha_Common.pretty_term ctxt term ^ "\ngreens:\t\t" ^ Jeha_Common.pretty_terms ctxt green_subterms ^
+      "\nnongreens:\t" ^ Jeha_Common.pretty_terms @{context} non_green_subterms
     end;
   writeln (pretty_green_nongreen_subterms @{context} @{term_pat "f (g (\<not> p)) (\<forall> x . q) (?y a) (\<lambda> x . h b)"});
   fun pretty_normed_unnormed ctxt term =
     let val normed = JTerm.norm_quantifier_poly_eq term in
-    "Q\<^sub>\<approx>: " ^ pretty_term ctxt term ^ "  \<mapsto>  " ^ pretty_term ctxt normed end;
+    "Q\<^sub>\<approx>: " ^ Jeha_Common.pretty_term ctxt term ^ "  \<mapsto>  " ^ Jeha_Common.pretty_term ctxt normed end;
   val no_rewrite_tests = [@{term "\<lambda> y . \<exists> x . g x y (z y) (f x)"}];
   val rewrite_tests = [@{term "\<exists> x . x a"}, Const (@{const_name "HOL.Ex"}, @{typ "('a \<Rightarrow> bool) \<Rightarrow> bool"}), @{term "\<forall> x . f (\<lambda> y . x)"}];
   (* Question: Why does a lone quantifier not make sense to isabelle? (can't be parsed using @{term ...}) *)
@@ -184,7 +99,7 @@ ML \<open>
   map (writeln o pretty_normed_unnormed @{context}) rewrite_tests;
   writeln "Making Higher-Order Superposition work, Example 5:";
   writeln (pretty_green_nongreen_subterms @{context} @{term_pat "?F a \<and> p (\<forall> x . q x) b"});
-  writeln (pretty_term @{context} (HOLogic.mk_not (HOLogic.mk_eq (@{term "a::'a"}, @{term "b::'a"}))));
+  writeln (Jeha_Common.pretty_term @{context} (HOLogic.mk_not (HOLogic.mk_eq (@{term "a::'a"}, @{term "b::'a"}))));
 \<close>
 
 (* sup tests *)
@@ -192,21 +107,21 @@ ML \<open>
   (* part of Example 25 from o\<lambda>Sup paper (WORKS) *)
   val (a, b, w) = (@{term "a::'a"}, @{term "b::'a"}, @{term_pat "?w::'a \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> 'a"});
   val cs = Jeha.infer_sup @{context} (JClause.of_literals ([(w $ a $ b $ b, w $ b $ a $ b, true)], 0), (JLit.Left, 0)) (JClause.of_literals ([(a, b, false)], 1), ([], JLit.Right, 0));
-  writeln (pretty_terms @{context} (map JClause.term_of cs));
+  writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of cs));
   (* part of Example 27 from the o\<lambda>Sup paper (WORKS) *)
   val (a, b, h, g) = (@{term "a::'a"}, @{term "b::'a"}, @{term "h::'b \<Rightarrow> 'c"}, @{term "g::bool \<Rightarrow> 'c"})
   val (x2, x3) = (@{term_pat "?x2 :: 'a \<Rightarrow> 'd"}, @{term_pat "?x3 :: 'a \<Rightarrow> 'd"});
   (* val d = [((h $ (g $ (HOLogic.mk_eq (x2 $ a, x3 $ a)))), h $ (g $ @{term True}), false), (@{term False}, @{term True}, true), (x2 $ b, x3 $ b, true)];
   val d_term = Jeha.term_of_clause d; *)
   val d = JClause.of_term (@{term_pat "h(g(?x2 a = ?x3 a)) \<noteq> h(g(True)) \<or> False = True \<or> ?x2 b = ?x3 b"}, 2);
-  (* writeln ("D_anti: " ^ pretty_term @{context} d_anti);
-  writeln ("D_anti_clause: " ^ pretty_term @{context} (JClause.term_of (JClause.of_term d_anti))); *)
-  writeln ("D: " ^ pretty_term @{context} (JClause.term_of d));
+  (* writeln ("D_anti: " ^ Jeha_Common.pretty_term @{context} d_anti);
+  writeln ("D_anti_clause: " ^ Jeha_Common.pretty_term @{context} (JClause.term_of (JClause.of_term d_anti))); *)
+  writeln ("D: " ^ Jeha_Common.pretty_term @{context} (JClause.term_of d));
   val c = JClause.of_literals ([(a, b, false)], 3);
-  writeln ("C: " ^ pretty_term @{context} (JClause.term_of c));
+  writeln ("C: " ^ Jeha_Common.pretty_term @{context} (JClause.term_of c));
   val cs = Jeha.infer_sup @{context} (d, (JLit.Left, 2)) (c, ([], JLit.Right, 0));
   val cs_terms = map JClause.term_of cs;
-  writeln (pretty_terms @{context} (map JClause.term_of cs));
+  writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of cs));
 \<close>
 
 (* BoolHoist tests *)
@@ -219,7 +134,7 @@ ML \<open>
     let
       val ctxt' = Config.put show_question_marks false ctxt
     in
-      pretty_term ctxt' (Thm.prop_of thm)
+      Jeha_Common.pretty_term ctxt' (Thm.prop_of thm)
     end
 
   fun my_print_tac ctxt thm =
@@ -247,21 +162,32 @@ lemma test:
   by jeha
 (* apply(tactic \<open>my_print_tac @{context}\<close>) *)
 
-lemma arg_cong_test:
-  shows "\<forall> x. g x = f x \<Longrightarrow> g a = f a"
-  by jeha
-
-lemma funext_test:
-  shows "\<forall> x . g x = f x \<Longrightarrow> f = g"
-  by jeha
-
-lemma ap_eq_test:
-  shows "g = f \<Longrightarrow> (\<And> x. f x = g x)"
-  by jeha
-
-lemma ap_fa_eq_test:
-  shows "g = f \<Longrightarrow> \<forall>x . f x = g x"
-  by jeha
+(* BoolRw bug? *)
+ML_val \<open>
+val c = JClause.of_term (@{term_pat "False = True \<or> (f ?x = f ?x) = True"}, 0)
+val [inferred] = Jeha.infer_bool_rw @{context} c ([], JLit.Left, 1)
+(* this is wrong: *)
+val ctxt = Config.map Jeha_Common.disable_all (K true) @{context}
+(* val ctxt = ctxt |> fold (fn rule => Config.map rule (K true)) [Jeha_Common.rule_delete_duplicated_lits] *)
+val cheap_simplified = Jeha.forward_simplify ctxt true [] inferred
+(* this is okay: *)
+val resolved_lits_deleted = Jeha.simp_delete_resolved_lits @{context} inferred
+val duplicated_lits_deleted = Jeha.simp_delete_duplicated_lits @{context} inferred
+val [tf, tt] = JClause.literals inferred
+val tf_tt_aconv = JLit.aconv (tf, tt) 
+val tt_tf_aconv = JLit.aconv (tt, tf)
+val cposs_of_dups =
+  fold_index
+    (fn (i, l) => fn (dup_is, head_list) =>
+      if exists (curry JLit.aconv l) head_list
+        (* duplicate of l has already been seen *)
+        then (i::dup_is, head_list)
+        (* l is new, add it to the seen lits *)
+        else (dup_is, l::head_list))
+    (* (JClause.literals inferred) *)
+    [tf, tt]
+    ([], [])
+\<close>
 
 ML \<open>
   (* val false_refl_clause = JClause.of_term (@{term "False = False"}, 0) *)
@@ -271,21 +197,90 @@ ML \<open>
   val arg_congs = Jeha.infer_arg_cong @{context} false_refl_clause 0
 \<close>
 
-lemma paper_example_26:
-  shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x)) = True"
-  by (jeha)
+(*
+ML \<open>
+  fun my_of_list xs = fold (fn x => fn acc => Seq.cons x acc) xs Seq.empty 
+  fun lazy_of_list [] = Seq.empty
+    | lazy_of_list (x :: xs) = Seq.make (fn _ => SOME (x, lazy_of_list xs))
+  fun lazy_prefix_map x ys = Seq.map (pair x) ys
+  fun lazy_cart xs ys =
+    Seq.make (fn () =>
+      case Seq.pull xs of
+        SOME (x, xs) => Seq.pull (Seq.append (lazy_prefix_map x ys) (lazy_cart xs ys))
+      | NONE => NONE
+    )
+\<close>
+
+ML \<open>
+  val long_list = replicate 30000000 5
+  (* val long_list = replicate 30000 5 *)
+  fun writeln_seq s 0 = Seq.empty 
+    | writeln_seq s n = Seq.make (fn _ => SOME (writeln s, writeln_seq s (n-1)))
+\<close>
+
+ML \<open>
+  val long_seq = lazy_of_list long_list
+  val hello_seq_5 = writeln_seq "hello" 5
+  val bye_seq_5 = writeln_seq "bye" 5
+\<close>
+
+ML \<open>
+  val cart = lazy_cart long_seq long_seq
+  val hello_bye_cart = lazy_cart hello_seq_5 bye_seq_5
+  val it = Seq.pull long_seq
+  val SOME (_, hb_tl) = Seq.pull hello_bye_cart
+  val _ = Seq.pull hb_tl
+\<close>
+*)
 
 (*
 ML \<open>
   val dumped_state = !Jeha_Tactic.dump;
   val dumped_states = length dumped_state;
   val { context = context, countdown = countdown, passive = passive, active = active, archive = archive } = nth dumped_state 0
-  val state = { context = verbose_of context, countdown = countdown, passive = passive, active = active, archive = archive }
-  val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
+  val state = { context = Jeha_Common.verbose_of context, countdown = 1, passive = passive, active = active, archive = archive }
+  val (given_clause, passive) = Jeha.select_given_clause passive
+  val [simplification] = Jeha.forward_simplify context false active given_clause
+  val same = (JClause.literals simplification = JClause.literals given_clause)
+  val (redundant_active, simplified_active, unsimplifiable_active) =
+    Jeha.backward_simplify context active given_clause
+  (* val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) ts)) *) *)
+  val active = given_clause :: unsimplifiable_active
+  val inferred_clauses = Jeha.infer_clauses context active given_clause
+  val bad_clause = nth inferred_clauses 3
+  val _ = writeln ("Bad: " ^ JClause.pretty_clause context bad_clause)
+  val second_bad_clause = nth inferred_clauses 4
+  val _ = writeln ("Also bad: " ^ JClause.pretty_clause context second_bad_clause)
+  
+  val _ = writeln ("Number of passive clauses: " ^ @{make_string} (length (Seq.list_of (Jeha.seq_of_passive_set passive))))
+
+  val context = Config.put Jeha_Common.disable_all true context
+  (* val context =
+    context
+    |> fold (fn rule => Config rule true [
+    ] *)
+  val _ = writeln "cheap simplify test"
+  val c = JClause.of_term (@{term_pat "p (SOME z. ?x4 z \<noteq> (p z \<and> q z)) = True \<or> q (SOME z. ?x4 z \<noteq> (p z \<and> q z)) = True \<or> (?x4 (SOME z. ?x4 z \<noteq> (p z \<and> q z)) = (False \<and> False)) = False"}, 0)
+  val d = JClause.of_term (@{term_pat "(False \<and> False) = True \<or> p (SOME z. ?x z \<noteq> (p z \<and> q z)) = True \<or> q (SOME z. ?x z \<noteq> (p z \<and> q z)) = True \<or> (?x (SOME z. ?x z \<noteq> (p z \<and> q z)) = False) = False"}, 1)
+  val c_subs_d = Jeha_Subsumption.subsumes (Context.Proof context) (c, d)
+
+  (* val bad_matchers = Jeha_Unify.literal_matchers (Context.Proof context) 5 (nth (JClause.literals c) 2, nth (JClause.literals d) 4)
+  val bad_matcher = Seq.pull bad_matchers *)
+
+  (* val is_redundant = Jeha.is_redundant context active bad_clause *)
+  (* val subs = exists (fn ac => Jeha_Subsumption.subsumes (Context.Proof context) (ac, bad_clause)) active *)
+  (* val eq_subs = exists (fn ac => Jeha.equality_subsumes context (ac, bad_clause) orelse Jeha_Subsumption.subsumes (Context.Proof context) (ac, c)) active
+  val is_trivial = Jeha.is_trivial bad_clause  *)
+  (* val simplified = Jeha.forward_simplify context true active (nth inferred_clauses 3) *)
+
+
+
+
+  fun f g 0 = g ()
+    | f g n = f g (n-1)
+  (* val _ = f (fn () => writeln "deep") 8070000 *)
 \<close>
 *)
-
-
 
 (*
 (* FIXME: BoolRw is not applicable... Is Outer clausification necessary for completeness? *)
@@ -298,68 +293,6 @@ lemma test3:
   shows "(A \<Longrightarrow> B) \<Longrightarrow> A \<Longrightarrow> B"
   by jeha
 *)
-
-lemma
-  shows "(1 :: nat) + 1 = 2"
-  by (jeha (dump) Num.nat_1_add_1)
-
-datatype 'a bt =
-    Lf
-  | Br 'a  "'a bt"  "'a bt"
-
-primrec n_nodes :: "'a bt \<Rightarrow> nat" where
-  "n_nodes Lf = 0"
-| "n_nodes (Br a t1 t2) = Suc (n_nodes t1 + n_nodes t2)"
-
-primrec n_leaves :: "'a bt => nat" where
-  "n_leaves Lf = Suc 0"
-| "n_leaves (Br a t1 t2) = n_leaves t1 + n_leaves t2"
-
-primrec depth :: "'a bt => nat" where
-  "depth Lf = 0"
-| "depth (Br a t1 t2) = Suc (max (depth t1) (depth t2))"
-
-primrec reflect :: "'a bt => 'a bt" where
-  "reflect Lf = Lf"
-| "reflect (Br a t1 t2) = Br a (reflect t2) (reflect t1)"
-
-primrec bt_map :: "('a => 'b) => ('a bt => 'b bt)" where
-  "bt_map f Lf = Lf"
-| "bt_map f (Br a t1 t2) = Br (f a) (bt_map f t1) (bt_map f t2)"
-
-primrec preorder :: "'a bt => 'a list" where
-  "preorder Lf = []"
-| "preorder (Br a t1 t2) = [a] @ (preorder t1) @ (preorder t2)"
-
-primrec inorder :: "'a bt => 'a list" where
-  "inorder Lf = []"
-| "inorder (Br a t1 t2) = (inorder t1) @ [a] @ (inorder t2)"
-
-primrec postorder :: "'a bt => 'a list" where
-  "postorder Lf = []"
-| "postorder (Br a t1 t2) = (postorder t1) @ (postorder t2) @ [a]"
-
-primrec append :: "'a bt => 'a bt => 'a bt" where
-  "append Lf t = t"
-| "append (Br a t1 t2) t = Br a (append t1 t) (append t2 t)"
-
-
-
-
-lemma n_leaves_reflect: "n_leaves (reflect t) = n_leaves t"
-proof (induct t)
-  case Lf thus ?case
-  proof -
-    let "?p\<^sub>1 x\<^sub>1" = "x\<^sub>1 \<noteq> n_leaves (reflect (Lf::'a bt))"
-    have "\<not> ?p\<^sub>1 (Suc 0)" by (jeha reflect.simps(1) n_leaves.simps(1))
-    hence "\<not> ?p\<^sub>1 (n_leaves (Lf::'a bt))" by (jeha n_leaves.simps(1))
-    thus "n_leaves (reflect (Lf::'a bt)) = n_leaves (Lf::'a bt)" by jeha
-  qed
-next
-  case (Br a t1 t2) thus ?case
-    (* takes 33 steps with order restrictions, ~210 steps without *)
-    by (jeha n_leaves.simps(2) add.commute reflect.simps(2))
-qed
 
 declare [[show_types]]
 ML \<open>
@@ -374,8 +307,8 @@ ML \<open>
   val dumped_state = !Jeha_Tactic.dump;
   val dumped_states = length dumped_state;
   val { context = context, countdown = countdown, passive = passive, active = active, archive = archive } = nth dumped_state 0
-  val state = { context = verbose_of context, countdown = countdown, passive = passive, active = active, archive = archive }
-  val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
+  val state = { context = Jeha_Common.verbose_of context, countdown = countdown, passive = passive, active = active, archive = archive }
+  val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) ts)) *)
 \<close>
 *)
 
@@ -391,7 +324,7 @@ ML \<open>
   (* val list_passive = Seq.list_of (seq_of_passive_set passive)
   val _ = writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of list_passive))
   val _ = writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of active)) *)
-  val _ = Jeha.given_clause_loop false (Config.put Jeha_Common.trace true ctxt) 5 passive active (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
+  val _ = Jeha.given_clause_loop false (Config.put Jeha_Common.trace true ctxt) 5 passive active (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) ts)) *)
 \<close>
 *)
 
@@ -537,54 +470,6 @@ ML \<open>
 \<close>
 *)
 
-
-lemma n_nodes_reflect: "n_nodes (reflect t) = n_nodes t"
-proof (induct t)
-  case Lf thus ?case by (jeha reflect.simps(1))
-next
-  case (Br a t1 t2) thus ?case
-    by (jeha add.commute n_nodes.simps(2) reflect.simps(2))
-    (* ~146 steps with order restrictions *)
-    (* 98 steps on 1099579 *)
-qed
-
-lemma depth_reflect: "depth (reflect t) = depth t"
-apply (induct t)
- apply (jeha depth.simps(1) reflect.simps(1))
-by (jeha depth.simps(2) max.commute reflect.simps(2))
-
-text \<open>
-The famous relationship between the numbers of leaves and nodes.
-\<close>
-
-lemma n_leaves_nodes: "n_leaves t = Suc (n_nodes t)"
-apply (induct t)
- apply (jeha n_leaves.simps(1) n_nodes.simps(1))
-by auto
-
-lemma reflect_reflect_ident: "reflect (reflect t) = t"
-apply (induct t)
- apply (jeha reflect.simps(1))
-proof -
-  fix a :: 'a and t1 :: "'a bt" and t2 :: "'a bt"
-  assume A1: "reflect (reflect t1) = t1"
-  assume A2: "reflect (reflect t2) = t2"
-  have "\<And>V U. reflect (Br U V (reflect t1)) = Br U t1 (reflect V)"
-    using A1 by (jeha reflect.simps(2))
-  hence "\<And>V U. Br U t1 (reflect (reflect V)) = reflect (reflect (Br U t1 V))"
-    by (jeha reflect.simps(2))
-  hence "\<And>U. reflect (reflect (Br U t1 t2)) = Br U t1 t2"
-    using A2 by jeha
-  thus "reflect (reflect (Br a t1 t2)) = Br a t1 t2" by blast
-qed
-
-lemma bt_map_ident: "bt_map (%x. x) = (%y. y)"
-apply (rule ext)
-apply (induct_tac y)
- apply (jeha bt_map.simps(1))
-by (jeha bt_map.simps(2))
-
-
 (* debugging reused names in smash_unifiers *)
 (*
 ML \<open>
@@ -604,15 +489,6 @@ ML \<open>
 \<close>
 *)
 
-(* FIXME: what should apply (jeha ...) do? *)
-lemma bt_map_append: "bt_map f (append t u) = append (bt_map f t) (bt_map f u)"
-apply (induct t)
- apply (jeha append.simps(1) bt_map.simps(1))
- (* takes ~130 steps *)
-by (jeha append.simps(2) bt_map.simps(2))
- (* ~90 steps if the problem clauses are activated first *)
- (* 56 steps with order restrictions *)
-
 ML \<open>
 val ac = JClause.of_term (@{term_pat "((append (Br (?a::?'a) (?t1.0::?'a bt) (?t2.0::?'a bt)) (?t::?'a bt)) = (Br ?a (append ?t1.0 ?t) (append ?t2.0 ?t)))"}, 0)
 val gc = JClause.of_term (@{term_pat "((bt_map (?f::(?'a \<Rightarrow> ?'b)) (Br (?a::?'a) (?t1.0::?'a bt) (?t2.0::?'a bt))) = (Br (?f ?a) (bt_map ?f ?t1.0) (bt_map ?f ?t2.0)))"}, 1)
@@ -622,36 +498,6 @@ val pc = JClause.of_term (@{term_pat "((bt_map (\<lambda>(a::?'a). (?f2::?'b)) (
 val inferred = Jeha.infer_clauses @{context} [gc] pc
 val _ = writeln (JClause.pretty_clauses @{context} inferred)
 \<close>
-
-
-
-
-
-
-
-
-
-
-
-(* FIXME: needs clausification
-(* declare [[unify_search_bound = 10]] *)
-lemma bt_map_compose: "bt_map (f o g) t = bt_map f (bt_map g t)"
-apply (induct t)
- apply (jeha bt_map.simps(1))
-by (jeha (dump) bt_map.simps(2) o_eq_dest_lhs)
-(* takes an hour, prints Unification bound exceeded 19481 times*)
-*)
-
-
-
-
-
-
-
-
-
-
-
 
 (*
 ML \<open>
@@ -666,95 +512,9 @@ ML \<open>
   val list_passive = Seq.list_of (seq_of_passive_set passive)
   val _ = writeln (Jeha_Common.pretty_terms @{context} (map (JClause.term_of o snd) list_passive))
   val _ = writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of active))
-  val _ = Jeha.given_clause_loop false (Config.put Jeha_Common.trace true (Jeha_Common.verbose_of ctxt)) 5 passive active (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (verbose_of ctxt) ts)) *)
+  val _ = Jeha.given_clause_loop false (Config.put Jeha_Common.trace true (Jeha_Common.verbose_of ctxt)) 5 passive active (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) ts)) *)
   val problem_term = @{term_pat "((bt_map (\<lambda>(a::bool). a) (Br ((?y1::?'a1::type) = ?y1) (?t1.0::bool bt) (?t2.0::bool bt))) = (Br True (bt_map (\<lambda>(a::bool). a) ?t1.0) (bt_map (\<lambda>(a::bool). a) ?t2.0)))"}
 \<close>
-*)
-
-
-
-
-
-
-lemma bt_map_reflect: "bt_map f (reflect t) = reflect (bt_map f t)"
-apply (induct t)
- apply (jeha bt_map.simps(1) reflect.simps(1))
-by (jeha bt_map.simps(2) reflect.simps(2))
-
-
-
-
-
-
-lemma preorder_bt_map: "preorder (bt_map f t) = map f (preorder t)"
-apply (induct t)
- apply (jeha bt_map.simps(1) list.map(1) preorder.simps(1))
-by simp
-
-lemma inorder_bt_map: "inorder (bt_map f t) = map f (inorder t)"
-proof (induct t)
-  case Lf thus ?case
-  proof -
-    have "map f [] = []" by (jeha list.map(1))
-    hence "map f [] = inorder Lf" by (jeha inorder.simps(1))
-    hence "inorder (bt_map f Lf) = map f []" by (jeha bt_map.simps(1))
-    thus "inorder (bt_map f Lf) = map f (inorder Lf)" by (jeha inorder.simps(1))
-  qed
-next
-  case (Br a t1 t2) thus ?case by simp
-qed
-
-(* FIXME: requires EqHoist or clausifcation of \<leftrightarrow>
-*)
-lemma postorder_bt_map: "postorder (bt_map f t) = map f (postorder t)"
-apply (induct t)
- apply (jeha Nil_is_map_conv bt_map.simps(1) postorder.simps(1))
-by simp
-
-lemma depth_bt_map [simp]: "depth (bt_map f t) = depth t"
-apply (induct t)
- apply (jeha bt_map.simps(1) depth.simps(1))
-by simp
-
-lemma n_leaves_bt_map [simp]: "n_leaves (bt_map f t) = n_leaves t"
-apply (induct t)
- apply (jeha bt_map.simps(1) n_leaves.simps(1))
-proof -
-  fix a :: 'b and t1 :: "'b bt" and t2 :: "'b bt"
-  assume A1: "n_leaves (bt_map f t1) = n_leaves t1"
-  assume A2: "n_leaves (bt_map f t2) = n_leaves t2"
-  have "\<And>V U. n_leaves (Br U (bt_map f t1) V) = n_leaves t1 + n_leaves V"
-    using A1 by (jeha n_leaves.simps(2))
-  hence "\<And>V U. n_leaves (bt_map f (Br U t1 V)) = n_leaves t1 + n_leaves (bt_map f V)"
-    by (jeha bt_map.simps(2))
-  hence F1: "\<And>U. n_leaves (bt_map f (Br U t1 t2)) = n_leaves t1 + n_leaves t2"
-    using A2 by jeha
-  have "n_leaves t1 + n_leaves t2 = n_leaves (Br a t1 t2)"
-    by (jeha n_leaves.simps(2))
-  thus "n_leaves (bt_map f (Br a t1 t2)) = n_leaves (Br a t1 t2)"
-    using F1 by jeha
-qed
-
-(* FIXME: requires EqHoist or clausifcation of \<leftrightarrow>
-*)
-lemma preorder_reflect: "preorder (reflect t) = rev (postorder t)"
-apply (induct t)
- apply (jeha Nil_is_rev_conv postorder.simps(1) preorder.simps(1)
-              reflect.simps(1))
-apply simp
-done
-
-(* FIXME: requires EqHoist or clausifcation of \<leftrightarrow>
-*)
-
-declare [[show_types]]
-
-lemma inorder_reflect: "inorder (reflect t) = rev (inorder t)"
-apply (induct t)
- apply (jeha Nil_is_rev_conv inorder.simps(1) reflect.simps(1))
-by (jeha append.simps(1) append_eq_append_conv2 inorder.simps(2)
-          reflect.simps(2) rev.simps(2) rev_append)
-(* Slow:
 *)
 
 ML \<open>
@@ -815,17 +575,6 @@ ML \<open>
   val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map JClause.term_of clauses))
   val result = Jeha.given_clause_loop false { context = @{context}, countdown = 6, passive = (Jeha.init_passive_set clauses), active = [], archive = [] }
 \<close>
-
-(*
-ML \<open>
-  val c1 = @{term "P a :: bool"}
-  val c2 = @{term "a = b"}
-  val c3 = @{term "\<not> P b"}
-  val clauses = map JClause.of_term [c1, c2, c3]
-  val _ = writeln (Jeha_Common.pretty_terms (Jeha_Common.verbose_of @{context}) (map JClause.term_of clauses))
-  val result = Jeha.given_clause_loop false @{context} 10 (Jeha.init_passive_set clauses) []
-\<close>
-*)
 
 ML \<open>
   val x_ord_x = Jeha_Order.kbo (@{term_pat "?x"}, @{term_pat "?x"})
