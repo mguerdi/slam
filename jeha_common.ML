@@ -62,6 +62,60 @@ end
 structure Jeha_Common : JEHA_COMMON =
 struct
 
+(** configuration **)
+
+(* for tracing *)
+fun I x = x
+
+(* from metis_generate.ML *)
+val trace = Attrib.setup_config_bool \<^binding>\<open>jeha_trace\<close> (K false)
+val verbose = Attrib.setup_config_bool \<^binding>\<open>jeha_verbose\<close> (K true)
+fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
+
+val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K false)
+
+val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_smash_unifiers\<close> (K false)
+(* FIXME: remove or better default *)
+val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>jeha_max_number_of_steps\<close> (K 300)
+
+(* NOTE: The rules aren't actually all turned off unless disable_all is set. *)
+val rule_default = false
+
+val rule_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_sup\<close> (K rule_default)
+val rule_fluid_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_sup\<close> (K rule_default)
+val rule_e_res = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_e_res\<close> (K rule_default)
+val rule_e_fact = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_e_fact\<close> (K rule_default)
+val rule_arg_cong = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_arg_cong\<close> (K rule_default)
+val rule_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_bool_hoist\<close> (K rule_default)
+val rule_false_elim = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_false_elim\<close> (K rule_default)
+val rule_eq_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_eq_hoist\<close> (K rule_default)
+val rule_neq_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neq_hoist\<close> (K rule_default)
+val rule_forall_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_forall_hoist\<close> (K rule_default)
+val rule_exists_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_exists_hoist\<close> (K rule_default)
+val rule_bool_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_bool_rw\<close> (K rule_default)
+val rule_forall_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_forall_rw\<close> (K rule_default)
+val rule_exists_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_exists_rw\<close> (K rule_default)
+val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_bool_hoist\<close> (K rule_default)
+val rule_fluid_loob_ho = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_loob_hoist\<close> (K rule_default)
+val rule_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_ext\<close> (K rule_default)
+val rule_choice = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_choice\<close> (K rule_default)
+val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_duplicated_lits\<close> (K rule_default)
+val rule_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_resolved_lits\<close> (K rule_default)
+val rule_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_rewrite_positive_lits\<close> (K rule_default)
+val rule_rewrite_negative_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_rewrite_negative_lits\<close> (K rule_default)
+val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_positive_simplify_reflect\<close> (K rule_default)
+val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_negative_simplify_reflect\<close> (K rule_default)
+val rule_pos_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_pos_outer_claus\<close> (K rule_default)
+val rule_neg_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neg_outer_claus\<close> (K rule_default)
+val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion1\<close> (K rule_default)
+val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion2\<close> (K rule_default)
+val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)
+val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_equality_subsumption\<close> (K rule_default)
+
+val disable_all = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_all\<close> (K false)
+
+(** term parsing antiquotations **)
+
 (* From the cookbook. Use
 
 setup \<open> Jeha_Common.term_pat_setup \<close>
@@ -117,55 +171,7 @@ in
   ML_Antiquotation.inline @{binding "term_schem"} (parser >> term_schem)
 end
 
-(* for tracing *)
-fun I x = x
-
-(* from metis_generate.ML *)
-val trace = Attrib.setup_config_bool \<^binding>\<open>jeha_trace\<close> (K false)
-val verbose = Attrib.setup_config_bool \<^binding>\<open>jeha_verbose\<close> (K true)
-fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
-
-val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K false)
-
-val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_smash_unifiers\<close> (K false)
-(* FIXME: remove or better default *)
-val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>jeha_max_number_of_steps\<close> (K 300)
-
-(* NOTE: The rules aren't actually all turned off unless disable_all is set. *)
-val rule_default = false
-
-val rule_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_sup\<close> (K rule_default)
-val rule_fluid_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_sup\<close> (K rule_default)
-val rule_e_res = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_e_res\<close> (K rule_default)
-val rule_e_fact = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_e_fact\<close> (K rule_default)
-val rule_arg_cong = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_arg_cong\<close> (K rule_default)
-val rule_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_bool_hoist\<close> (K rule_default)
-val rule_false_elim = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_false_elim\<close> (K rule_default)
-val rule_eq_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_eq_hoist\<close> (K rule_default)
-val rule_neq_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neq_hoist\<close> (K rule_default)
-val rule_forall_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_forall_hoist\<close> (K rule_default)
-val rule_exists_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_exists_hoist\<close> (K rule_default)
-val rule_bool_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_bool_rw\<close> (K rule_default)
-val rule_forall_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_forall_rw\<close> (K rule_default)
-val rule_exists_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_exists_rw\<close> (K rule_default)
-val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_bool_hoist\<close> (K rule_default)
-val rule_fluid_loob_ho = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_loob_hoist\<close> (K rule_default)
-val rule_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_ext\<close> (K rule_default)
-val rule_choice = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_choice\<close> (K rule_default)
-val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_duplicated_lits\<close> (K rule_default)
-val rule_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_resolved_lits\<close> (K rule_default)
-val rule_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_rewrite_positive_lits\<close> (K rule_default)
-val rule_rewrite_negative_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_rewrite_negative_lits\<close> (K rule_default)
-val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_positive_simplify_reflect\<close> (K rule_default)
-val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_negative_simplify_reflect\<close> (K rule_default)
-val rule_pos_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_pos_outer_claus\<close> (K rule_default)
-val rule_neg_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neg_outer_claus\<close> (K rule_default)
-val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion1\<close> (K rule_default)
-val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion2\<close> (K rule_default)
-val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)
-val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_equality_subsumption\<close> (K rule_default)
-
-val disable_all = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_all\<close> (K false)
+(** pretty / unpretty printing **)
 
 (* much from cookboock *)
 fun verbose_of ctxt = config_put_many_bool ctxt
@@ -206,6 +212,37 @@ let
 in
   "tenv:" ^ Pretty.string_of (pretty_helper (print o get_trms) tenv)
 end;
+
+(* from the cookbook
+(* switch to unpretty printer *)
+ML_system_pp (fn _ => fn _ => Pretty.to_polyml o Jeha_Common.raw_pp_typ);
+ML_system_pp (fn _ => fn _ => Pretty.to_polyml o Jeha_Common.raw_pp_term);
+(* reset to default pretty printer *)
+ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_typ Theory.get_pure);
+ML_system_pp (fn depth => fn _ => ML_Pretty.to_polyml o Pretty.to_ML depth o Proof_Display.pp_term Theory.get_pure);
+*)
+local
+  fun pp_pair (x, y) = Pretty.list "(" ")" [x, y]
+  fun pp_triple (x, y, z) = Pretty.list "(" ")" [x, y, z]
+  fun pp_list xs = Pretty.list "[" "]" xs
+  fun pp_str s = Pretty.str s
+  fun pp_qstr s = Pretty.quote (pp_str s)
+  fun pp_int i = pp_str (string_of_int i)
+  fun pp_sort S = pp_list (map pp_qstr S)
+  fun pp_constr a args = Pretty.block [pp_str a, Pretty.brk 1, args]
+in
+fun raw_pp_typ (TVar ((a, i), S)) = pp_constr "TVar" (pp_pair (pp_pair (pp_qstr a, pp_int i), pp_sort S))
+| raw_pp_typ (TFree (a, S)) = pp_constr "TFree" (pp_pair (pp_qstr a, pp_sort S))
+| raw_pp_typ (Type (a, tys)) =  pp_constr "Type" (pp_pair (pp_qstr a, pp_list (map raw_pp_typ tys)))
+fun raw_pp_term  (Const (c, T)) = pp_constr "Const" (pp_pair (pp_qstr c, raw_pp_typ T))
+  | raw_pp_term (Free (x, T)) = pp_constr "Free" (pp_pair (pp_qstr x, raw_pp_typ T))
+  | raw_pp_term (Var ((x, i), T)) = pp_constr "Var" (pp_pair (pp_pair (pp_qstr x, pp_int i), raw_pp_typ T))
+  | raw_pp_term (Bound i) = pp_constr "Bound" (pp_int i)
+  | raw_pp_term (Abs(x, T, t)) = pp_constr "Abs" (pp_triple (pp_qstr x, raw_pp_typ T, raw_pp_term t))
+  | raw_pp_term (s $ t) = pp_constr "$" (pp_pair (raw_pp_term s, raw_pp_term t))
+end;
+
+(** common utilities **)
 
 fun map_some _ NONE = NONE
   | map_some f (SOME x) = SOME (f x)

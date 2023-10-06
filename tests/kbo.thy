@@ -17,20 +17,7 @@ structure Random = SpecCheck_Random
 declare [[speccheck_max_success = 100]]
 declare [[speccheck_num_counterexamples = 30]]
 declare [[ML_print_depth = 100]]
-
-(* Antiquotations for term and type patterns from the cookbook. *)
-setup \<open> Jeha_Common.term_pat_setup \<close>
-
-setup \<open> Jeha_Common.type_pat_setup \<close>
-
-setup \<open> Jeha_Common.term_schem_setup \<close>
-
-declare [[speccheck_max_success = 100]]
-declare [[speccheck_num_counterexamples = 30]]
 declare [[show_types = true]]
-
-
-declare [[speccheck_num_counterexamples = 30]]
 
 ML \<open>
   val ctxt = Context.Proof @{context}
@@ -431,6 +418,11 @@ check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => SOME LESS <>
 
 ML_command \<open>
 check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => max >= x) xs) (map (fn (i, _) => nth xs i) (Jeha_Order.idxs_of_maximal_elements (SOME o int_ord) xs))"
+\<close>
+
+(* strict maximality test *)
+ML_val \<open>
+  val one_is_strict_maximal = Jeha_Order.is_maximal (SOME o int_ord) true 1 [0, 1]
 \<close>
 
 end

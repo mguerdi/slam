@@ -13,11 +13,11 @@ declare [[ jeha_rule_exists_hoist ]]
 declare [[ jeha_rule_bool_rw ]]
 declare [[ jeha_rule_false_elim ]]
 
+(* NOTE: Example 26 in the paper doesn't work out of the box: FalseElim doesn't
+handle True = False \<or> True = False, because neither literal is strictly maximal.
+In Addition EFact and ERes are required (or selection functions). *)
 declare [[jeha_rule_e_fact]]
 declare [[jeha_rule_e_res]]
-
-(* doesn't work without smash unifiers: *)
-(* declare [[jeha_disable_smash_unifiers]] *)
 
 declare [[jeha_proof_reconstruction]]
 declare [[metis_trace]]
