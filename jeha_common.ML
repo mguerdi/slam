@@ -14,6 +14,8 @@ sig
   val pretty_terms : Proof.context -> term list -> string
   val pretty_tyenv : Proof.context -> Type.tyenv -> string
   val pretty_tenv : Proof.context -> Envir.tenv -> string
+  val raw_pp_typ : typ -> Pretty.T
+  val raw_pp_term : term -> Pretty.T
   val I : 'a -> 'a
   val map_some : ('a -> 'b) -> 'a option -> 'b option
   val seq_cartesian_product : 'a Seq.seq -> 'b Seq.seq -> ('a * 'b) Seq.seq
