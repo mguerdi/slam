@@ -40,6 +40,7 @@ sig
   val is_eligible_full_pos : T -> full_pos -> bool
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
   val is_false : T -> bool
+  val maxidx_of_literal_list : JLit.T list -> int
 end;
 
 structure JClause : JCLAUSE =
@@ -138,20 +139,22 @@ fun term_of { literals = [], ... } = @{term False}
         fold (curry HOLogic.mk_disj) (map JLit.term_of xs) (JLit.term_of x)
       end
 
-fun pretty_clause ctxt (c as { id, origin, ... }) =
-  @{make_string} id ^ ":" ^ Jeha_Common.pretty_term ctxt (term_of c) ^ " (" ^ Jeha_Log.name_of origin ^ ")"
+fun pretty_clause' ctxt c =
+  Pretty.block
+    [ Pretty.str (@{make_string} (#id c) ^ ":")
+    , Syntax.pretty_term ctxt (term_of c)
+    , Pretty.str (" (" ^ (Jeha_Log.name_of (#origin c)) ^ ")")
+    ]
 
-fun pretty_clauses ctxt cs =
+val pretty_clause = Pretty.string_of oo pretty_clause'
+
+fun pretty_clauses' ctxt cs =
   cs
-  |> map (fn c =>
-      Pretty.block
-        [Pretty.str (@{make_string} (#id c) ^ ":")
-        , Syntax.pretty_term ctxt (term_of c)
-        , Pretty.str (" (" ^ (Jeha_Log.name_of (#origin c)) ^ ")")
-        ])
+  |> map (pretty_clause' ctxt)
   |> Pretty.commas
   |> Pretty.block
-  |> Pretty.string_of
+
+val pretty_clauses = Pretty.string_of oo pretty_clauses'
 
 fun cposs_of c = 0 upto (length c - 1)
 
