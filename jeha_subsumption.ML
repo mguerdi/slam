@@ -30,6 +30,8 @@ fun literal_subsumes ctxt maxidx ll' =
   (* ) *)
 
 (* all ways in which l can subsume a literal of d *)
+(* FIXME: lazify with make / pull if it isn't yet. *)
+(* FIXME: tail recursive version? *)
 fun subsumed_alternatives ctxt maxidx (l, []) = Seq.empty
   | subsumed_alternatives ctxt maxidx (l, l' :: d') = 
       let
