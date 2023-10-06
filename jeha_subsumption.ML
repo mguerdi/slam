@@ -22,10 +22,12 @@ structure Jeha_Subsumption : JEHA_SUBSUMPTION =
 struct
 
 fun literal_subsumes ctxt maxidx ll' =
+  (* (writeln ("literals subumes:" ^ JLit.pretty_lit (Context.the_proof ctxt) (#1 ll') ^ " can match? " ^ JLit.pretty_lit (Context.the_proof ctxt) (#2 ll')); *)
   case Seq.pull (Jeha_Unify.literal_matchers ctxt maxidx ll') of
-    NONE => NONE
+    NONE => (* (writeln "=> no"; *) NONE (* ) *)
     (* throw away the others *)
-  | SOME (env, _) => SOME env
+  | SOME (env, _) => (* (writeln "=> yes"; *) SOME env (* ) *)
+  (* ) *)
 
 (* all ways in which l can subsume a literal of d *)
 fun subsumed_alternatives ctxt maxidx (l, []) = Seq.empty
@@ -79,6 +81,7 @@ fun subsumes ctxt (c, d) =
     val c = JClause.incr_indexes (JClause.maxidx d + 1) c
     (* to ensure generate variables are fresh w.r.t. both clauses *)
     val maxidx = JClause.maxidx_of2 (c, d)
+    (* val _ = writeln ("check if " ^ JClause.pretty_clause (Context.the_proof ctxt) c ^ " subsumes " ^ JClause.pretty_clause (Context.the_proof ctxt) d) *)
   in
     impl_subsumes ctxt maxidx (apply2 JClause.literals (c, d))
   end
