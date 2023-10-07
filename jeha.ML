@@ -20,7 +20,7 @@ sig
   val outer_clausify : bool -> term -> JClause.T -> JClause.T list
   val is_trivial : JClause.T -> bool
   val is_redundant : Proof.context -> JClause.T list -> JClause.T -> bool
-  val simp_bool_outer_claus : JClause.T -> JClause.cpos -> JClause.T list
+  val simp_bool_outer_claus : JClause.T * JClause.cpos -> JClause.T list
   val simp_rewrite_positive_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val simp_rewrite_negative_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
@@ -425,8 +425,6 @@ fun is_redundant ctxt active c =
 
 (** Clausification **)
 
-fun is_boolean_const t = t = @{term True} orelse t = @{term False}
-
 fun ml_bool_of @{term True} = true
   | ml_bool_of @{term False} = false
   | ml_bool_of _ = error "term is not HOL.True or HOL.False"
@@ -435,26 +433,17 @@ fun hol_bool_of true = @{term "True"}
   | hol_bool_of false = @{term "False"}
   | hol_bool_of _ = error "term is not true of false"
 
-fun is_eq_bool_lit (s, t, true) = exists is_boolean_const [s, t]
-    (* FIXME: Maybe accept boolean disequations? (by turning them into equations) *)
-  | is_eq_bool_lit _ = false
-
-fun dest_eq_bool_lit (s, t, true) =
-  if is_boolean_const t
-    then (s, t)
-  else if is_boolean_const s
-    then (t, s)
-  else error "neither is HOL.True or HOL.False"
-  (* FIXME: allow disequations? (see similar comment above mk_pred) *)
-  | dest_eq_bool_lit _ = error "disequation"
-
 (* PosOuterClaus and NegOuterClaus simplficiations *)
-fun simp_bool_outer_claus c i =
+fun simp_bool_outer_claus (c, i) =
+  let val lit = JClause.lit_at i c in
+  if not (JLit.is_pred lit) then [] else
   let
-    val (s, b) = JClause.lit_at i c |> dest_eq_bool_lit ||> ml_bool_of
+    val (s, b) = lit |> JLit.dest_pred ||> ml_bool_of
     val c' = JClause.delete_lit_at i c
   in
+    (* if b then PosOuterClaus else NegOuterClaus *)
     outer_clausify b s c'
+  end
   end
 
 (* EqOuterClaus and NeqOuterClaus inferences *)

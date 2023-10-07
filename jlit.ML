@@ -12,6 +12,8 @@ sig
   val swap_lpos : lpos -> lpos
   (* make predicate literal, by equating the term to the boolean *)
   val mk_pred : term -> bool -> T
+  val is_pred : T -> bool
+  val dest_pred : T -> term * term
   val term_of : T -> term
   val term_at_lpos : T -> lpos -> term
   val orient : lpos -> T -> term * term * bool
@@ -67,6 +69,23 @@ fun swap_lpos Left = Right
 (see similar comment in dest_eq_bool_lit) *)
 fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
   | mk_pred t b = (t, if b then @{term True} else @{term False}, true)
+
+fun is_truth_value t = t = @{term True} orelse t = @{term False}
+
+fun is_pred (s, t, true) = exists is_truth_value [s, t]
+    (* FIXME: Maybe accept boolean disequations? (by turning them into equations) *)
+  | is_pred _ = false
+
+fun dest_pred (s, t, true) =
+  (* FIXME: what about when both are truth values? do we prefer an orientation? *)
+  if is_truth_value t
+    then (s, t)
+  else if is_truth_value s
+    then (t, s)
+  else error "neither is HOL.True or HOL.False"
+  (* FIXME: allow disequations? (see similar comment above mk_pred) *)
+  | dest_pred _ = error "disequation"
+
 
 fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 
