@@ -16,6 +16,7 @@ ML_file_debug \<open>jclause.ML\<close>
 ML_file_debug \<open>jeha_proof.ML\<close>
 ML_file_debug \<open>jeha_unify.ML\<close>
 ML_file_debug \<open>jeha_subsumption.ML\<close>
+ML_file_debug \<open>jeha_simplify.ML\<close>
 ML_file_debug \<open>jeha.ML\<close>
 ML_file_debug \<open>jeha_tactic.ML\<close>
 

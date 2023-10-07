@@ -14,6 +14,7 @@ ML_file \<open>jclause.ML\<close>
 ML_file \<open>jeha_proof.ML\<close>
 ML_file \<open>jeha_unify.ML\<close>
 ML_file \<open>jeha_subsumption.ML\<close>
+ML_file \<open>jeha_simplify.ML\<close>
 ML_file \<open>jeha.ML\<close>
 ML_file \<open>jeha_tactic.ML\<close>
 

@@ -1002,38 +1002,45 @@ fun forward_simplify ctxt cheap active given_clause =
     val rn_rp_rules = Seq.append
       (if_cfg Jeha_Common.rule_rewrite_negative_lits (Seq.single simp_rewrite_negative_lits))
       (if_cfg Jeha_Common.rule_rewrite_positive_lits (Seq.single simp_rewrite_positive_lits))
-    fun first_successful_rewrite c =
+    (* FIXME: use index *)
+    fun simp_fun_of_seq clause_seq _ c =
+      case Seq.pull (clause_seq c) of
+        NONE => []
+      | SOME (c, _) => [c]
+    (* FIXME: remove active_units hack *)
+    val simp_funs =
       let
-        val green_targets : (JClause.T * JClause.full_pos) Seq.seq = Seq.map (pair c) (Seq.of_list (JClause.green_full_poss_of c))
-        val unit_target_pairs = Jeha_Common.seq_cartesian_product active_units_all_orientations green_targets
         (* successful rewrites of c (NONE filtered out) *)
-        val rn_rp_rewrites : JClause.T Seq.seq =
+        val rn_rp_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          let
+            val green_targets : (JClause.T * JClause.full_pos) Seq.seq = Seq.map (pair c) (Seq.of_list (JClause.green_full_poss_of c))
+            val unit_target_pairs = Jeha_Common.seq_cartesian_product active_units_all_orientations green_targets
+          in
           Jeha_Common.seq_cartesian_product rn_rp_rules unit_target_pairs
           |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target)
-        val ps_rewrites : JClause.T Seq.seq = if_cfg Jeha_Common.rule_positive_simplify_reflect (
+          end
+        val ps_rewrites : JClause.T -> JClause.T Seq.seq = fn c => if_cfg Jeha_Common.rule_positive_simplify_reflect (
           Jeha_Common.seq_cartesian_product active_units (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (unit, target) => simp_positive_simplify_reflect ctxt unit target)
         )
-        val ns_rewrites : JClause.T Seq.seq = if_cfg Jeha_Common.rule_negative_simplify_reflect (
+        val ns_rewrites : JClause.T -> JClause.T Seq.seq = fn c => if_cfg Jeha_Common.rule_negative_simplify_reflect (
           Jeha_Common.seq_cartesian_product active_units_all_orientations (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map_filter (fn (oriented_unit, target) => simp_negative_simplify_reflect ctxt oriented_unit target)
         )
-        val dd_dr_rewrites : JClause.T Seq.seq =
+        val dd_dr_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           Seq.map_filter (fn f => f c) (Seq.append (if_cfg Jeha_Common.rule_delete_duplicated_lits (Seq.single (simp_delete_duplicated_lits ctxt))) (if_cfg Jeha_Common.rule_delete_resolved_lits (Seq.single (simp_delete_resolved_lits ctxt))))
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
-        Seq.empty
-        |> (Seq.append rn_rp_rewrites
-          o Seq.append (if not cheap then ps_rewrites else Seq.empty)
-          o Seq.append (if not cheap then ns_rewrites else Seq.empty)
-          o Seq.append dd_dr_rewrites)
-        |> Seq.pull
-        |> Jeha_Common.map_some #1
+        [rn_rp_rewrites]
+        @ (if not cheap then [ps_rewrites] else []) 
+        @ (if not cheap then [ns_rewrites] else [])
+        @ [dd_dr_rewrites]
+        |> map simp_fun_of_seq
       end
     (* rewrite until not possible anymore *)
     (* FIXME: can this lead to a fixed-point (and not terminate)? No, even RP with unit s\<approx>t and \<sigma> a
     unifier of s and t as well, violates s\<sigma> > t\<sigma>*)
-    fun full_rewrite c countdown =
+    (* fun full_rewrite c countdown =
       (* ( writeln ("rewrite step " ^ @{make_string} countdown ^ " of " ^ JClause.pretty_clause ctxt c); *)
       if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
       (* let val _ = Jeha_Common.trace_msg ctxt (fn () => (if cheap then "cheap " else "") ^ "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in *)
@@ -1046,7 +1053,9 @@ fun forward_simplify ctxt cheap active given_clause =
           end
       (* ) *)
       (* end *)
-    val given_clause = full_rewrite given_clause 10
+    val given_clause = full_rewrite given_clause 10 *)
+    (* FIXME: use archive and other simplifications *)
+    val (given_clause::simplifications, archive) = Jeha_Simplify.simplify true ctxt simp_funs (fn _ => error "no index") given_clause
     (* val _ = Jeha_Common.trace_msg ctxt (K "START REDUNDANCY CHECK") *)
   in
     if
