@@ -269,9 +269,9 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
     val unit_lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
     val (s, t, false) = JLit.orient unit_lp unit_lit
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
-    val (u, v, b) = target_lit
+    val (u, v, true) = target_lit
     val exists_matcher =
-      [(u, s), (v, t)]
+      [(s, u), (t, v)]
       |> Jeha_Unify.matchers (Context.Proof ctxt) maxidx
       |> Seq.pull
       |> is_some
