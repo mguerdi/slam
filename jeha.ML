@@ -1055,18 +1055,20 @@ fun forward_simplify ctxt cheap active given_clause =
       (* end *)
     val given_clause = full_rewrite given_clause 10 *)
     (* FIXME: use archive and other simplifications *)
-    val (given_clause::simplifications, archive) = Jeha_Simplify.simplify true ctxt simp_funs (fn _ => error "no index") given_clause
+    val (simplifications, archive) = Jeha_Simplify.simplify false ctxt simp_funs (fn _ => error "no index") given_clause
     (* val _ = Jeha_Common.trace_msg ctxt (K "START REDUNDANCY CHECK") *)
+    fun discard_redundant clause =
+      if
+        (not cheap andalso is_redundant ctxt active clause)
+        (* FIXME: this is not specified in the E paper, so should we perform inferences with tautologies?? *)
+        orelse is_trivial clause
+          then
+            let val _ = Jeha_Common.trace_msg ctxt (fn () => "discarding redundant or trivial clause") in
+            []
+            end
+          else [clause]
   in
-    if
-      (not cheap andalso is_redundant ctxt active given_clause)
-      (* FIXME: this is not specified in the E paper, so should we perform inferences with tautologies?? *)
-      orelse is_trivial given_clause
-        then
-          let val _ = Jeha_Common.trace_msg ctxt (fn () => "discarding redundant or trivial given_clause") in
-          []
-          end
-        else [given_clause]
+    flat (map discard_redundant simplifications)
   end
   (* let
     val idxs = find_simp_bool_outer_clause given_clause
