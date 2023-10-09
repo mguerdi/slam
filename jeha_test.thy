@@ -583,6 +583,20 @@ ML \<open>
   val o4 = Jeha_Order.kbo (@{term "\<forall>x. P x"}, @{term "P True"})
 \<close>
 
+(* FIXME: might require better boolean simplification *)
+lemma "(=) = (\<lambda>x y. y = x)"
+using [[unify_search_bound = 15]] by (jeha (dump) ext)
+
+declare [[jeha_trace]]
+ML \<open>
+  val dumped_state = !Jeha_Tactic.dump;
+  val dumped_states = length dumped_state;
+  val { context = context, countdown = countdown, passive = passive, active = active, archive = archive } = nth dumped_state 0
+  val context = Config.put Jeha_Common.disable_all false context
+  val context = Config.put Jeha_Common.trace true context
+  val state = { context = Jeha_Common.verbose_of context, countdown = countdown, passive = passive, active = active, archive = archive }
+  val _ = Jeha.given_clause_loop false state (* handle TYPE (msg, _, ts) => error (msg ^ " " ^ (Jeha_Common.pretty_terms (Jeha_Common.verbose_of ctxt) ts)) *)
+\<close>
 (*
 notepad
 begin

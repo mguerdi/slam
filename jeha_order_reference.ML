@@ -177,6 +177,7 @@ and translate_O_Abs Ts (Abs (_, T, u)) =
 (* argument is an Abs because of Q\<^sub>\<eta> normal form *)
 and translate_O_Quant Ts (quantifier $ (Abs (_, T, u))) =
   FOApp (mk_fo_const_head quantifier, [type_to_fo_term T, translate_O (T::Ts) u])
+  | translate_O_Quant Ts t = error ("translate_O_Quant: wrong normal form" ^ @{make_string} t)
 
 fun translate_p (t as FOVar (Const ("Pure.dummy_pattern", _), _)) = t (* \<alpha> *)
   | translate_p (FOVar (t, false)) = FOVar (t, true)
