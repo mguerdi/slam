@@ -1010,6 +1010,15 @@ fun forward_simplify ctxt cheap active given_clause =
     (* FIXME: remove active_units hack *)
     val simp_funs =
       let
+        val oc_rewrites : Jeha_Simplify.simp_fun = fn _ => fn c =>
+          if_cfg Jeha_Common.rule_simp_outer_claus (
+          (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
+          |> Seq.map simp_bool_outer_claus
+          |> Seq.map_filter (fn cs => case cs of [] => NONE | _ => SOME cs)
+          )
+          |> Seq.pull
+          |> Jeha_Common.map_some fst
+          |> the_default []
         (* successful rewrites of c (NONE filtered out) *)
         val rn_rp_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           let
@@ -1031,11 +1040,12 @@ fun forward_simplify ctxt cheap active given_clause =
           Seq.map_filter (fn f => f c) (Seq.append (if_cfg Jeha_Common.rule_delete_duplicated_lits (Seq.single (simp_delete_duplicated_lits ctxt))) (if_cfg Jeha_Common.rule_delete_resolved_lits (Seq.single (simp_delete_resolved_lits ctxt))))
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
-        [rn_rp_rewrites]
-        @ (if not cheap then [ps_rewrites] else []) 
-        @ (if not cheap then [ns_rewrites] else [])
-        @ [dd_dr_rewrites]
-        |> map simp_fun_of_seq
+        [oc_rewrites]
+        @ map simp_fun_of_seq
+          ( [rn_rp_rewrites]
+          @ (if not cheap then [ps_rewrites] else [])
+          @ (if not cheap then [ns_rewrites] else [])
+          @ [dd_dr_rewrites] )
       end
     (* rewrite until not possible anymore *)
     (* FIXME: can this lead to a fixed-point (and not terminate)? No, even RP with unit s\<approx>t and \<sigma> a

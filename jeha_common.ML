@@ -49,8 +49,7 @@ sig
   val rule_rewrite_negative_lits : bool Config.T
   val rule_positive_simplify_reflect : bool Config.T
   val rule_negative_simplify_reflect : bool Config.T
-  val rule_pos_outer_claus : bool Config.T
-  val rule_neg_outer_claus : bool Config.T
+  val rule_simp_outer_claus : bool Config.T
   val rule_syntactic_tautology_deletion1 : bool Config.T
   val rule_syntactic_tautology_deletion2 : bool Config.T
   val rule_clause_subsumption : bool Config.T
@@ -107,8 +106,7 @@ val rule_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>jeha
 val rule_rewrite_negative_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_rewrite_negative_lits\<close> (K rule_default)
 val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_positive_simplify_reflect\<close> (K rule_default)
 val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_negative_simplify_reflect\<close> (K rule_default)
-val rule_pos_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_pos_outer_claus\<close> (K rule_default)
-val rule_neg_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neg_outer_claus\<close> (K rule_default)
+val rule_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_simp_outer_claus\<close> (K rule_default)
 val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion1\<close> (K rule_default)
 val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion2\<close> (K rule_default)
 val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)
