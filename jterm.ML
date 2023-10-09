@@ -338,15 +338,20 @@ precondition of the completeness theorem." *)
 fun norm_beta_eta_env env = Envir.eta_contract o Envir.norm_term env
 
 (* Q t \<mapsto> Q (\<lambda>x. t x) *)
-fun ensure_lambda_under_q (t $ Abs (x, T, u)) = t $ Abs (x, T, ensure_lambda_under_q u)
-  | ensure_lambda_under_q (t $ u) =
+fun ensure_lambda_under_q (Abs (x, T, t)) = Abs (x, T, ensure_lambda_under_q t)
+  | ensure_lambda_under_q (t $ (u as (Abs _))) = ensure_lambda_under_q t $ ensure_lambda_under_q u
+  | ensure_lambda_under_q (t $ u) = 
       if is_quantifier t
         then
+          (* \<eta>-expand u (which is not a \<lambda>-expression!) *)
           let val (T, _) = dest_funT (fastype_of u) in
             t $ Abs(Name.uu, T, incr_boundvars 1 (ensure_lambda_under_q u) $ Bound 0)
           end
         else ensure_lambda_under_q t $ ensure_lambda_under_q u
-  | ensure_lambda_under_q t = t
+  | ensure_lambda_under_q (t as Free _) = t
+  | ensure_lambda_under_q (t as Const _) = t
+  | ensure_lambda_under_q (t as Var _) = t
+  | ensure_lambda_under_q (t as Bound _) = t
 
 (* apply substitution and normalize (compare Envir.beta_eta_contract) *)
 fun norm_beta_eta_qeta_env env = ensure_lambda_under_q o norm_beta_eta_env env
