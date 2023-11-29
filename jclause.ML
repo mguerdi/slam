@@ -41,6 +41,8 @@ sig
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
   val is_false : T -> bool
   val maxidx_of_literal_list : JLit.T list -> int
+  (* Debuggging *)
+  val is_eligible_tpos : term -> JTerm.tpos -> bool
 end;
 
 structure JClause : JCLAUSE =

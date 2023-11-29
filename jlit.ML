@@ -73,7 +73,6 @@ fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
 fun is_truth_value t = t = @{term True} orelse t = @{term False}
 
 fun is_pred (s, t, true) = exists is_truth_value [s, t]
-    (* FIXME: Maybe accept boolean disequations? (by turning them into equations) *)
   | is_pred _ = false
 
 fun dest_pred (s, t, true) =

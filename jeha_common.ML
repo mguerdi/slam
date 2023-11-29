@@ -25,6 +25,8 @@ sig
   val disable_smash_unifiers : bool Config.T
   val max_number_of_steps : int Config.T
   (* Config options to turn rules on and off. *)
+  val disable_all : bool Config.T
+  (* inferences *)
   val rule_sup : bool Config.T
   val rule_fluid_sup : bool Config.T
   val rule_e_res : bool Config.T
@@ -43,6 +45,7 @@ sig
   val rule_fluid_loob_ho : bool Config.T
   val rule_ext : bool Config.T
   val rule_choice : bool Config.T
+  (* simplifications *)
   val rule_delete_duplicated_lits : bool Config.T
   val rule_delete_resolved_lits : bool Config.T
   val rule_rewrite_positive_lits : bool Config.T
@@ -54,7 +57,7 @@ sig
   val rule_syntactic_tautology_deletion2 : bool Config.T
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
-  val disable_all : bool Config.T
+
   datatype ('a, 'b) either = Left of 'a | Right of 'b
   val get_left : ('a, 'b) either -> 'a option
   val assert_results_eq : ('a -> ''b) -> ('a -> ''b) -> 'a -> ''b
@@ -80,8 +83,11 @@ val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_dis
 val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>jeha_max_number_of_steps\<close> (K 300)
 
 (* NOTE: The rules aren't actually all turned off unless disable_all is set. *)
+val disable_all = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_all\<close> (K false)
+
 val rule_default = false
 
+(* inferences *)
 val rule_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_sup\<close> (K rule_default)
 val rule_fluid_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_sup\<close> (K rule_default)
 val rule_e_res = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_e_res\<close> (K rule_default)
@@ -100,6 +106,7 @@ val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule
 val rule_fluid_loob_ho = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_loob_hoist\<close> (K rule_default)
 val rule_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_ext\<close> (K rule_default)
 val rule_choice = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_choice\<close> (K rule_default)
+(* simplifications *)
 val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_duplicated_lits\<close> (K rule_default)
 val rule_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_resolved_lits\<close> (K rule_default)
 val rule_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_rewrite_positive_lits\<close> (K rule_default)
@@ -111,8 +118,6 @@ val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<o
 val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion2\<close> (K rule_default)
 val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)
 val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_equality_subsumption\<close> (K rule_default)
-
-val disable_all = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_all\<close> (K false)
 
 (** term parsing antiquotations **)
 

@@ -401,7 +401,7 @@ M < N := N > M *)
 fun mk_multiset_order_of_strict a_ord (m, n) =
   if multiset_is_greater_reference (a_ord #> curry op= (SOME GREATER)) (a_ord #> curry op= (SOME EQUAL)) (m, n)
     then SOME GREATER
-  (* NOTE: The next line is not the same as the line below it! *)
+  (* NOTE: The commented next line is not the same as the line below it! *)
   (*      multiset_is_greater_reference (a_ord #> curry op= (SOME LESS))    (a_ord #> curry op= (SOME EQUAL)) (m, n) *)
   else if multiset_is_greater_reference (a_ord #> curry op= (SOME GREATER)) (a_ord #> curry op= (SOME EQUAL)) (n, m)
     then SOME LESS

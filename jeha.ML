@@ -97,7 +97,7 @@ fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   concretely? (Isabelle represents \<longleftrightarrow> as HOL.eq) *)
   | outer_clausify b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
       [JClause.add_literal (s, t, b) c]
-  (* FIXME: add forall, exists *)
+  (* FIXME: add forall, exists (make fresh var, increment maxidx) *)
   | outer_clausify b s c = []
 
 (*** Rules ***)
@@ -223,6 +223,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
             (not toplevel ||
           (* Question: does this mean "rewritten literal is not strictly maximal?"
           Is this what Schulz calls "not eligible for paramodulation"? *)
+          (* My reading: There exists a literal s=s' with s or s' greater or equal to t. Problem:
+          But in particular there is the literal of which t itself is a (green/blue) subterm, so the
+          statement must already hold by the green (blue??) subterm property. So is it redundant? *)
             C.lits c |> CCArray.exists (fun lit -> Lit.Seq.terms lit |>
               Iter.exists (fun s -> Comp.is_Gt_or_Geq (O.compare ord s t))) ||
           (* Context: r' is the matching side of the equation (our `to`) with the matcher applied *)
@@ -502,18 +505,18 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     if is_Var u andalso JClause.occurs_deeply u c then [] else (* 2. *)
     (* FIXME: 3. variable condition ... *)
     let
-      (* val _ = writeln ("Sup: " ^ JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c )*)
+      (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: " ^ JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c ) *)
       val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
-      (* val _ = writeln ("Sup: " ^ Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u )*)
+      (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: " ^ Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u ) *)
       val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
       fun build_conclusion unifier =
         let
           val (c, d) = (c, d) |> apply2 (JClause.norm_beta_eta_qeta_env unifier)
           val u_eligible = JClause.is_eligible_full_pos c u_pos
-          (* val _ = writeln ("Sup: u eligible=" ^ @{make_string} u_eligible) *)
+          (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: u eligible=" ^ @{make_string} u_eligible) *)
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
           val tt'_eligible = JClause.is_eligible_cpos d cp
-          (* val _ = writeln ("Sup: tt' eligible=" ^ @{make_string} tt'_eligible)*)
+          (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: tt' eligible=" ^ @{make_string} tt'_eligible) *)
           (* FIXME: according to the thesis this is skipped for performance
           reasons, would explain the difficulty in understanding zipperpositions
           implementation *)
@@ -765,6 +768,11 @@ val bool_rw_non_var_rules =
       , (HOLogic.mk_imp, ml_imp) ]
   end
 
+(* FIXME: o\<lambda>Sup: "[...] oSup relies heavily on BoolSimp, and we keep this rule as the basis of our
+Boolean simplification machinery [...] BoolRw can be reduced to two cases [...]"
+We should probably do the same, see zipperposition/booleans.ML:1072 (simplify_bools), in particular
+to get the boolean implication simplifications from oSup. (Note oSup: "assuming \<not> is not greater
+than \<longrightarrow>") *)
 (* Implementation of BoolRw, EqHoist, NeqHoist, ForallHoist and ExistsHoist.
 unifies u with boolean pattern, returns C<\<top>> or C<\<bottom>> and checks relevant conditions *)
 fun impl_infer_bool_rw_eq_neq_fa_ex_hoist

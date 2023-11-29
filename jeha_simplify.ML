@@ -3,6 +3,8 @@
 signature JEHA_SIMPLIFY =
 sig
   type unit_index = term -> JClause.T list
+  (* stateful simplification to solve archival:
+  type 's simp_fun = 's -> unit_index -> JClause.T -> 's * JClause.T list *)
   type simp_fun = unit_index -> JClause.T -> JClause.T list
   val first_successful_rewrite : unit_index -> JClause.T -> simp_fun list -> JClause.T list
   val simplify_first :
