@@ -30,6 +30,7 @@ sig
   val green_full_poss_of : T -> full_pos list
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T
+  val map_literals : (JLit.T list -> JLit.T list) -> T -> T
   val subterm_at_full_pos : T -> full_pos -> term
   val occurs_deeply : term -> T -> bool
   val norm_beta_eta_qeta_env : Envir.env -> T -> T
@@ -142,11 +143,18 @@ fun term_of { literals = [], ... } = @{term False}
       end
 
 fun pretty_clause' ctxt c =
-  Pretty.block
-    [ Pretty.str (@{make_string} (#id c) ^ ":")
-    , Syntax.pretty_term ctxt (term_of c)
-    , Pretty.str (" (" ^ (Jeha_Log.name_of (#origin c)) ^ ")")
-    ]
+  let
+    val origin = #origin c
+    val premises = case origin of
+      Jeha_Log.Invalid => "[Invalid]"
+    | _ => @{make_string} (Jeha_Log.premises origin)
+  in
+    Pretty.block
+      [ Pretty.str (@{make_string} (#id c) ^ ":")
+      , Syntax.pretty_term ctxt (term_of c)
+      , Pretty.str (" (" ^ (Jeha_Log.name_of origin) ^ " " ^ premises ^ ")")
+      ]
+  end
 
 val pretty_clause = Pretty.string_of oo pretty_clause'
 
