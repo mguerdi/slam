@@ -51,7 +51,7 @@ fun jeha_tac options ctxt ths i st0 =
       if exists (curry (op =) "dump") options
         then
           (let val _ = dump := state :: (!dump) in
-            (writeln "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Common.dump"; raise e)
+            (writeln "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Tactic.dump"; raise e)
           end)
         else raise e
     val atomized_ths = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) ths
