@@ -14,6 +14,7 @@ sig
   val mk_pred : term -> bool -> T
   val is_pred : T -> bool
   val dest_pred : T -> term * term
+  val normalize_if_negative_pred : T -> T
   val term_of : T -> term
   val term_at_lpos : T -> lpos -> term
   val orient : lpos -> T -> term * term * bool
@@ -85,6 +86,14 @@ fun dest_pred (s, t, true) =
   (* FIXME: allow disequations? (see similar comment above mk_pred) *)
   | dest_pred _ = error "disequation"
 
+(* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
+fun normalize_if_negative_pred (l as (_, _, true)) = l
+  | normalize_if_negative_pred (l as (s, t, false)) =
+      if is_truth_value s
+        then (JTerm.negate_hol_bool s, t, true)
+      else if is_truth_value t
+        then (s, JTerm.negate_hol_bool t, true)
+      else l 
 
 fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 

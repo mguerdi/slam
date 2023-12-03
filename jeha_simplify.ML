@@ -46,9 +46,14 @@ fun first_successful_rewrite _ _ [] = [] (* no rewrite possible *)
 (* for full simplification: *)
 
 (* simplify a clause once *)
-fun once_simplify index simp_funs clause (once_simplified, fully_simplified, archive) =
+fun once_simplify ctxt index simp_funs clause (once_simplified, fully_simplified, archive) =
   case first_successful_rewrite index clause simp_funs of
-    [] => (once_simplified, clause::fully_simplified, archive)
+    [] =>
+      let val _ = Jeha_Common.trace_msg ctxt (fn () =>
+        "done rewriting " ^ JClause.pretty_clause ctxt clause ^ ".")
+      in
+        (once_simplified, clause::fully_simplified, archive)
+      end
   | simplifications =>
       (simplifications @ once_simplified, fully_simplified, clause::archive)
 
@@ -63,7 +68,7 @@ fun full_simplify_all _ _ _ 0 (partially_simplified, fully_simplified, archive) 
   | full_simplify_all ctxt simp_funs index countdown (partially_simplified, fully_simplified, archive) =
       (* Fresh accumulator for results of one-step simplification of partially_simplified. *) 
       ([], fully_simplified, archive)
-      |> fold (once_simplify index simp_funs) partially_simplified 
+      |> fold (once_simplify ctxt index simp_funs) partially_simplified 
       |> full_simplify_all ctxt simp_funs index (countdown - 1)
 
 fun simplify_all ctxt simp_funs index countdown clause =

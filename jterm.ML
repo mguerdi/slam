@@ -2,6 +2,9 @@ signature JTERM =
 sig
   (* type T = term *)
   type tpos = int list (* position of a subterm *)
+  val ml_bool_of : term -> bool
+  val hol_bool_of : bool -> term
+  val negate_hol_bool : term -> term
   val is_quantifier : term -> bool
   val quantified_typ : term -> typ
   val strip_comb_fun_types_args : term -> term * typ list * term list
@@ -29,6 +32,16 @@ end;
 
 structure JTerm : JTERM =
 struct
+
+fun ml_bool_of @{term True} = true
+  | ml_bool_of @{term False} = false
+  | ml_bool_of _ = error "term is not HOL.True or HOL.False"
+
+fun hol_bool_of true = @{term "True"}
+  | hol_bool_of false = @{term "False"}
+  | hol_bool_of _ = error "term is not true of false"
+
+val negate_hol_bool = hol_bool_of o not o ml_bool_of
 
 (* type T = term *)
 

@@ -2,6 +2,7 @@
 signature JEHA_COMMON =
 sig
   val trace : bool Config.T
+  val trace_cheap_simplify : bool Config.T 
   val trace_msg : Proof.context -> (unit -> string) -> unit
   val proof_reconstruction : bool Config.T
   val term_pat_setup : theory -> theory
@@ -53,6 +54,8 @@ sig
   val rule_positive_simplify_reflect : bool Config.T
   val rule_negative_simplify_reflect : bool Config.T
   val rule_simp_outer_claus : bool Config.T
+  val rule_simp_bool_rw : bool Config.T
+  val rule_simp_false_elim : bool Config.T
   val rule_syntactic_tautology_deletion1 : bool Config.T
   val rule_syntactic_tautology_deletion2 : bool Config.T
   val rule_clause_subsumption : bool Config.T
@@ -75,6 +78,8 @@ fun I x = x
 val trace = Attrib.setup_config_bool \<^binding>\<open>jeha_trace\<close> (K false)
 val verbose = Attrib.setup_config_bool \<^binding>\<open>jeha_verbose\<close> (K true)
 fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
+
+val trace_cheap_simplify = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_cheap_simplify\<close> (K false)
 
 val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K false)
 
@@ -114,6 +119,8 @@ val rule_rewrite_negative_lits = Attrib.setup_config_bool \<^binding>\<open>jeha
 val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_positive_simplify_reflect\<close> (K rule_default)
 val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_negative_simplify_reflect\<close> (K rule_default)
 val rule_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_simp_outer_claus\<close> (K rule_default)
+val rule_simp_bool_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_simp_bool_rw\<close> (K rule_default)
+val rule_simp_false_elim = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_simp_false_elim\<close> (K rule_default)
 val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion1\<close> (K rule_default)
 val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion2\<close> (K rule_default)
 val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)

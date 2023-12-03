@@ -27,15 +27,23 @@ sig
   | Ext
   | Choice
   (* simplification *)
-  | DeleteDuplicatedLits of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
+  (* FIXME: | DeleteDuplicatedLits of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
+  | DeleteDuplicatedLits of { premise: int } 
   (* FIXME: | DeleteResolvedLits of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env } *)
   | DeleteResolvedLits of { premise: int }
   | RewritePositiveLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos, substitution: Envir.env }
-  | NegativeSimplifyReflect of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | PosOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | NegOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  (* FIXME: add substitution *)
+  | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
+  (* FIXME: add substitution *)
+  | NegativeSimplifyReflect of { unit: int, right_premise: int, literal: JClause_Pos.cpos }
+  (* | PosOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | NegOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env } *)
+  | SimpPosNegOuterClaus of { premise: int, literal: JClause_Pos.cpos } 
+  (* *)
+  | SimpBoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
+  | SimpFalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | SimpNormalizePredLits of { premise: int }
   (* redundancy FIXME: different type? these don't make sense in logs in clauses *)
   | SyntacticTautologyDeletion1 of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | SyntacticTautologyDeletion2 of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
@@ -77,14 +85,16 @@ datatype inference =
   | Ext
   | Choice
   (** simplification **)
-  | DeleteDuplicatedLits of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
+  | DeleteDuplicatedLits of { premise: int } 
   | DeleteResolvedLits of { premise: int }
   | RewritePositiveLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos, substitution: Envir.env }
-  | NegativeSimplifyReflect of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | PosOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | NegOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
+  | NegativeSimplifyReflect of { unit: int, right_premise: int, literal: JClause_Pos.cpos }
+  | SimpPosNegOuterClaus of { premise: int, literal: JClause_Pos.cpos }
+  | SimpBoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
+  | SimpFalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | SimpNormalizePredLits of { premise: int }
   (* redundancy FIXME: different type? these don't make sense in logs in clauses *)
   | SyntacticTautologyDeletion1 of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | SyntacticTautologyDeletion2 of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
@@ -118,8 +128,10 @@ fun premises (Axiom { thm: thm }) = []
   | premises (RewriteNegativeLits { unit, right_premise, ... }) = [unit, right_premise]
   | premises (PositiveSimplifyReflect { unit, right_premise, ... }) = [unit, right_premise]
   | premises (NegativeSimplifyReflect { unit, right_premise, ... }) = [unit, right_premise]
-  | premises (PosOuterClaus { premise, ... }) = [premise]
-  | premises (NegOuterClaus { premise, ... }) = [premise]
+  | premises (SimpPosNegOuterClaus { premise, ... }) = [premise]
+  | premises (SimpBoolRw { premise, ...}) = [premise]
+  | premises (SimpFalseElim { premise, ... }) = [premise]
+  | premises (SimpNormalizePredLits { premise: int }) = [premise]
   | premises Invalid = error "\"Invalid\" inference encountered"
 
 (* Building blocks of proofs (inspired by metis_reconstruct.ML):
@@ -205,12 +217,14 @@ fun name_of (Axiom _) = "Axiom"
   | name_of (RewriteNegativeLits _) = "RewriteNegativeLits" 
   | name_of (PositiveSimplifyReflect _) = "PositiveSimplifyReflect" 
   | name_of (NegativeSimplifyReflect _) = "NegativeSimplifyReflect" 
-  | name_of (PosOuterClaus _) = "PosOuterClaus" 
-  | name_of (NegOuterClaus _) = "NegOuterClaus" 
+  | name_of (SimpPosNegOuterClaus _) = "SimpPosNegOuterClaus"
   | name_of (SyntacticTautologyDeletion1 _) = "SyntacticTautologyDeletion1" 
   | name_of (SyntacticTautologyDeletion2 _) = "SyntacticTautologyDeletion2" 
   | name_of (ClauseSubsumption _) = "ClauseSubsumption" 
   | name_of (EqualitySubsumption _) = "EqualitySubsumption" 
+  | name_of (SimpBoolRw _) = "SimpBoolRw"
+  | name_of (SimpFalseElim _) = "SimpFalseElim" 
+  | name_of (SimpNormalizePredLits _) = "SimpNormalizePredLits"
   | name_of Invalid = "Invalid" 
 
 end;
