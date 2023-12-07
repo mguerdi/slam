@@ -10,14 +10,14 @@ struct
 
 (* CONFIGURATION *)
 
-(* probability of generating a constant *)
-val prob_of_constant = 0.3
+(* probability of generating a schematic variable *)
+val prob_of_var = 0.3
 (* Precomputed, from the paper, presumably increasing the probability of
 boltzmann_index leads to smaller terms. Weaker effect when increasing the
 probability of boltzmann_lambda. *)
-(* Scale precomputed values into interval determined by 1 - prob_of_constant. *)
-fun rescale r = (1.0 - prob_of_constant) * r + prob_of_constant
-fun boltzmann_constant r = r < prob_of_constant
+(* Scale precomputed values into interval determined by 1 - prob_of_var. *)
+fun rescale r = (1.0 - prob_of_var) * r + prob_of_var
+fun boltzmann_var r = r < prob_of_var
 fun boltzmann_index r = r < rescale 0.35700035696434995;
 fun boltzmann_lambda r = r < rescale 0.6 (* 0.6525813160382378 *);
 (* The probability p of de Bruijn index 0, generally Bound j has the
@@ -30,7 +30,9 @@ fun boltzmann_leaf r = r < rescale 0.65 (* 0.7044190409261122 *);
 generators. *)
 val lift_gen : ('a, 's) SpecCheck_Gen_Types.gen_state -> ('a, 'b * 's) SpecCheck_Gen_Types.gen_state =
   fn gen => (fn (b, s) => let val (a, s) = gen s in (a, (b, s)) end)
+
 type unif_state = (Proof.context * Type.tyenv * int)
+
 val add_unif : (typ * typ) -> unif_state -> unif_state =
   fn T_pair => fn (ctxt, typ_env, maxidx) =>
     let
@@ -42,29 +44,48 @@ val add_unif : (typ * typ) -> unif_state -> unif_state =
     in
       (ctxt, typ_env, maxidx)
     end
+
 (* Like gen but with unification state. *)
 type 'a unif_gen = ('a, unif_state * SpecCheck_Random.rand) SpecCheck_Gen_Types.gen_state
+
 val fresh_type_indexname : indexname unif_gen =
   fn ((ctxt, typ_env, maxidx), s) =>
     ((Name.aT, maxidx), ((ctxt, typ_env, maxidx + 1), s))
+
 val defaultS : sort unif_gen = fn (s as ((ctxt, _, _), _)) =>
   (Sign.defaultS (Proof_Context.theory_of ctxt), s)
+
 val fresh_tvar : typ unif_gen =
   SpecCheck_Gen_Term.tvar
     fresh_type_indexname
     defaultS
+
+val fresh_var_indexname : indexname unif_gen =
+  fn ((ctxt, typ_env, maxidx), s) =>
+    (("x", maxidx), ((ctxt, typ_env, maxidx + 1), s))
+
 (* Each term generator guarantees that it generates a term whose type unifies
 with the type T in the type environment it returns (unless it fails). *)
 fun term Ts T s =
   let
     val (r, s) = lift_gen (SpecCheck_Generator.range_real (0.0, 1.0)) s
   in
-    if boltzmann_index r
+    if boltzmann_var r
+      then var Ts T s
+    else if boltzmann_index r
       then bound Ts T s
     else if boltzmann_lambda r
       then abs Ts T s
     else app Ts T s
   end
+
+and var _ T s =
+  let
+    val (v, s) = fresh_var_indexname s
+  in
+    (Var (v, T), s)
+  end
+
 and bound [] _ _ = error "bound: not below lambda"
   | bound (bT::bound_Ts) T (unif_s, rng_s) =
       let val (r, rng_s) = SpecCheck_Random.real_unit rng_s in
@@ -76,6 +97,7 @@ and bound [] _ _ = error "bound: not below lambda"
               (bound bound_Ts T)
               (unif_s, rng_s)
       end
+
 and abs Ts T s =
   let
     val (arg_T, s) = fresh_tvar s
@@ -89,6 +111,7 @@ and abs Ts T s =
       (term (arg_T :: Ts) return_T)
       (unif_s, rng_s)
   end
+
 and app Ts T s =
   let
     val (arg_T, s) = fresh_tvar s
@@ -163,7 +186,7 @@ fun ran_typable
   let
     val (r, s) = SpecCheck_Generator.range_real (0.0, 1.0) s
   in
-    if boltzmann_constant r
+    if boltzmann_var r
       then ran_constant ctxt typ (s, (typ_env, maxidx))
     else if boltzmann_index r
       then pick_index ctxt binder_types typ (s, (typ_env, maxidx))

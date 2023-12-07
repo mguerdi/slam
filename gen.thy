@@ -18,18 +18,6 @@ imports
   SpecCheck.SpecCheck_Generators
 begin
 
-ML_file \<open>jeha_common.ML\<close>
-ML_file \<open>clause_id.ML\<close>
-ML_file \<open>jterm.ML\<close>
-ML_file \<open>jeha_order_reference.ML\<close>
-ML_file \<open>jeha_order.ML\<close>
-ML_file \<open>jlit.ML\<close>
-ML_file \<open>jclause_pos.ML\<close>
-ML_file \<open>jeha_log.ML\<close>
-ML_file \<open>jclause.ML\<close>
-ML_file \<open>jeha_proof.ML\<close>
-ML_file \<open>jeha_unify.ML\<close>
-
 (* Antiquotations for term and type patterns from the cookbook. *)
 ML \<open>
   val term_pat_setup =
@@ -145,48 +133,6 @@ ML \<open>
       ((s, (typ_env, maxidx)), t)
     end
 
-    (* let
-      val (r, s) = SpecCheck_Generator.range_real (0.0, 1.0) s
-    in
-      if boltzmann_constant r
-        then ran_constant ctxt typ (s, (typ_env, maxidx))
-      else if boltzmann_index r
-        then pick_index ctxt binder_types typ (s, (typ_env, maxidx))
-      else if boltzmann_lambda r
-        then
-          let
-            val (maxidx, arg_T) = gen_fresh_tyvar ctxt maxidx
-            val (maxidx, return_T) = gen_fresh_tyvar ctxt maxidx
-            (* The type of the thing we're generating. *)
-            val lambda_typ = arg_T --> return_T
-            (* The `typ` we were asked to return must unify the type we're
-            actually generating *)
-            val (typ_env, maxidx) =
-              Sign.typ_unify
-                (Proof_Context.theory_of ctxt)
-                (lambda_typ, typ)
-                (typ_env, maxidx)
-            val (state, body) =
-              ran_typable
-                ctxt
-                (arg_T :: binder_types)
-                return_T
-                (s, (typ_env, maxidx))
-          in
-            (state, Abs (Name.uu_, arg_T, body))
-          end
-      else
-        let
-          val (maxidx, arg_T) = gen_fresh_tyvar ctxt maxidx
-          val (state, function) =
-            ran_typable ctxt binder_types (arg_T --> typ) (s, (typ_env, maxidx))
-          val (state, arg) =
-            ran_typable ctxt binder_types arg_T state
-        in
-          (state, function $ arg)
-        end
-    end *)
-
   type boltzmann_config =
     { T : typ, free_names : string list, const_names : string list, min_size : int }
 
@@ -250,6 +196,11 @@ ML \<open>
     SpecCheck_Property.prop (K false) (* (is_some o try (Syntax.check_term ctxt)) *)
     |> check_term "boltzmann generator type checks"
   ]
+\<close>
+
+ML \<open>
+  val t = @{term_schem "\<lambda>uu. ?x9 (\<lambda>z. uu) (\<lambda>uua . uua (\<lambda>uua . ?x26 (?x28 (?x30 (uua (uua uu (?x35 (?x38 (\<lambda>uu. uu) uua)))))) (?x30 (uua (uua uu (?x35 (?x38 (\<lambda>uu. uu) uua)))))))"}
+  (* val vs = subst_Vars [(("x", 26), ] t  *)
 \<close>
 
 declare [[speccheck_num_counterexamples = 10]]
