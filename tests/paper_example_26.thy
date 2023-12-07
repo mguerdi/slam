@@ -6,6 +6,12 @@ begin
 
 declare [[jeha_trace]]
 
+(* lemma paper_example_26_all_rules:
+  shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x))"
+  (* sledgehammer *)
+  (* by metis (* fails *) *)
+  using [[jeha_trace_active]] by (jeha) (* 80_000 ms *) *)
+
 declare [[jeha_disable_all]]
 
 declare [[jeha_rule_forall_rw]]
@@ -25,8 +31,8 @@ but FalseElim doesn't apply because of its strict-maximality side condition *)
 declare [[jeha_rule_simp_false_elim]]
 
 (* works but takes very long (> 1 min): *)
-(* declare [[jeha_proof_reconstruction]]
-declare [[metis_trace]] *)
+declare [[jeha_proof_reconstruction]]
+declare [[metis_trace]]
 
 lemma paper_example_26:
   shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x))"

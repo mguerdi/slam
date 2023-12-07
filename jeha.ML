@@ -203,7 +203,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
   if not (positive = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
     (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
-    val unit_clause = JClause.incr_indexes (JClause.maxidx target_clause + 1) unit_clause
+    val unit_shift = JClause.maxidx target_clause + 1
+    val unit_clause = JClause.incr_indexes unit_shift unit_clause
     val (from, to) = apply2 (JLit.term_at_lpos (the_single (JClause.literals unit_clause))) (lp, JLit.swap_lpos lp) (* Schulz: (s, t) *)
     val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
     val matchers =
@@ -243,6 +244,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           |> JClause.set_origin (
               (if positive then Jeha_Log.RewritePositiveLits else Jeha_Log.RewriteNegativeLits)
                 { unit = JClause.id unit_clause
+                , unit_shift = unit_shift
                 , right_premise = JClause.id target_clause
                 , literal = target_cp 
                 , substitution = matcher}
@@ -519,7 +521,8 @@ fun impl_infer_sup precheck ctxt (d, (lp, cp), (c, u_pos)) =
 (* Sup inference *)
 fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
   let
-    val d = JClause.incr_indexes (JClause.maxidx c + 1) d
+    val left_premise_shift = JClause.maxidx c + 1
+    val d = JClause.incr_indexes left_premise_shift d
     val env = Envir.empty (JClause.maxidx_of2 (c, d))
     val rewriting_literal = JClause.lit_at cp d (* t \<approx> t' *)
     val (t, t', is_pos_eq) = JLit.orient lp rewriting_literal
@@ -566,6 +569,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           |> JClause.set_origin
               (Jeha_Log.Sup
                 { left_premise = JClause.id d
+                , left_premise_shift = left_premise_shift
                 , right_premise = JClause.id c
                 , literal = (lp, cp)
                 , subterm = u_pos

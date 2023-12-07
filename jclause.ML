@@ -185,10 +185,10 @@ fun occurs_deeply (x as (Var _)) { literals, ... } = exists (JLit.occurs_deeply_
   | occurs_deeply _ _ = error "only Vars can occur deeply"
 
 fun norm_beta_eta_qeta_env env clause =
-  if Envir.maxidx_of env < maxidx clause
+  (* if Envir.maxidx_of env < maxidx clause
     (* this indicates something went wrong *)
     then error "maxidx of env should be greater or equal to maxidx of clause"
-    else
+    else *)
       clause
       |> map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env env)))
       |> map_maxidx (K (Int.max (Envir.maxidx_of env, maxidx clause)))

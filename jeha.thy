@@ -2,6 +2,11 @@ theory jeha
   imports Main (* HOL.Hilbert_Choice *)
 begin
 
+(* from SMT.thy *)
+lemma verit_sko_forall: \<open>(\<forall>x. P x) \<longleftrightarrow> P (SOME x. \<not>P x)\<close>
+  using someI[of \<open>\<lambda>x. \<not>P x\<close>]
+  by auto
+
 ML_file \<open>jeha_common.ML\<close>
 ML_file \<open>clause_id.ML\<close>
 ML_file \<open>jterm.ML\<close>

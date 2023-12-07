@@ -6,7 +6,7 @@ sig
   (* part of the input problem or auxilliary like lem, boolean tautologies *)
     Axiom of { thm: thm }
   (* proper inferences *)
-  | Sup of { left_premise: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | Sup of { left_premise: int, left_premise_shift: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidSup
   | ERes of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | EFact of { premise: int, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -31,8 +31,8 @@ sig
   | DeleteDuplicatedLits of { premise: int } 
   (* FIXME: | DeleteResolvedLits of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env } *)
   | DeleteResolvedLits of { premise: int }
-  | RewritePositiveLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | RewriteNegativeLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | RewritePositiveLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | RewriteNegativeLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   (* FIXME: add substitution *)
   | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
   (* FIXME: add substitution *)
@@ -53,6 +53,7 @@ sig
   | Invalid
 
   val premises : inference -> int list
+  val premises_shift_substitution : inference -> { id: int, shift: int } list * Envir.env
   val name_of : inference -> string
 end;
 
@@ -64,7 +65,7 @@ datatype inference =
     Axiom of { thm: thm }
   (* proper inferences *)
   (** general **)
-  | Sup of { left_premise: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | Sup of { left_premise: int, left_premise_shift: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidSup
   | ERes of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | EFact of { premise: int, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -87,8 +88,8 @@ datatype inference =
   (** simplification **)
   | DeleteDuplicatedLits of { premise: int } 
   | DeleteResolvedLits of { premise: int }
-  | RewritePositiveLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | RewriteNegativeLits of { unit: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | RewritePositiveLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | RewriteNegativeLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
   | NegativeSimplifyReflect of { unit: int, right_premise: int, literal: JClause_Pos.cpos }
   | SimpPosNegOuterClaus of { premise: int, literal: JClause_Pos.cpos }
@@ -133,6 +134,47 @@ fun premises (Axiom { thm: thm }) = []
   | premises (SimpFalseElim { premise, ... }) = [premise]
   | premises (SimpNormalizePredLits { premise: int }) = [premise]
   | premises Invalid = error "\"Invalid\" inference encountered"
+
+fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_premise, substitution, ... })
+      = ([{ id = left_premise, shift = left_premise_shift }, { id = right_premise, shift = 0}], substitution)
+  | premises_shift_substitution (RewritePositiveLits { unit, unit_shift, right_premise, substitution, ... })
+      = ([{ id = unit, shift = unit_shift}, { id = right_premise, shift = 0 }], substitution)
+  | premises_shift_substitution (RewriteNegativeLits log) 
+      = premises_shift_substitution (RewritePositiveLits log) 
+  | premises_shift_substitution (ERes { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (EFact { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  (* | premises_shift_substitution (ArgCong { premise, number_of_vars, ... })
+      = ([{ id = premise, shift = 0 }], substitution) *)
+  | premises_shift_substitution (BoolHoist { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (FalseElim { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (EqHoist { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (NeqHoist { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (ForallHoist { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (ExistsHoist { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (BoolRw { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (ForallRw { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (ExistsRw { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (FluidBoolHoist { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution (FluidLoobHoist { premise, substitution, ... })
+      = ([{ id = premise, shift = 0 }], substitution)
+  | premises_shift_substitution other =
+      let
+        val premises = premises other
+      in
+        (premises |> map (fn id => { id = id, shift = 0 }), Envir.init)
+      end
 
 (* Building blocks of proofs (inspired by metis_reconstruct.ML):
 
