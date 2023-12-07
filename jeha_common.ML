@@ -1,9 +1,39 @@
 
 signature JEHA_COMMON =
 sig
+  (* overrides all other tracing settings *)
   val trace : bool Config.T
-  val trace_cheap_simplify : bool Config.T 
+  (* output the active set whenver it changes *)
+  val trace_active : bool Config.T
+  (* output 10 passive clauses at each step *)
+  val trace_passive : bool Config.T
+  (* output single simplification steps *)
+  val trace_simp_steps : bool Config.T
+  (* output during forward simplification (overrides) *)
+  val trace_forward_simp : bool Config.T
+  (* output during backward simplification (overrides) *)
+  val trace_backward_simp : bool Config.T
+  (* output during cheap simplification *)
+  val trace_cheap_simp : bool Config.T
+  (* output archive *)
+  val trace_archive : bool Config.T
+  (* output inferred / new clauses *)
+  val trace_inferred : bool Config.T
+  (* internal *)
+  val trace_simp_results : bool Config.T
+
   val trace_msg : Proof.context -> (unit -> string) -> unit
+  val trace_msg_active : Proof.context -> (unit -> string) -> unit
+  val trace_msg_passive : Proof.context -> (unit -> string) -> unit
+  val trace_msg_simp_steps : Proof.context -> (unit -> string) -> unit
+  val trace_msg_forward_simp : Proof.context -> (unit -> string) -> unit
+  val trace_msg_backward_simp : Proof.context -> (unit -> string) -> unit
+  val trace_msg_cheap_simp : Proof.context -> (unit -> string) -> unit
+  val trace_msg_archive : Proof.context -> (unit -> string) -> unit
+  val trace_msg_inferred : Proof.context -> (unit -> string) -> unit
+  (* internal *)
+  val trace_msg_simp_results : Proof.context -> (unit -> string) -> unit
+
   val proof_reconstruction : bool Config.T
   val term_pat_setup : theory -> theory
   val type_pat_setup : theory -> theory
@@ -74,12 +104,33 @@ struct
 (* for tracing *)
 fun I x = x
 
-(* from metis_generate.ML *)
+(* overrides all other tracing options *)
 val trace = Attrib.setup_config_bool \<^binding>\<open>jeha_trace\<close> (K false)
-val verbose = Attrib.setup_config_bool \<^binding>\<open>jeha_verbose\<close> (K true)
 fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
 
-val trace_cheap_simplify = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_cheap_simplify\<close> (K false)
+val trace_active = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_active\<close> (K true)
+(* FIXME change to int and show only that many *)
+val trace_passive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_passive\<close> (K true)
+val trace_simp_steps = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_steps\<close> (K true)
+val trace_forward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_forward_simp\<close> (K true)
+val trace_backward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_backward_simp\<close> (K false)
+val trace_cheap_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_cheap_simp\<close> (K false)
+val trace_archive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_archive\<close> (K false)
+val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_inferred\<close> (K false)
+(* internal *)
+val trace_simp_results = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_results\<close> (K false)
+
+(* only output if trace would *)
+fun trace_msg_active ctxt msg = if Config.get ctxt trace_active then trace_msg ctxt msg else ();
+fun trace_msg_passive ctxt msg = if Config.get ctxt trace_passive then trace_msg ctxt msg else ();
+fun trace_msg_simp_steps ctxt msg = if Config.get ctxt trace_simp_steps then trace_msg ctxt msg else ();
+fun trace_msg_forward_simp ctxt msg = if Config.get ctxt trace_forward_simp then trace_msg ctxt msg else ();
+fun trace_msg_backward_simp ctxt msg = if Config.get ctxt trace_backward_simp then trace_msg ctxt msg else ();
+fun trace_msg_cheap_simp ctxt msg = if Config.get ctxt trace_cheap_simp then trace_msg ctxt msg else ();
+fun trace_msg_archive ctxt msg = if Config.get ctxt trace_archive then trace_msg ctxt msg else ();
+fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_msg ctxt msg else ();
+(* internal *)
+fun trace_msg_simp_results ctxt msg = if Config.get ctxt trace_simp_results then trace_msg ctxt msg else ();
 
 val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K false)
 

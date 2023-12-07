@@ -165,7 +165,7 @@ fun simp_delete_duplicated_lits ctxt c =
     if JClause.length c' = JClause.length c
       then NONE
       else
-        (Jeha_Common.trace_msg ctxt (fn () =>
+        (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
           "deleted duplicated literals in " ^ JClause.pretty_clause ctxt c);
         SOME (
           JClause.refresh_id () c'
@@ -186,7 +186,7 @@ fun simp_delete_resolved_lits ctxt c =
     if JClause.length c' = JClause.length c
       then NONE
       else
-        (Jeha_Common.trace_msg ctxt (fn () =>
+        (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
           "deleted resolved literals in " ^ JClause.pretty_clause ctxt c);
         SOME (
           JClause.refresh_id () c'
@@ -265,7 +265,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
                 | None -> false))
           *)
           if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
-          (Jeha_Common.trace_msg ctxt (fn () => msg);
+          (Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg);
           (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
           (JClause.norm_beta_eta_qeta rewritten_clause)
           |> JClause.refresh_id ()
@@ -319,7 +319,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
       ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [unit_lit])
   in
     if exists_matcher
-      then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
+      then let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
         |> JClause.delete_lit_at target_cp
         |> JClause.refresh_id ()
@@ -416,7 +416,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
       ^ " with " ^ JClause.pretty_clause ctxt (unit_clause)
   in
     if exists_matcher
-      then let val _ = Jeha_Common.trace_msg ctxt (fn () => msg) in
+      then let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
         |> JClause.delete_lit_at target_cp
         |> JClause.refresh_id ()
@@ -434,7 +434,7 @@ fun equality_subsumes ctxt (unit_clause, target_clause) =
     val unit_lit = (JClause.maxidx unit_clause, the_single (JClause.literals unit_clause)) (* Schulz: s, t *)
     val positive_lits = map (pair (JClause.maxidx target_clause)) (filter #3 (JClause.literals target_clause))
     val exists_matcher = exists (literal_can_match_single_disagreement ctxt unit_lit) positive_lits
-    val _ = if exists_matcher then Jeha_Common.trace_msg ctxt (fn () =>
+    val _ = if exists_matcher then Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
       "equality subsumed by " ^ JClause.pretty_clause ctxt unit_clause) else ()
   in
     exists_matcher
@@ -446,7 +446,7 @@ fun is_trivial c =
 fun is_redundant ctxt active c =
   let fun trace_subsumed unit subsumed =
     subsumed andalso
-      (Jeha_Common.trace_msg ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+      (Jeha_Common.trace_msg_simp_steps ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
     (* val _ = if all_disabled then writeln "REDUNDANCY CHECKS DISABLED" else () *)
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
@@ -1165,10 +1165,9 @@ fun select_given_clause cs = Passive_Set.min_elem cs |>> snd
 fun forward_simplify ctxt cheap active given_clause =
   let
     (* tracing *)
-    val trace_anything = Config.get ctxt Jeha_Common.trace
-    val trace_cheap = Config.get ctxt Jeha_Common.trace_cheap_simplify
-    val ctxt = Config.put Jeha_Common.trace (trace_anything andalso (not cheap orelse trace_cheap)) ctxt
-    
+    val ctxt = ctxt |> Config.map Jeha_Common.trace (fn s =>
+      s andalso (not cheap orelse Config.get ctxt Jeha_Common.trace_cheap_simp))
+
     val active_units = Seq.filter (fn c => JClause.length c = 1) (Seq.of_list active)
     val all_orientations : JClause.T Seq.seq -> (JClause.T * JLit.lpos) Seq.seq =
       fn cs => Jeha_Common.seq_cartesian_product cs (Seq.of_list [JLit.Left, JLit.Right])
@@ -1271,12 +1270,12 @@ fun forward_simplify ctxt cheap active given_clause =
       (* end *)
     val given_clause = full_rewrite given_clause 10 *)
     val (simplifications, archive) = Jeha_Simplify.simplify false ctxt simp_funs (fn _ => error "no index") given_clause
-    fun trace_msg_clauses msg clauses =
-      Jeha_Common.trace_msg ctxt 
+    fun trace_msg_clauses tracer msg clauses =
+      tracer ctxt 
         (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-    val _ = trace_msg_clauses "simplification results:" simplifications
-    val _ = trace_msg_clauses "intermediates " archive;
-    val _ = Jeha_Common.trace_msg ctxt (K "START REDUNDANCY CHECK")
+    val _ = trace_msg_clauses Jeha_Common.trace_msg_simp_results "simplification results:" simplifications
+    val _ = trace_msg_clauses Jeha_Common.trace_msg_archive "intermediates " archive;
+    (* val _ = Jeha_Common.trace_msg ctxt (K "START REDUNDANCY CHECK") *)
     (* FIXME: return NONE/SOME instead of lists? *)
     fun discard_redundant clause =
       if
@@ -1337,12 +1336,12 @@ fun map_filter_partition _ _ [] = ([], [], [])
                   then (archive, changed, y :: unchanged)
                   else (
                     let
-                      fun trace_msg_clauses msg clauses =
-                        Jeha_Common.trace_msg ctxt 
+                      fun trace_msg_clauses tracer msg clauses =
+                        tracer ctxt 
                           (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-                      val () = trace_msg_clauses "active clause, single simplified active" [x,y]
-                      val () = Jeha_Common.trace_msg ctxt (fn () => "with ids: " ^ @{make_string} (JClause.id x) ^ " and " ^ @{make_string} (JClause.id y))
-                      val () = trace_msg_clauses "intermediate simplificaitons" new_archive
+                      val () = trace_msg_clauses Jeha_Common.trace_msg_backward_simp "active clause, single simplified active" [x,y]
+                      val () = Jeha_Common.trace_msg_backward_simp ctxt (fn () => "with ids: " ^ @{make_string} (JClause.id x) ^ " and " ^ @{make_string} (JClause.id y))
+                      val () = trace_msg_clauses Jeha_Common.trace_msg_archive "intermediate simplificaitons" new_archive
                     in
                       error "map_filter_partition: clause id was unchanged, but intermediate simplifications returned."
                     end)
@@ -1350,7 +1349,12 @@ fun map_filter_partition _ _ [] = ([], [], [])
       end
 
 fun backward_simplify ctxt active given_clause =
-  map_filter_partition ctxt (forward_simplify (Config.put Jeha_Common.trace false ctxt) false [given_clause]) active
+  let
+    val simp_ctxt = ctxt |> Config.map Jeha_Common.trace (fn s =>
+      s andalso Config.get ctxt Jeha_Common.trace_backward_simp)
+  in
+    map_filter_partition ctxt (forward_simplify simp_ctxt false [given_clause]) active
+  end
 
 fun infer_clauses ctxt active given_clause =
   let
@@ -1411,12 +1415,13 @@ fun given_clause_step { context, countdown, passive, active, archive } =
   let
     (* tracing *)
     val _ = Jeha_Common.trace_msg context (fn () => "countdown = " ^ @{make_string} countdown)
-    fun trace_msg_clauses msg clauses =
-      Jeha_Common.trace_msg context
+    fun trace_msg_clauses tracer msg clauses =
+      tracer context
         (fn () => msg ^ JClause.pretty_clauses context clauses)
     val _ =
       let val passive_seq = passive |> seq_of_passive_set in
           trace_msg_clauses
+            Jeha_Common.trace_msg_passive
             ("passive [10/" ^ (passive_seq |> Seq.list_of |> length |> @{make_string}) ^ "]")
             (passive_seq |> Seq.take 10 |> Seq.list_of)
       end
@@ -1427,11 +1432,13 @@ fun given_clause_step { context, countdown, passive, active, archive } =
     val (given_clause, passive) = select_given_clause passive
 
     (* tracing *)
-    val _ = trace_msg_clauses "given_clause " [given_clause]
+    val _ = trace_msg_clauses Jeha_Common.trace_msg "given_clause " [given_clause]
+    val forward_simp_ctxt = context |> (Config.map Jeha_Common.trace (fn s =>
+      s andalso Config.get context Jeha_Common.trace_forward_simp))
   in
     (* simplify given_clause with active set *)
     (* FIXME TODO add simplification steps to archive *)
-    case forward_simplify context false active given_clause of
+    case forward_simplify forward_simp_ctxt false active given_clause of
       (* given_clause redundant w.r.t. active set, don't add intermediat simplifications to archive *)
       { simplifications = [], archive = _ } => (Next, { context = context, countdown = countdown - 1, passive = passive, active = active, archive = archive })
       (* select first simplification as given_clause *)
@@ -1449,7 +1456,7 @@ fun given_clause_step { context, countdown, passive, active, archive } =
             (* simplify actives with given clause *)
             (* FIXME: remove direct descendants of redundant_actives and simplified_actives from
             passive set, or: do what's described in the E 2.3 paper (deleting at activation time) *)
-            val _ = Jeha_Common.trace_msg context (K "START BACKWARD SIMPLIFICATION")
+            val _ = Jeha_Common.trace_msg_backward_simp context (K "START BACKWARD SIMPLIFICATION")
             val (redundant_active_and_intermediate_simplifications, simplified_active, unsimplifiable_active) =
               backward_simplify context active given_clause
             val archive = redundant_active_and_intermediate_simplifications @ archive
@@ -1457,11 +1464,11 @@ fun given_clause_step { context, countdown, passive, active, archive } =
             val active = given_clause :: unsimplifiable_active
             (* perform all possible inferences between given_clause and active set NOTE: also
             computes inferences between given_clause and itself! *)
-            val _ = Jeha_Common.trace_msg context (K "START INFERRING NEW CLAUSES")
+            val _ = Jeha_Common.trace_msg_inferred context (K "START INFERRING NEW CLAUSES")
             val inferred_clauses = infer_clauses context active given_clause
-            val _ = trace_msg_clauses "inferred: " inferred_clauses
+            val _ = trace_msg_clauses Jeha_Common.trace_msg_inferred "inferred: " inferred_clauses
             (* clauses to be added to passive set *)
-            val _ = Jeha_Common.trace_msg context (K "START CHEAP SIMPLIFICATION")
+            val _ = Jeha_Common.trace_msg_cheap_simp context (K "START CHEAP SIMPLIFICATION")
             val { simplifications = new_clauses, intermediate = cheap_simplification_intermediate } =
               fold
                 (fn inferred_clause =>
@@ -1479,16 +1486,16 @@ fun given_clause_step { context, countdown, passive, active, archive } =
               (simplified_active @ inferred_clauses)
               { simplifications = [], intermediate = []}
             val archive = cheap_simplification_intermediate @ archive
-            val _ = trace_msg_clauses "cheap_simplified: " new_clauses
+            val _ = trace_msg_clauses Jeha_Common.trace_msg_cheap_simp "cheap_simplified: " new_clauses
             val _ = if length (filter (not o is_trivial) new_clauses) <> length new_clauses
               then error "assert failed: forward_simplify returned trivial clauses"
               else ()
-            val _ = Jeha_Common.trace_msg context (K "END CHEAP SIMPLIFICATION")
-            val _ = trace_msg_clauses "new_clauses: " new_clauses
+            val _ = Jeha_Common.trace_msg_cheap_simp context (K "END CHEAP SIMPLIFICATION")
+            val _ = trace_msg_clauses Jeha_Common.trace_msg_inferred "new_clauses: " new_clauses
             (* add inferred clauses to passive set *)
             val passive = add_new_clauses passive new_clauses
             (* tracing *)
-            val _ = trace_msg_clauses "active: " active
+            val _ = trace_msg_clauses Jeha_Common.trace_msg_active "active: " active
           in
             (Next, { context = context, countdown = countdown - 1, passive = passive, active = active, archive = archive })
           end
