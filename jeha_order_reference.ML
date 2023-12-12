@@ -27,7 +27,7 @@ sig
   val fo_term_weight : fo_term -> weight
   val fold_fo_vars : (term * bool -> 'a -> 'a) -> fo_term -> 'a -> 'a
   val fo_var_counts : fo_term -> int Termtab.table * int Termtab.table
-  val fo_prec_greater : fo_head * fo_head -> bool
+  val fo_prec_greater : (fo_head * int) * (fo_head * int) -> bool
   val lex_greater : (''a * ''a -> bool) -> (''a list * ''a list) -> bool
   val fo_kbo_greater : (fo_term * fo_term) -> bool
 
@@ -276,24 +276,27 @@ fun prec_key FOLam = 11
   | prec_key (FOType _) = 1
   | prec_key (FOTFree _) = 0
 
-fun fo_prec_greater st =
-  case int_ord (apply2 prec_key st) of
-    GREATER => true
-  | LESS => false
-  | EQUAL =>
-    case st of
-      (FODeBruijn i, FODeBruijn j) => i > j
-      (* FIXME: types? *)
-    | (FOConst (s, _), FOConst (t, _)) => GREATER = string_ord (s, t)
-    | (FOFree (s, _), FOFree (t, _)) => GREATER = string_ord (s, t)
-    | (FOType s, FOType t) => GREATER = string_ord (s, t)
-    | (FOTFree (s, _), FOTFree (t, _)) => GREATER = string_ord (s, t)
-    | (s, t) =>
+(* compare De Bruijn to De Bruijn, Const to Const, etc. *)
+fun fo_prec_same_class_ord (FODeBruijn i, FODeBruijn j) = int_ord (i, j)
+    (* FIXME: types? *)
+  | fo_prec_same_class_ord (FOConst (s, _), FOConst (t, _)) = string_ord (s, t)
+  | fo_prec_same_class_ord (FOFree (s, _), FOFree (t, _)) = string_ord (s, t)
+  | fo_prec_same_class_ord (FOType s, FOType t) = string_ord (s, t)
+  | fo_prec_same_class_ord (FOTFree (s, _), FOTFree (t, _)) = string_ord (s, t)
+  | fo_prec_same_class_ord (s, t) =
         if s <> t then
-          error ("fo_prec_greater: not the same constructors?" ^
-            @{make_string} (#1 st) ^ " and " ^ @{make_string} (#2 st))
+          error ("fo_prec_same_class_ord: not the same constructors?" ^
+            @{make_string} s ^ " and " ^ @{make_string} t)
         else
-          false
+          EQUAL
+
+(* coarse grained, then fine grained if equal *)
+val fo_prec_symbol_ord = apply2 prec_key #> int_ord ||| fo_prec_same_class_ord
+
+(* val fo_prec_ord = apply2 #1 #> fo_prec_symbol_ord ||| apply2 #2 #> int_ord  *)
+val fo_prec_ord = prod_ord fo_prec_symbol_ord int_ord
+
+fun fo_prec_greater st = GREATER = fo_prec_ord st
 
 fun lex_greater a_ord ([], []) = false
   | lex_greater a_ord (s::ss, t::ts) =
@@ -312,7 +315,7 @@ fun fo_kbo_greater (s as (FOApp (f, ss)), (t as FOApp (g, ts))) =
         orelse (
           fo_term_weight s = fo_term_weight t (* 2b or 2c *)
           andalso (
-            fo_prec_greater (f, g) (* 2b *)
+            fo_prec_greater ((f, length ss), (g, length ts)) (* 2b *)
             orelse (f = g andalso lex_greater fo_kbo_greater (ss, ts)) (* 2c *)
           )
         )
