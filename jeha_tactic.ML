@@ -60,16 +60,20 @@ fun jeha_tac options ctxt ths i st0 =
       Subgoal.FOCUS (fn { context, prems, ...} => (fn st =>
         (* FIXME: make sure that we really don't need asms (only use is in
         HOL/Tools/Quotient/quotient_tacs.ML) *)
-        case (Jeha.try_saturate context (prems @ atomized_ths)
+        case (Jeha_Common.cpu_time_milliseconds (uncurry Jeha.try_saturate) (context, (prems @ atomized_ths))
             handle Jeha.JEHA_EXCEPTION (e, state) => handle_exception (e, state)) of
-          (Unsat, final_state) =>
-            if Config.get context Jeha_Common.proof_reconstruction
-              then reconstruct_proof final_state st
-              (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
-              (* we provide #False *)
-              else ALLGOALS (Skip_Proof.cheat_tac context) st
-        | (MaybeSat, final_state) => Seq.empty
-        | (Next, final_state) => error "Bug: Next in final result")
+          ((Jeha.Unsat, final_state), time) =>
+            let val () =
+              writeln ("total elapsed time until contradiction: " ^ @{make_string} time ^ " ms")
+            in
+              if Config.get context Jeha_Common.proof_reconstruction
+                then reconstruct_proof final_state st
+                (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
+                (* we provide #False *)
+                else ALLGOALS (Skip_Proof.cheat_tac context) st
+            end
+        | ((Jeha.MaybeSat, final_state), _) => Seq.empty
+        | ((Jeha.Next, final_state), _) => error "Bug: Next in final result")
       ) ctxt i'
     val seq =
       (* SELECT_GOAL applies the tactic (it's first argument) to the selected

@@ -21,6 +21,9 @@ sig
   val trace_inferred : bool Config.T
   (* internal *)
   val trace_simp_results : bool Config.T
+  
+  (* report how many milliseconds the given clause procedure took to find a contradiction *)
+  val report_main_loop_timing : bool Config.T
 
   val trace_msg : Proof.context -> (unit -> string) -> unit
   val trace_msg_active : Proof.context -> (unit -> string) -> unit
@@ -90,6 +93,8 @@ sig
   val rule_syntactic_tautology_deletion2 : bool Config.T
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
+  
+  val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
 
   datatype ('a, 'b) either = Left of 'a | Right of 'b
   val get_left : ('a, 'b) either -> 'a option
@@ -119,6 +124,8 @@ val trace_archive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_archiv
 val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_inferred\<close> (K false)
 (* internal *)
 val trace_simp_results = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_results\<close> (K false)
+
+val report_main_loop_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_report_main_loop_timing\<close> (K false)
 
 (* only output if trace would *)
 fun trace_msg_active ctxt msg = if Config.get ctxt trace_active then trace_msg ctxt msg else ();
@@ -306,6 +313,12 @@ fun raw_pp_term  (Const (c, T)) = pp_constr "Const" (pp_pair (pp_qstr c, raw_pp_
 end;
 
 (** common utilities **)
+
+(* from HOL/Tools/Mirabelle/mirabelle.ML *)
+fun cpu_time_milliseconds f x =
+  (* CPU time is problematics with multithreading as it refers to the per-process CPU time. *)
+  let val ({elapsed, ...}, y) = Timing.timing f x
+  in (y, Time.toMilliseconds elapsed) end;
 
 fun map_some _ NONE = NONE
   | map_some f (SOME x) = SOME (f x)
