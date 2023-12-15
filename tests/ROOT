@@ -1,11 +1,46 @@
 chapter JEHA_TESTS
 
-session "JEHA_EXPORTING" = HOL +
+session "JEHA_TEST" = HOL +
   description "
-    various tests for jeha
+    various tests and examples for jeha
   "
   theories
-    paper_examples
-    subsumption
+    (* general examples *)
+    paper_example_25
+    sums
+    paper_example_26
+    propositional
+    misc
+    SAT_Examples
+    (* specific rules *)
     sup
+    bool_rw
+    eq_hoist
+     
+    (* misc *)
+    boolean_ho
+    redundant_boolean
+    eligibility
+    faexhoist
+    (* utilities *)
+    subsumption
     unification
+    normalization
+    preprocessing
+
+    (* still failing: *)
+    (* leo3 *)
+    (* eta_expand *)
+    (* preprocessing *)
+
+    (* FIXME: figure out how to assert failure (i.e. success if failure) *)
+    (* expect failure: *)
+    (* no_sup *)
+
+    (* outdated / unused *)
+    (* simp_bool_rw_.thy *)
+    (* simp_false_elim.thy *)
+    (* redundant_boolean.thy *)
+    (* kbo.thy *)
+    (* index.thy *)
+    (* smash_unify_fluid.thy *)
