@@ -13,6 +13,8 @@ begin
 
 declare [[jeha_trace]]
 
+(* declare [[jeha_proof_reconstruction]] *)
+
 datatype 'a bt =
     Lf
   | Br 'a  "'a bt"  "'a bt"
@@ -116,12 +118,18 @@ by (jeha bt_map.simps(2))
 lemma bt_map_append: "bt_map f (append t u) = append (bt_map f t) (bt_map f u)"
 apply (induct t)
  apply (jeha append.simps(1) bt_map.simps(1))
-by (jeha append.simps(2) bt_map.simps(2))
+proof -
+  (* timeout with 500 *)
+  note [[jeha_max_number_of_steps = 1000]]
+  have ?thesis by (jeha append.simps(2) bt_map.simps(2))
+qed
 
 lemma bt_map_compose: "bt_map (f o g) t = bt_map f (bt_map g t)"
 apply (induct t)
  apply (jeha bt_map.simps(1))
-by (jeha bt_map.simps(2) o_eq_dest_lhs)
+  sorry
+(* stuck in higher order unification *)
+(* by (jeha bt_map.simps(2) o_eq_dest_lhs) *)
 
 lemma bt_map_reflect: "bt_map f (reflect t) = reflect (bt_map f t)"
 apply (induct t)

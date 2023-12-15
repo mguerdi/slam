@@ -8,7 +8,7 @@ Example featuring Metis's support for lambda-abstractions.
 section \<open>Example Featuring Metis's Support for Lambda-Abstractions\<close>
 
 theory Abstraction
-  imports "../jeha" "HOL-Library.FuncSet"
+  imports "../jeha_debug" "HOL-Library.FuncSet"
 begin
 
 declare [[jeha_trace]]
@@ -19,8 +19,45 @@ by (jeha nat_1_add_1 trans_less_add2)
 
 (* find_theorems " *)
 
+lemma epsilon_characterization:
+  shows "\<And>y x. y x = False \<or> y (SOME z. y z) = True"
+  by (metis someI_ex)
+
+lemma better_ext:
+  shows "\<And>f g. f = g \<or> f (SOME z. f z \<noteq> g z) \<noteq> g (SOME z. f z \<noteq> g z)"
+  sorry
+
+lemma simpler:
+  shows "\<And>f. (\<And>x y. f x y = f y x) \<Longrightarrow> f = (\<lambda> x y. f y x)"
+  using [[jeha_max_number_of_steps = 100
+        , unify_search_bound = 5
+        , jeha_disable_all
+        , jeha_rule_arg_cong 
+        , jeha_rule_sup
+        , jeha_rule_e_res
+        , jeha_rule_e_fact
+        , jeha_rule_clause_subsumption
+        ]]
+  (* by (jeha better_ext) *)
+  oops
+  
+
+(* FIXME: might require better boolean simplification *)
 lemma "(=) = (\<lambda>x y. y = x)"
-by (jeha ext)
+  using [[unify_search_bound = 15
+        , jeha_disable_all
+        , jeha_rule_sup
+        , jeha_rule_e_fact
+        , jeha_rule_e_res
+        , jeha_rule_arg_cong
+        (* , jeha_rule_bool_rw
+        , jeha_rule_forall_rw
+        , jeha_rule_simp_outer_claus *)
+        , jeha_rule_clause_subsumption
+        , jeha_max_number_of_steps = 200
+        ]]
+        (* by (jeha better_ext) (* ext epsilon_characterization) *) *)
+  oops
 
 consts
   monotone :: "['a => 'a, 'a set, ('a *'a)set] => bool"
