@@ -33,6 +33,17 @@ ML_val \<open>
   \<^assert> is_strict_maximal_in_singleton;
 \<close>
 
+(* assumes alphabetical ordering of free variables *)
+ML \<open>
+  val c = JClause.of_term (@{term "x \<noteq> z"}, ~1);
+  val x_eligible = JClause.is_eligible_full_pos c ([], JLit.Left, 0);
+  val z_eligible = JClause.is_eligible_full_pos c ([], JLit.Right, 0);
+  (* x < z alphabetically *)
+  \<^assert> (not x_eligible);
+  \<^assert> z_eligible;
+\<close>
+
+
 (* eligible: direct subterms of fully applied equality *)
 ML_val \<open>
   val t = @{term "x = y"};
