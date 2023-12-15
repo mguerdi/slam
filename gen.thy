@@ -13,111 +13,17 @@ with parts taken from
 
 theory gen
 imports
-  HOL.Main
+  "tests/test_base"
   SpecCheck.SpecCheck_Dynamic
   SpecCheck.SpecCheck_Generators
 begin
 
-(* Antiquotations for term and type patterns from the cookbook. *)
-ML \<open>
-  val term_pat_setup =
-  let
-    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
-
-    fun term_pat (ctxt, str) =
-      str |> Proof_Context.read_term_pattern ctxt |> ML_Syntax.print_term |> ML_Syntax.atomic
-  in
-    ML_Antiquotation.inline @{binding "term_pat"} (parser >> term_pat)
-  end
-
-  val type_pat_setup =
-  let
-    val parser = Args.context -- Scan.lift Parse.embedded_inner_syntax
-
-    fun typ_pat (ctxt, str) =
-      let
-        val ctxt' = Proof_Context.set_mode Proof_Context.mode_schematic ctxt
-      in
-        str |> Syntax.read_typ ctxt' |> ML_Syntax.print_typ |> ML_Syntax.atomic
-      end
-  in
-    ML_Antiquotation.inline @{binding "typ_pat"} (parser >> typ_pat)
-  end
-\<close>
-
-setup \<open> term_pat_setup \<close>
-
-setup \<open> type_pat_setup \<close>
-
-ML \<open>
-  (* probability of generating a constant *)
-  val prob_of_constant = (* 0.3 *) 0.0
-  (* Precomputed, from the paper, presumably increasing the probability of
-  boltzmann_index leads to smaller terms. Weaker effect when increasing the
-  probability of boltzmann_lambda. *)
-  (* Scale precomputed values into interval determined by 1 - prob_of_constant. *)
-  fun rescale r = (1.0 - prob_of_constant) * r + prob_of_constant
-  fun boltzmann_constant r = r < prob_of_constant
-  fun boltzmann_index r = r < rescale 0.35700035696434995;
-  fun boltzmann_lambda r = r < rescale (* 0.6 *) 0.6525813160382378;
-  (* The probability p of de Bruijn index 0, generally Bound j has the
-  probability (1-p)^j * p (geometric distribution) *)
-  fun boltzmann_leaf r = r < rescale (* 0.65 *) 0.7044190409261122;
-\<close>
-
 ML_file \<open>jeha_gen_term.ML\<close>
 
 ML \<open>
-  (* (rng state, env, maxidx) *)
-  type term_state = SpecCheck_Random.rand * Type.tyenv * int;
-
-  fun pick_index _ [] _ _ = error "pick_index: not below lambda"
-    | pick_index (ctxt : Proof.context) (T::Ts) typ (s, env) =
-    let
-      val (r, s) = SpecCheck_Generator.range_real (0.0, 1.0) s
-    in
-      if boltzmann_leaf r
-        then ((s, Sign.typ_unify (Proof_Context.theory_of ctxt) (T, typ) env), Bound 0)
-        else
-          let val (state, Bound i) = pick_index ctxt Ts typ (s, env) in
-            (state, Bound (i+1))
-          end
-    end;
-
-  fun gen_fresh_tyvar ctxt maxidx =
+  fun gen_fresh_tyvar ctxt maxidx = (* Jeha_Gen_Term.fresh_tvar () *)
     (maxidx + 1, TVar ((Name.aT, maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)));
   
-  fun ran_constant ctxt typ (s, (typ_env, maxidx)) =
-    let
-      fun upshift_TVar j (TVar ((name, i), T)) = TVar ((name, i + j), T)
-        | upshift_TVar _ T = T
-      fun map_const f (t as (Const _)) = f t
-        | map_const _ t = t
-      val freshen_type = map_const (map_types (map_atyps (upshift_TVar maxidx)))
-      val constants =
-        ctxt
-        |> Proof_Context.theory_of
-        |> Sign.consts_of
-        |> Consts.dest
-        |> #constants
-        (* discard Pure... constants, length of 11 is a good cutoff that includes HOL.False *)
-        |> filter (fn (name, _) => String.isPrefix "HOL" name andalso String.size name <= 11)
-        (* |> filter (fn (name, _) => String.isPrefix "HOL.All" name orelse String.isPrefix "HOL.False" name) *)
-        |> map (fn (name, (T, _)) => Const (name, T))
-        (* |> curry (op @) [Free ("c", TVar (("'a", 0), [])), Free ("d", TVar (("'b", 0), []))] *)
-      val (constant, s) = SpecCheck_Generator.elementsL constants s
-      val constant = freshen_type constant
-      val T = fastype_of constant
-      val maxidx = Term.maxidx_typ T maxidx
-      val (typ_env, maxidx) =
-        Sign.typ_unify
-          (Proof_Context.theory_of ctxt)
-          (T, typ)
-          (typ_env, maxidx)
-    in
-      ((s, (typ_env, maxidx)), constant)
-    end
-
   (* Generate a typable, closed random term. Rejection sampler with early abort
   that fails via exceptions. *)
   fun ran_typable
@@ -178,11 +84,11 @@ ML \<open>
 declare [[speccheck_num_counterexamples = 100]]
 declare [[speccheck_max_success = 100]]
 
-(* declare [[show_types]] *)
+declare [[show_types]]
 
 ML \<open>
-  val check_term = SpecCheck.check (SpecCheck_Show.term @{context}) boltzmann_term_gen
-  (* val check_term = SpecCheck.check (SpecCheck_Show.term @{context}) (boltzmann_term_gen_min_size 5) *)
+  (* val check_term = SpecCheck.check (SpecCheck_Show.term @{context}) boltzmann_term_gen *)
+  val check_term = SpecCheck.check (SpecCheck_Show.term @{context}) (boltzmann_term_gen_min_size 12)
   (* val check_term =
     SpecCheck.check
       (SpecCheck_Show.term @{context})
@@ -198,8 +104,19 @@ ML \<open>
   ]
 \<close>
 
+ML_val \<open>
+  (* val example_term = @{term_schem "?x3 (\<lambda>x xa xb xc xd. xb (xd (\<lambda>x xa. xa (?x24 x))) x (xa (?x32 (xd xc)) xd xb))"} *)
+  val example_term = @{term_schem "?x3 (\<lambda>x. x (x (\<lambda>x. x) (\<lambda>x xa. ?x16)) (?x18 (x (\<lambda>x xa. ?x24))))"}
+  val example_term = @{term_schem "?x3 (\<lambda>x xa. xa ?x10 (\<lambda>x. ?x18 ?x22 x (\<lambda>x xa. ?x29) x ?x30))"}
+  val example_term = @{term_schem "?x4 (\<lambda>x xa. xa (xa (\<lambda>x xa xb. x (\<lambda>x xa. x))) (?x25 x) x) (\<lambda>x. ?x28)"}
+  val vars = Term.add_vars example_term []
+  val bla = map (writeln o Jeha_Common.pretty_term (Jeha_Common.verbose_of @{context}) o Var) vars;
+  val _ = writeln (Jeha_Common.pretty_term (Jeha_Common.verbose_of @{context}) example_term);
+\<close>
+
 ML \<open>
   val t = @{term_schem "\<lambda>uu. ?x9 (\<lambda>z. uu) (\<lambda>uua . uua (\<lambda>uua . ?x26 (?x28 (?x30 (uua (uua uu (?x35 (?x38 (\<lambda>uu. uu) uua)))))) (?x30 (uua (uua uu (?x35 (?x38 (\<lambda>uu. uu) uua)))))))"}
+
   (* val vs = subst_Vars [(("x", 26), ] t  *)
 \<close>
 
