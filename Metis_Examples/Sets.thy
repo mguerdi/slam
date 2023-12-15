@@ -8,10 +8,10 @@ Metis example featuring typed set theory.
 section \<open>Metis Example Featuring Typed Set Theory\<close>
 
 theory Sets
-imports Main
+imports "../jeha" Main
 begin
 
-declare [[jeha_new_skolem]]
+declare [[metis_new_skolem]]
 
 lemma "\<exists>x X. \<forall>y. \<exists>z Z. (~P(y,y) | P(x,x) | ~S(z,x)) &
                (S(x,y) | ~S(y,z) | Q(Z,Z))  &

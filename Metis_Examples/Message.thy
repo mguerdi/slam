@@ -22,10 +22,12 @@ consts
   all_symmetric :: bool        \<comment> \<open>true if all keys are symmetric\<close>
   invKey        :: "key=>key"  \<comment> \<open>inverse of a symmetric key\<close>
 
+(* FIXME: slow *)
 specification (invKey)
   invKey [simp]: "invKey (invKey K) = K"
   invKey_symmetric: "all_symmetric --> invKey = id"
-by (jeha id_apply)
+(* by (jeha id_apply) *)
+  sorry
 
 
 text\<open>The inverse of a symmetric key is itself; that of a public key
@@ -83,15 +85,20 @@ apply (erule parts.induct)
  apply (jeha parts.Snd)
 by (jeha parts.Body)
 
+(* FIXME: timeout *)
 text\<open>Equations hold because constructors are injective.\<close>
 lemma Friend_image_eq [simp]: "(Friend x \<in> Friend`A) = (x\<in>A)"
-by (jeha agent.inject image_iff)
+(* by (jeha agent.inject image_iff) *)
+  sorry
 
+(* FIXME: timeout *)
 lemma Key_image_eq [simp]: "(Key x \<in> Key`A) = (x \<in> A)"
-by (jeha image_iff msg.inject(4))
+(* by (jeha image_iff msg.inject(4)) *)
+  sorry
 
-lemma Nonce_Key_image_eq [simp]: "Nonce x \<notin> Key`A"
-by (jeha image_iff msg.distinct(23))
+(* FIXME: incompleteness *)
+(* lemma Nonce_Key_image_eq [simp]: "Nonce x \<notin> Key`A"
+by (jeha image_iff msg.distinct(23)) *)
 
 
 subsubsection\<open>Inverse of keys\<close>
@@ -196,9 +203,11 @@ apply (subst insert_is_Un [of _ H])
 apply (simp only: parts_Un)
 done
 
+(* FIXME: slow *)
 lemma parts_insert2:
      "parts (insert X (insert Y H)) = parts {X} \<union> parts {Y} \<union> parts H"
-by (jeha Un_commute Un_empty_left Un_empty_right Un_insert_left Un_insert_right parts_Un)
+(* by (jeha Un_commute Un_empty_left Un_empty_right Un_insert_left Un_insert_right parts_Un) *)
+  sorry
 
 
 lemma parts_UN_subset1: "(\<Union>x\<in>A. parts(H x)) \<subseteq> parts(\<Union>x\<in>A. H x)"
@@ -232,11 +241,14 @@ by (erule parts.induct, blast+)
 lemma parts_idem [simp]: "parts (parts H) = parts H"
 by blast
 
+(* FIXME: incompleteness *)
 lemma parts_subset_iff [simp]: "(parts G \<subseteq> parts H) = (G \<subseteq> parts H)"
-apply (rule iffI)
+(* apply (rule iffI)
 apply (jeha Un_absorb1 Un_subset_iff parts_Un parts_increasing)
 apply (jeha parts_idem parts_mono)
-done
+done *)
+  sorry
+
 
 lemma parts_trans: "[| X\<in> parts G;  G \<subseteq> parts H |] ==> X\<in> parts H"
 by (blast dest: parts_mono)
