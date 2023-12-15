@@ -24,21 +24,14 @@ declare [[jeha_rule_e_res]]
 but FalseElim doesn't apply because of its strict-maximality side condition *)
 declare [[jeha_rule_simp_false_elim]]
 
-declare [[jeha_proof_reconstruction]]
-declare [[metis_trace]]
-
-declare [[jeha_rule_sup]]
+(* works but takes very long (> 1 min): *)
+(* declare [[jeha_proof_reconstruction]]
+declare [[metis_trace]] *)
 
 lemma paper_example_26:
   shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x))"
   (* sledgehammer
   by metis *)
-  by (jeha)
-
-(* lemma forall_hoist:
-  assumes "\<not> (\<exists> y. \<forall> x . y x = (p x \<and> q x))"
-  shows "\<And>x. (x (SOME z. x z \<noteq> (p z \<and> q z)) = (p (SOME z. x z \<noteq> (p z \<and> q z)) \<and> q (SOME z. x z \<noteq> (p z \<and> q z)))) = False \<or> True = False"
-  sledgehammer
-  by (metis assms) *)
+  by (jeha) (* 29500 ms *)
 
 end
