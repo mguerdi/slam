@@ -16,7 +16,7 @@ session "JEHA_TEST" = HOL +
     sup
     bool_rw
     eq_hoist
-     
+
     (* misc *)
     boolean_ho
     redundant_boolean
