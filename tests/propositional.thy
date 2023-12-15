@@ -5,6 +5,8 @@ imports "../jeha"
 begin
 
 declare [[jeha_trace]]
+declare [[jeha_proof_reconstruction]]
+declare [[metis_trace]]
 
 lemma modus_ponens:
   shows "A \<Longrightarrow> (A \<Longrightarrow> B) \<Longrightarrow> B" 
