@@ -125,6 +125,7 @@ val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_infer
 (* internal *)
 val trace_simp_results = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_results\<close> (K false)
 
+(* FIXME: actually use this config option *)
 val report_main_loop_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_report_main_loop_timing\<close> (K false)
 
 (* only output if trace would *)
