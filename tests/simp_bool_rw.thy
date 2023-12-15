@@ -5,13 +5,15 @@ imports "test_base"
 begin
 
 declare [[jeha_trace]]
-declare [[jeha_trace_cheap_simplify]]
+declare [[jeha_trace_cheap_simp]]
 
 declare [[jeha_disable_all]]
 
 declare [[jeha_rule_simp_false_elim]]
 declare [[jeha_rule_simp_bool_rw]]
 declare [[jeha_rule_simp_outer_claus]]
+
+(* FIXME: update *)
 
 ML_val \<open>
   val neg_conj = JClause.of_term (@{term "a \<noteq> b"}, 1);

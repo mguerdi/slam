@@ -24,21 +24,27 @@ ML \<open>
 \<close>
 
 ML \<open>
-  fun type_checks t = (type_of t; false) handle _ => true
+  fun type_checks t = (type_of t; true) handle _ => false
 \<close>
 
 ML_command \<open>
-  check_dynamic @{context} "ALL s t. not (type_checks s) orelse not (type_checks t) orelse is_some (Unify.matcher ctxt [s] [t])"
+  check_dynamic @{context}
+  "ALL s t. not (type_checks s) orelse not (type_checks t) orelse is_some (Unify.matcher ctxt [s] [t])"
+\<close>
+
+(* standard term generators *)
+
+(* tested to speccheck_max_success = 100000000 *)
+declare [[speccheck_max_success = 10000]]
+ML_command \<open>
+  check_dynamic @{context}
+  "ALL s t. not (type_checks t) orelse not (type_checks s) orelse (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
 \<close>
 
 declare [[speccheck_max_success = 10000]]
 ML_command \<open>
-check_dynamic @{context} "ALL s t. type_checks t orelse type_checks s orelse (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
-\<close>
-
-declare [[speccheck_max_success = 10]]
-ML_command \<open>
-check_dynamic @{context} "ALL s t. (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
+  check_dynamic @{context}
+  "ALL s t. (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
 \<close>
 
 (*
@@ -205,6 +211,25 @@ ML_command \<open>
 check_dynamic @{context} "ALL s t. (SOME EQUAL = Jeha_Order.kbo_fast (s, t)) = (s aconv t)"
 \<close>
 
+ML_val \<open>
+  val ms_ms_int_ord =
+    Jeha_Order.mk_multiset_order_of_strict
+      (Jeha_Order.mk_multiset_order_of_strict (SOME o int_ord));
+  val int_list_list_g =
+    let
+      val int_list_eq = Jeha_Order.multiset_eq op=
+      val int_list_g = Jeha_Order.multiset_is_greater_reference op= op>
+    in
+      Jeha_Order.multiset_is_greater_reference int_list_g int_list_eq
+    end;
+
+  val (l, r) = ([[1, 0], [3, 0]], [[2], [3]]);
+  val b = ms_ms_int_ord (l, r);
+  val b' = int_list_list_g (l, r);
+  \<^assert> (SOME GREATER = b);
+  \<^assert> b';
+\<close>
+
 (* literals *)
 ML \<open>
   (* extra element Bot which is the smallest *)
@@ -270,7 +295,6 @@ ML_val \<open>
   val l2_kbo_l1 = JLit.kbo_generic (SOME o int_ord) (l2, l1);
   \<^assert> (are_equal_lit_int_ords (l1, l2))
 \<close>
-
 
 declare [[speccheck_max_success = 100000]]
 ML_command \<open>

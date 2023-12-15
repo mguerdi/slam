@@ -39,7 +39,7 @@ ML \<open>
       ()
 \<close>
 
-ML_file \<open>generators.ML\<close>
+ML_file \<open>../jeha_gen_term.ML\<close>
 
 ML \<open>
   fun set_params gen = gen 2 2 (1, 1, 1, 0) 4 4

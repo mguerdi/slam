@@ -4,8 +4,8 @@ imports "test_base"
 
 begin
 
-(* This was the simp_bool_outer_claus bug where the condition that the head of s not be a logical
-symbol wasn't handled. *)
+(* This was the simp_bool_outer_claus bug where the condition that the head of s
+may not be a logical symbol wasn't handled. *)
 ML_val \<open>
   val c = JClause.of_term (@{term_schem "?x b = True \<or> (?x a = True) = False"}, 1);
   val (lpos, cpos) = (JLit.Left, 0);
