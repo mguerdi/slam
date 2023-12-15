@@ -4,13 +4,6 @@ imports "../jeha"
 
 begin
 
-(* TODO
-check that unification with
-  \<forall> ?y
-is the same as with the eta-expanded
-  \<forall> x. ?y x
-If not, then one of the two is hopefully more general. Which one? *)
-
 ML_val \<open>
   val ctxt = @{context}
   val fresh_typ = TVar (("'a", 1), Sign.defaultS (Proof_Context.theory_of ctxt));
