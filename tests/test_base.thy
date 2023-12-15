@@ -1,10 +1,10 @@
 theory test_base
-  imports "../jeha_debug" SpecCheck.SpecCheck
+  imports "../jeha_debug" (* SpecCheck.SpecCheck *)
 begin
 
 text \<open>SpecCheck term generators, etc.\<close>
 
-ML_file \<open>test_base.ML\<close>
+(* ML_file \<open>test_base.ML\<close> *)
 
 (* Antiquotations for term and type patterns from the cookbook. *)
 setup \<open>Jeha_Common.term_pat_setup\<close>
