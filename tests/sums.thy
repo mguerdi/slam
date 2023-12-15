@@ -1,4 +1,4 @@
-theory vsmetis
+theory sums 
 
 imports "../jeha"
 
