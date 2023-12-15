@@ -409,7 +409,7 @@ fun mk_multiset_order_of_strict a_ord (m, n) =
     then SOME EQUAL
   else NONE
 
-(* FIXME: broken, doesn't even consder the case where an element appears twice *)
+(* FIXME: broken, multiset extension of > is not the same as multiset extension of < *)
 (*
   let
     fun a_eq (x, y) = SOME EQUAL = a_ord (x, y)
