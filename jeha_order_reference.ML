@@ -193,6 +193,27 @@ fun translate_p (t as FOVar (Const ("Pure.dummy_pattern", _), _)) = t (* \<alpha
         map translate_p ts
       )
 
+(* NOTE: Testing Idea: when doing translation on the fly, make it a kind of fold that is generic
+over the "operation that sits on the bottom". Then create an operation, which just "reads off" the
+first-order term and compare that to the explicit translation.
+
+Simple example:
+(* the explicit "translation" *)
+val vars_below_lambda : term -> term list
+(* the generic fold which supplies information on the fly *)
+val fold_aterm' : ('a -> { below_lam : bool } -> term -> 'a) -> 'a -> term -> 'a
+(* *)
+val read_off : term list -> { below_lam : bool } -> term -> term list
+(* the test case *)
+ALL t. vars_below_lambda t = fold_aterm' read_off [] t
+
+The challenge is adapting this to a a simultaneous traversal of two terms and making sure we don't
+carry too much useless information around in the generic fold, just to be able to write the test.
+Although we could always "compile" that extra information out by hand once we're happy that it
+works. *) 
+
+
+
 fun translate_P (FOVar t) = FOVar t (* \<alpha> and z\<^sub>u *)
   | translate_P (t as FOApp (FOLam, [T, u])) = FOApp (FOLam, [T, translate_p u])
   | translate_P (FOApp (f, ts)) = FOApp (f, map translate_P ts)
