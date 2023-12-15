@@ -76,7 +76,7 @@ struct
 val UNIFIER_CUTOFF = 2
 
 (* Turns t \<noteq> b into t = \<not>b *)
-(* FIXME: only update id, origin in work was done *)
+(* FIXME: only update id, origin if work was done *)
 fun simp_normalize_pred_lits c =
   let
     val literals = JClause.literals c
@@ -124,11 +124,6 @@ fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b s c = []
 
 (*** Rules ***)
-(* rule implementation checklist:
-  * conditions checked?
-  * requires normalization?
-  * 
-*)
 
 (** Simplification **)
 
@@ -240,30 +235,6 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           val rewriting_smaller_than_rewritten = (fn () =>
             SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
         in
-          (* FIXME: understand and implement the restrictions on RP form Schulz's paper *)
-          (* for RP the rewriting clause must be smaller than the rewritten clause *)
-          (* FIXME: is this what that sentence means? Relevant: zipperposition, superposition.ml:1886
-          in detail:
-          (* Context: c is the to be rewritten clause, t is the literal where the rewrite happens *)
-            (* - The rewriting clause is smaller than the rewritten clause *)
-          (* Quesiton: does (not toplevel) correspond to Schulz' p \<noteq> \<lambda>? *)
-            (not toplevel ||
-          (* Question: does this mean "rewritten literal is not strictly maximal?"
-          Is this what Schulz calls "not eligible for paramodulation"? *)
-          (* My reading: There exists a literal s=s' with s or s' greater or equal to t. Problem:
-          But in particular there is the literal of which t itself is a (green/blue) subterm, so the
-          statement must already hold by the green (blue??) subterm property. So is it redundant? *)
-            C.lits c |> CCArray.exists (fun lit -> Lit.Seq.terms lit |>
-              Iter.exists (fun s -> Comp.is_Gt_or_Geq (O.compare ord s t))) ||
-          (* Context: r' is the matching side of the equation (our `to`) with the matcher applied *)
-          (* Question: at this point the *)
-            C.lits c |> CCArray.exists (fun lit -> match Literal.View.as_eqn lit with
-                | Some (litl, litr, true) ->
-                  T.equal t litl && Comp.is_Gt_or_Geq (O.compare ord litr r') ||
-                  T.equal t litr && Comp.is_Gt_or_Geq (O.compare ord litl r')
-                | Some (litl, litr, false) -> T.equal t litl || T.equal t litr
-                | None -> false))
-          *)
           if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
           (Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg);
           (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
@@ -1253,22 +1224,6 @@ fun forward_simplify ctxt cheap active given_clause =
           @ [dd_dr_rewrites] )
       end
     (* rewrite until not possible anymore *)
-    (* FIXME: can this lead to a fixed-point (and not terminate)? No, even RP with unit s\<approx>t and \<sigma> a
-    unifier of s and t as well, violates s\<sigma> > t\<sigma>*)
-    (* fun full_rewrite c countdown =
-      (* ( writeln ("rewrite step " ^ @{make_string} countdown ^ " of " ^ JClause.pretty_clause ctxt c); *)
-      if countdown = 0 then let val _ = writeln "full_rewrite countdown reached" in c end else
-      (* let val _ = Jeha_Common.trace_msg ctxt (fn () => (if cheap then "cheap " else "") ^ "rewrite step of " ^ JClause.pretty_clause ctxt c ^ ":") in *)
-      case first_successful_rewrite c of
-        SOME c' =>
-          full_rewrite c' (countdown - 1)
-      | NONE =>
-          let val _ = Jeha_Common.trace_msg ctxt (fn () => "done rewriting " ^ JClause.pretty_clause ctxt c ^ ".") in
-          c
-          end
-      (* ) *)
-      (* end *)
-    val given_clause = full_rewrite given_clause 10 *)
     val (simplifications, archive) = Jeha_Simplify.simplify false ctxt simp_funs (fn _ => error "no index") given_clause
     fun trace_msg_clauses tracer msg clauses =
       tracer ctxt 
@@ -1292,12 +1247,6 @@ fun forward_simplify ctxt cheap active given_clause =
     (* FIXME: Rename "archive" to "intermediate" or "to_archive". *)
     { simplifications = flat (map discard_redundant simplifications), archive = archive }
   end
-  (* let
-    val idxs = find_simp_bool_outer_clause given_clause
-    val outer_clausified = flat (map (simp_bool_outer_claus given_clause) idxs)
-  in
-    outer_clausified
-  end *)
 
 fun map_filter_partition _ _ [] = ([], [], [])
   | map_filter_partition ctxt f (x :: xs) =
@@ -1312,21 +1261,6 @@ fun map_filter_partition _ _ [] = ([], [], [])
         | { simplifications = [y], archive = new_archive } =>
             (* One simplification, check the id to see if it is actually the original clause and no
             simplification was performed. *)
-            (* if JClause.id y = JClause.id x
-              then (new_archive @ archive, changed, y :: unchanged)
-              else if not (null new_archive)
-                then (
-                  let
-                    fun trace_msg_clauses msg clauses =
-                      Jeha_Common.trace_msg ctxt 
-                        (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-                    val () = trace_msg_clauses "active clause, single simplified active" [x,y]
-                    val () = Jeha_Common.trace_msg ctxt (fn () => "with ids: " ^ @{make_string} (JClause.id x) ^ " and " ^ @{make_string} (JClause.id y))
-                    val () = trace_msg_clauses "intermediate simplificaitons" new_archive
-                  in
-                    error "map_filter_partition: clause id was unchanged, but intermediate simplifications returned."
-                  end)
-                else (archive, y :: changed, unchanged) *)
             if JClause.id y <> JClause.id x
               (* id changed, clause was simplified *)
               then (new_archive @ archive, y :: changed, unchanged)
@@ -1334,6 +1268,7 @@ fun map_filter_partition _ _ [] = ([], [], [])
               else
                 if null new_archive
                   then (archive, changed, y :: unchanged)
+                  (* error *)
                   else (
                     let
                       fun trace_msg_clauses tracer msg clauses =
@@ -1545,61 +1480,4 @@ fun make_clause_db state clause_id =
     SOME clause => clause
   | NONE => error ("No clause with id " ^ @{make_string} clause_id ^ " in active set or archive.")
 
-(*
-Question:
-
-f x y         f(x, y)
-
-  $              f
- /|\      or    / \    ?
-f x y          x   y
-(HO)            (FO)
-
-  / \
- $
-/ \
-f  x
-
-x is green. What about f itself?
-
-green part:
-  $
-  |\
-  x y
-
-nongreen leaves:
-   
- /  
-f    
-
-FIXME: f x is a subterm
-
-Counter argument:
-o\<lambda>Sup paper, below Definition 6:
-  "[...] or has an argument of the form \<lambda>x. v such that x occurs free in a nongreen position of v."
-
-consider v = f x y
-
-If the term f x is in a nongreen position f x y then x occurs in a nongreen position subterm of v. x also
-occurs in a green position of v.
-
-But if we take v = f y x then x occurs only in green positions of v.
-
-If however f x is not a subterm of f x y at all, this ambiguity disappears.
-
-Proposed Definitions:
-* variadic application (/combination) with function as it's first child and arguments as the rest
-* term positions: standard definition of position in a tree
-* green positions as in paper
-* nongreen positions are all the other positions
-
-Observation:
-* The whole tree is green.
-* Every suffix of a green position is a green position.
-=> The green positions span a subtree starting at the root.
-
-
-
-
-*)
 end;
