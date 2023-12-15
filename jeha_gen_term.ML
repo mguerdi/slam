@@ -3,6 +3,7 @@ sig
   type unif_state = (Proof.context * Type.tyenv * int)
   type 'a unif_gen = ('a, unif_state * SpecCheck_Random.rand) SpecCheck_Gen_Types.gen_state
   val term : typ list -> typ -> term unif_gen
+  val fresh_tvar : typ unif_gen
 end
 
 structure Jeha_Gen_Term : JEHA_GEN_TERM =
@@ -11,7 +12,7 @@ struct
 (* CONFIGURATION *)
 
 (* probability of generating a schematic variable *)
-val prob_of_var = 0.3
+val prob_of_var = 0.1
 (* Precomputed, from the paper, presumably increasing the probability of
 boltzmann_index leads to smaller terms. Weaker effect when increasing the
 probability of boltzmann_lambda. *)
@@ -107,7 +108,7 @@ and abs Ts T s =
     val unif_s = add_unif (arg_T --> return_T, T) unif_s
   in
     SpecCheck_Generator.map
-      (fn t => Abs (Name.uu_, arg_T, t))
+      (fn t => Abs ("x" (* Name.uu_ *), arg_T, t))
       (term (arg_T :: Ts) return_T)
       (unif_s, rng_s)
   end
