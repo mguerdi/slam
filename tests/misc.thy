@@ -9,8 +9,6 @@ declare [[metis_trace]]
 
 declare [[jeha_proof_reconstruction]]
 
-(* metis works *)
-
 lemma funs_eq_then_comp_id_eq:
   shows "f = g \<Longrightarrow> (\<And> x. f x = (id o g) x)"
   (* by (metis fun.map_id) *)
@@ -85,7 +83,7 @@ lemma
   shows "(\<lambda> x. b) = (\<lambda> x. a) \<Longrightarrow> a = b"
   (* by metis *)
   by jeha (* 44 ms *)
-  
+
 lemma
   shows "g = f \<Longrightarrow> f a b c = d \<Longrightarrow> \<forall> h. h a \<noteq> d \<Longrightarrow> False"
   (* by (metis fun_upd_apply) (* vampire *) *)
