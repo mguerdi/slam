@@ -18,4 +18,15 @@ ML_val \<open>
   \<^assert> (expected aconv conclusion_term);
 \<close>
 
+ML_val \<open>
+  (* EqHoist can emulate NeqHoist *)
+  val c = JClause.of_term (@{term_schem "f (\<not> ((a :: 'a) = b)) = d"}, 1);
+  val [conclusion] = Jeha.infer_eq_hoist @{context} c ([1, 1], JLit.Left, 0);
+  val conclusion_term = JClause.term_of conclusion;
+  val expected = @{term_schem "(a :: 'a) = b \<or> f (\<not> False) = d"};
+  (* val () = writeln (Jeha_Common.pretty_term @{context} conclusion_term);
+  val () = writeln (Jeha_Common.pretty_term @{context} expected); *)
+  \<^assert> (expected aconv JClause.term_of conclusion);
+\<close>
+
 end
