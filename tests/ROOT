@@ -1,6 +1,6 @@
 chapter JEHA_TESTS
 
-session "JEHA_TEST" = HOL +
+session "JEHA_TEST" = JEHA +
   description "
     various tests and examples for jeha
   "

@@ -1,6 +1,6 @@
 theory SMT_Examples
 
-imports "../jeha" Complex_Main
+imports "JEHA.jeha" Complex_Main
 
 begin
 

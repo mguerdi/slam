@@ -1,6 +1,6 @@
 theory redundant_boolean
 
-imports "../jeha"
+imports "JEHA.jeha"
 
 begin
 

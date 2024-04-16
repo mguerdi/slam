@@ -1,6 +1,6 @@
 theory paper_example_26
 
-imports "../jeha" 
+imports "JEHA.jeha" 
 
 begin
 

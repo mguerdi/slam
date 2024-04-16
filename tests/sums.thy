@@ -1,6 +1,6 @@
 theory sums 
 
-imports "../jeha_debug"
+imports "JEHA.jeha_debug"
 
 begin
 

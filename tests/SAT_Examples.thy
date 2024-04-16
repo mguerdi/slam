@@ -8,7 +8,7 @@
 section \<open>Examples for proof methods "sat" and "satx"\<close>
 
 theory SAT_Examples
-imports "../jeha" Main
+imports "JEHA.jeha" Main
 begin
 
 declare [[jeha_trace]]

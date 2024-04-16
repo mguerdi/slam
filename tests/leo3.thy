@@ -1,6 +1,6 @@
 theory leo3
 
-imports "../jeha"
+imports "JEHA.jeha"
 
 begin
 

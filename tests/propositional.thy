@@ -1,6 +1,6 @@
 theory propositional
 
-imports "../jeha"
+imports "JEHA.jeha"
 
 begin
 

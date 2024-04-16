@@ -1,6 +1,6 @@
 theory "index"
 
-imports "../jeha" SpecCheck.SpecCheck_Dynamic
+imports "JEHA.jeha" SpecCheck.SpecCheck_Dynamic
 
 begin
 

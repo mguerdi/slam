@@ -1,6 +1,6 @@
 theory subsumption
 
-imports "../jeha" HOL.HOL
+imports "JEHA.jeha" HOL.HOL
 
 begin
 

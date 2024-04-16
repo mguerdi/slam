@@ -1,6 +1,6 @@
 theory faexhoist
 
-imports "../jeha"
+imports "JEHA.jeha"
 
 begin
 

@@ -1,6 +1,6 @@
 theory paper_example_25
 
-imports "../jeha_debug"
+imports "JEHA.jeha_debug"
 
 begin
 

@@ -1,6 +1,6 @@
 theory reconstruct_fa_rw
 
-imports "../jeha"
+imports "JEHA.jeha"
 
 begin
 
