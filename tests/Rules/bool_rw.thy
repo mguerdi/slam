@@ -1,6 +1,6 @@
 theory bool_rw
 
-imports "test_base"
+imports "JEHA_TEST_BASE.test_base"
 
 begin
 

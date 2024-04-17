@@ -1,22 +1,44 @@
+(* Run using
+  Isabelle2023/bin/isabelle build -d ~/git/jeha -d ~/git/jeha/tests SESSIONS
+e.g.
+  Isabelle2023/bin/isabelle build -d ~/git/jeha -d ~/git/jeha/tests JEHA_TEST_GENERAL JEHA_TEST_RULES
+*)
+
 chapter JEHA_TESTS
 
-session "JEHA_TEST" = JEHA +
+session "JEHA_TEST_BASE" = JEHA +
   description "
-    various tests and examples for jeha
+    basic utilities for testing
   "
   theories
-    (* general examples *)
+    test_base
+
+session "JEHA_TEST_GENERAL" in General = JEHA_TEST_BASE +
+  description "
+    general examples
+  "
+  theories
     paper_example_25
     sums
     paper_example_26
     propositional
     misc
     SAT_Examples
-    (* specific rules *)
+
+session "JEHA_TEST_RULES" in Rules = JEHA_TEST_BASE +
+  description "
+    specific rules
+  "
+  theories
     sup
     bool_rw
     eq_hoist
 
+session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
+  description "
+    miscellaneous tests
+  "
+  theories
     (* misc *)
     boolean_ho
     redundant_boolean
@@ -44,3 +66,4 @@ session "JEHA_TEST" = JEHA +
     (* kbo.thy *)
     (* index.thy *)
     (* smash_unify_fluid.thy *)
+
