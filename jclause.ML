@@ -4,6 +4,7 @@ sig
   type cpos = int
   type full_pos = JTerm.tpos * JLit.lpos * cpos
   *)
+  exception NOBOOL of string * term * typ
   include JCLAUSE_POS
   type T
   val literals : T -> JLit.T list
@@ -48,6 +49,8 @@ end;
 
 structure JClause : JCLAUSE =
 struct
+
+exception NOBOOL of string * term * typ
 
 open JClause_Pos
 
@@ -127,7 +130,7 @@ fun of_literals (ls, id) =
 (* converts boolean terms to lists of literals *)
 fun of_term (t, id) =
   if not (fastype_of t = @{typ bool})
-    then error "can only turn boolean terms into clauses"
+    then raise (NOBOOL ("can only turn boolean terms into clauses", t, (fastype_of t)))
     else
       empty
       |> map_id (K id)

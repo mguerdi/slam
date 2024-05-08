@@ -95,7 +95,7 @@ fun jeha_tac options ctxt ths i st0 =
         st0
   in
     seq
-  end
+  end handle JClause.NOBOOL (msg, term, typ) => (Jeha_Common.trace_msg ctxt (fn () => (msg ^ ". Term " ^ @{make_string} term ^ " of type " ^ @{make_string} typ)); Seq.empty)
 
 (* FIXME: only pass schematic facts to jeha_tac? see metis_tactic.ML *)
 fun jeha_method (options, ths) ctxt facts =
