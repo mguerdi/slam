@@ -1,6 +1,6 @@
 theory sums 
 
-imports "JEHA.jeha_debug"
+imports JEHA.jeha
 
 begin
 
@@ -24,9 +24,9 @@ lemma "(\<Sum>i\<in>A. i\<^sup>2 + i * 2 + 1) = (\<Sum>i\<in>A. i\<^sup>2) + (\<
         , jeha_rule_clause_subsumption
         , jeha_max_number_of_steps = 200
         , jeha_report_main_loop_timing
-        , jeha_trace
+        (* , jeha_trace *)
         , jeha_proof_reconstruction
         ]]
-  by (jeha sum.distrib) (* 8000 ms *)
+  using sum.distrib by jeha (* 8000 ms *)
 
 end

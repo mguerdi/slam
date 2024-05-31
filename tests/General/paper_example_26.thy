@@ -31,13 +31,14 @@ but FalseElim doesn't apply because of its strict-maximality side condition *)
 declare [[jeha_rule_simp_false_elim]]
 
 (* works but takes very long (> 1 min): *)
-declare [[jeha_proof_reconstruction]]
-declare [[metis_trace]]
+(* doesn't work in Isabelle2023 FIXME: figure out why *)
+(* declare [[jeha_proof_reconstruction]]
+declare [[metis_trace]] *)
 
 lemma paper_example_26:
   shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x))"
   (* sledgehammer
   by metis *)
-  by (jeha) (* 29500 ms *)
+  by jeha (* 29500 ms *)
 
 end

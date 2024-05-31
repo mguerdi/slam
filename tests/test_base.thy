@@ -1,5 +1,5 @@
 theory test_base
-  imports "JEHA.jeha_debug" (* SpecCheck.SpecCheck *)
+  imports JEHA.jeha (* SpecCheck.SpecCheck *)
 begin
 
 text \<open>SpecCheck term generators, etc.\<close>

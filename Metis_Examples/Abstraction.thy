@@ -8,7 +8,7 @@ Example featuring Metis's support for lambda-abstractions.
 section \<open>Example Featuring Metis's Support for Lambda-Abstractions\<close>
 
 theory Abstraction
-  imports "../jeha_debug" "HOL-Library.FuncSet"
+  imports "JEHA.jeha" "HOL-Library.FuncSet"
 begin
 
 declare [[jeha_trace]]

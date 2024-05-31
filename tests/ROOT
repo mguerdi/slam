@@ -6,7 +6,7 @@ e.g.
 
 chapter JEHA_TESTS
 
-session "JEHA_TEST_BASE" = JEHA +
+session "JEHA_TEST_BASE" = JEHA_MIRABELLE +
   description "
     basic utilities for testing
   "
@@ -66,4 +66,3 @@ session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
     (* kbo.thy *)
     (* index.thy *)
     (* smash_unify_fluid.thy *)
-

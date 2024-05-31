@@ -12,14 +12,15 @@ declare [[jeha_proof_reconstruction]]
 lemma funs_eq_then_comp_id_eq:
   shows "f = g \<Longrightarrow> (\<And> x. f x = (id o g) x)"
   (* by (metis fun.map_id) *)
-  using
+  using comp_apply id_apply
     [[ jeha_disable_all,
         jeha_rule_sup,
         jeha_rule_arg_cong,
         jeha_rule_clause_subsumption,
         jeha_rule_e_res,
         unify_search_bound = 7 ]]
-  by (jeha comp_apply id_apply) (* 1070 ms *)
+  by jeha
+  (* by (jeha comp_apply id_apply) (* 1070 ms *) *)
 
 lemma arg_cong_test:
   shows "g = f \<Longrightarrow> g a = f a"
@@ -69,7 +70,7 @@ lemma ap_fa_eq_test:
 
 lemma
   shows "(1 :: nat) + 1 = 2"
-  by (jeha (dump) Num.nat_1_add_1) (* 51 ms *)
+  using Num.nat_1_add_1 by jeha (* 51 ms *)
 
 (* b \<approx> a, (\<lambda>x. b) !\<approx> (\<lambda> x. a) *)
 lemma
@@ -92,6 +93,6 @@ lemma
 
 lemma
   shows "\<forall> x y. g x y = f y x \<Longrightarrow> g c \<noteq> (\<lambda> y. f y c) \<Longrightarrow> False"
-  by (jeha ext) (* 223 ms *)
+  using ext by jeha (* 223 ms *)
 
 end

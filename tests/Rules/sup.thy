@@ -1,6 +1,6 @@
 theory sup
 
-imports "JEHA.jeha_debug" HOL.HOL
+imports "JEHA.jeha" HOL.HOL
 
 begin
 

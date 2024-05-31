@@ -6,4 +6,11 @@ session "JEHA" = HOL +
   "
   theories
     jeha
-    jeha_debug
+    (* jeha_debug *)
+
+session "JEHA_MIRABELLE" in Mirabelle = JEHA +
+  description "
+    mirabelle action for running jeha
+  "
+  theories
+    Mirabelle_Jeha

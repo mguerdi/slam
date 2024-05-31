@@ -1,6 +1,6 @@
 theory paper_example_25
 
-imports "JEHA.jeha_debug"
+imports "JEHA.jeha"
 
 begin
 
@@ -43,5 +43,14 @@ lemma paper_example_25:
   (* by metis (* fails *) *)
   using [[show_types, ML_print_depth=100, ML_exception_trace, jeha_trace_archive, jeha_trace_forward_simp, jeha_trace_simp_steps, jeha_trace_inferred, jeha_trace_cheap_simp]]
   by jeha (* 300ms *)
+
+(* attempt to reproduce failed: Pure.protectI from mirabelle.log *)
+ML\<open>
+  val t = Logic.mk_term (Term.dummy_pattern @{typ prop})
+  val c = Thm.cterm_of @{context} t
+  val g = Goal.init c
+  val res = Jeha_Tactic.jeha_tac [] @{context} [] 0 g
+  val first = Seq.pull res
+\<close>
 
 end
