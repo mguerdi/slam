@@ -36,7 +36,7 @@ sig
   (* FIXME: add substitution *)
   | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
   (* FIXME: add substitution *)
-  | NegativeSimplifyReflect of { unit: int, right_premise: int, literal: JClause_Pos.cpos }
+  | NegativeSimplifyReflect of { unit: int, substitution: Envir.env, unit_shift : int, right_premise: int, literal: JClause_Pos.cpos }
   (* | PosOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   | NegOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env } *)
   | SimpPosNegOuterClaus of { premise: int, literal: JClause_Pos.cpos } 
@@ -91,7 +91,7 @@ datatype inference =
   | RewritePositiveLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
-  | NegativeSimplifyReflect of { unit: int, right_premise: int, literal: JClause_Pos.cpos }
+  | NegativeSimplifyReflect of { unit: int, substitution: Envir.env, unit_shift : int, right_premise: int, literal: JClause_Pos.cpos }
   | SimpPosNegOuterClaus of { premise: int, literal: JClause_Pos.cpos }
   | SimpBoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | SimpFalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -169,6 +169,8 @@ fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_p
       = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (FluidLoobHoist { premise, substitution, ... })
       = [{ id = premise, shift = 0, substitution = substitution }]
+  | premises_shift_substitution (NegativeSimplifyReflect { unit, substitution, unit_shift, right_premise, ... })
+      = [{ id = unit, shift = unit_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = Envir.init }]
   | premises_shift_substitution other =
       let
         val premises = premises other

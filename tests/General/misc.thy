@@ -88,8 +88,7 @@ lemma
 lemma
   shows "g = f \<Longrightarrow> f a b c = d \<Longrightarrow> \<forall> h. h a \<noteq> d \<Longrightarrow> False"
   (* by (metis fun_upd_apply) (* vampire *) *)
-  (* FIXME: activate proof reconstruction once NS reuses the substitution *)
-  using [[ jeha_proof_reconstruction = false ]] by jeha (* 132 ms *)
+  by jeha (* 132 ms *)
 
 lemma
   shows "\<forall> x y. g x y = f y x \<Longrightarrow> g c \<noteq> (\<lambda> y. f y c) \<Longrightarrow> False"

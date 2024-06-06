@@ -274,24 +274,24 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
   (* check that to be deleted literal is indeed positive *)
   if not (true = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
-    val unit_clause = JClause.incr_indexes (JClause.maxidx target_clause + 1) unit_clause
+    val unit_shift = (JClause.maxidx target_clause + 1)
+    val unit_clause = JClause.incr_indexes unit_shift unit_clause
     val maxidx = JClause.maxidx_of2 (unit_clause, target_clause)
     val unit_lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
     val (s, t, false) = JLit.orient unit_lp unit_lit
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
     val (u, v, true) = target_lit
-    val exists_matcher =
+    val matcher =
       [(s, u), (t, v)]
       |> Jeha_Unify.matchers (Context.Proof ctxt) maxidx
       |> Seq.pull
-      |> is_some
     (* tracing *)
     val msg =  "   " ^ "(NS)"
       ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
       ^ " in " ^ JClause.pretty_clause ctxt target_clause
       ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [unit_lit])
   in
-    if exists_matcher
+    if is_some matcher
       then let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
         |> JClause.delete_lit_at target_cp
@@ -299,7 +299,9 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
         |> JClause.set_origin (Jeha_Log.NegativeSimplifyReflect
             { literal = target_cp
             , right_premise = JClause.id target_clause
-            , unit = JClause.id unit_clause }
+            , unit = JClause.id unit_clause
+            , substitution = #1 (the matcher)
+            , unit_shift = unit_shift }
            )
         |> SOME 
       end
