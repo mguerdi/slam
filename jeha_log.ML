@@ -53,7 +53,7 @@ sig
   | Invalid
 
   val premises : inference -> int list
-  val premises_shift_substitution : inference -> { id: int, shift: int } list * Envir.env
+  val premises_shift_substitution : inference -> { id: int, shift: int, substitution: Envir.env } list
   val name_of : inference -> string
 end;
 
@@ -136,44 +136,44 @@ fun premises (Axiom { thm: thm }) = []
   | premises Invalid = error "\"Invalid\" inference encountered"
 
 fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_premise, substitution, ... })
-      = ([{ id = left_premise, shift = left_premise_shift }, { id = right_premise, shift = 0}], substitution)
+      = [{ id = left_premise, shift = left_premise_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (RewritePositiveLits { unit, unit_shift, right_premise, substitution, ... })
-      = ([{ id = unit, shift = unit_shift}, { id = right_premise, shift = 0 }], substitution)
+      = [{ id = unit, shift = unit_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (RewriteNegativeLits log) 
       = premises_shift_substitution (RewritePositiveLits log) 
   | premises_shift_substitution (ERes { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (EFact { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   (* | premises_shift_substitution (ArgCong { premise, number_of_vars, ... })
-      = ([{ id = premise, shift = 0 }], substitution) *)
+      = [{ id = premise, shift = 0, substitution = substitution }] *)
   | premises_shift_substitution (BoolHoist { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (FalseElim { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (EqHoist { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (NeqHoist { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (ForallHoist { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (ExistsHoist { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (BoolRw { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (ForallRw { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (ExistsRw { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (FluidBoolHoist { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (FluidLoobHoist { premise, substitution, ... })
-      = ([{ id = premise, shift = 0 }], substitution)
+      = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution other =
       let
         val premises = premises other
       in
-        (premises |> map (fn id => { id = id, shift = 0 }), Envir.init)
+        premises |> map (fn id => { id = id, shift = 0, substitution = Envir.init })
       end
 
 (* Building blocks of proofs (inspired by metis_reconstruct.ML):

@@ -212,10 +212,10 @@ and get_prems_and_lemmas ctxt clause_db origin =
 and get_premises _ _ (Jeha_Log.Axiom { thm = thm }) = [thm]
   | get_premises ctxt clause_db origin =
       let
-        val (ids_and_shift, substitution) = Jeha_Log.premises_shift_substitution origin
+        val ids_and_shifts_and_substituitons = Jeha_Log.premises_shift_substitution origin
         val instantiated_premises =
-          ids_and_shift
-          |> map (fn { id, shift } =>
+          ids_and_shifts_and_substituitons
+          |> map (fn { id, shift, substitution } =>
               impl_reconstruct_with_metis ctxt clause_db id
               |> Thm.incr_indexes shift
               |> (fn premise =>
