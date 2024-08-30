@@ -16,8 +16,8 @@ sig
   | FalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   | EqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | NeqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ExistsHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
+  | ExistsHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
   | BoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | ForallRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | ExistsRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -55,6 +55,7 @@ sig
   val premises : inference -> int list
   val premises_shift_substitution : inference -> { id: int, shift: int, substitution: Envir.env } list
   val name_of : inference -> string
+  val pretty : Proof.context -> inference -> string
 end;
 
 structure Jeha_Log : JEHA_LOG =
@@ -75,8 +76,8 @@ datatype inference =
   | FalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   | EqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | NeqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ExistsHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
+  | ExistsHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
   | BoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | ForallRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | ExistsRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -270,5 +271,9 @@ fun name_of (Axiom _) = "Axiom"
   | name_of (SimpFalseElim _) = "SimpFalseElim" 
   | name_of (SimpNormalizePredLits _) = "SimpNormalizePredLits"
   | name_of Invalid = "Invalid" 
+
+fun pretty ctxt inference = case inference of
+    Axiom { thm = thm } => "Axiom:" ^ Thm.string_of_thm ctxt thm (* shows hyps *)
+  | _ => @{make_string} inference
 
 end;

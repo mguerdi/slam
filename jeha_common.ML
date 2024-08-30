@@ -37,7 +37,10 @@ sig
   (* internal *)
   val trace_msg_simp_results : Proof.context -> (unit -> string) -> unit
 
-  val proof_reconstruction : bool Config.T
+  val proof_reconstruction : string Config.T
+  datatype proof_reconstruction_mode = None | Argo | Metis | Blast
+  val get_proof_reconstruction_mode : Proof.context -> proof_reconstruction_mode
+
   val term_pat_setup : theory -> theory
   val type_pat_setup : theory -> theory
   val term_schem_setup : theory -> theory
@@ -140,7 +143,29 @@ fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_m
 (* internal *)
 fun trace_msg_simp_results ctxt msg = if Config.get ctxt trace_simp_results then trace_msg ctxt msg else ();
 
-val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K false)
+datatype proof_reconstruction_mode = None | Argo | Metis | Blast
+
+fun string_of_proof_reconstruction_mode None = "none"
+  | string_of_proof_reconstruction_mode Argo = "argo"
+  | string_of_proof_reconstruction_mode Metis = "metis"
+  | string_of_proof_reconstruction_mode Blast = "blast"
+
+fun parse_proof_reconstruction_mode "none" = None
+  | parse_proof_reconstruction_mode "argo" = Argo
+  | parse_proof_reconstruction_mode "metis" = Metis
+  | parse_proof_reconstruction_mode "blast" = Blast
+  | parse_proof_reconstruction_mode s = error
+      ( "Not a valid jeha proof reconstruction mode: "
+      ^ s
+      ^ " (must be either of \"none\", \"argo\", \"metis\" or \"blast\")" )
+
+val proof_reconstruction =
+  Attrib.setup_config_string
+    \<^binding>\<open>jeha_proof_reconstruction\<close>
+    (K (string_of_proof_reconstruction_mode Argo))
+(* val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K true) *)
+
+fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)
 
 val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_smash_unifiers\<close> (K false)
 (* FIXME: remove or better default *)

@@ -11,57 +11,64 @@ sig
   val instantiate : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
   
   val fix_vars : Proof.context -> thm list -> cterm -> Proof.context * thm list * cterm
+
+  (* FIXME: for debugging *)
+  val get_lemmas : Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference -> cterm -> int -> thm list 
+  val get_instantiated_premises : Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference -> thm Inttab.table * thm list
+  val resolve_against_arg_cong_contrapositive_n_times : Proof.context -> int -> thm * int -> thm
+  val reconstruct_arg_cong : Proof.context -> int -> thm * int -> cterm -> thm 
 end;
 
 structure Jeha_Proof : JEHA_PROOF = 
 struct
 
-(* The primitve building blocks to which all o\<lambda>Sup inferences can be reduced. *)
-(* datatype proof_step =
-    (* FIXME: does normalization need to be separate? *)
-    Instantiation of { premise: int, substitution: Envir.env }
-  | Sup of { left_premise: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos }
-  | ERes of { premise: int, literal: JClause_Pos.cpos }
-  | EFact of { premise: int, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos }
-  (* FIXME: can this be meaningfully viewed as a kind of superposition? *)
-  | ArgCong 
-  |
-
-fun proof_steps_of_inference *)
-
-(* turn jeha clause [A, B, C] into formula \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False *)
-fun hol_of_clause ctxt close c =
+(* from metis_reconstruct.ML *)
+(* with index 1 turn \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False into \<not>A \<Longrightarrow> \<not>C \<Longrightarrow> B *)
+(*Permute a rule's premises to move the i-th premise to the last position.*)
+fun make_last cpos th =
   let
-    val negated_literals = 
-      JClause.literals c
-      |> map (fn (s, t, b) => (s, t, not b))
-      |> map JLit.term_of
-      |> map HOLogic.mk_Trueprop
-    (* FIXME: remove *)
-    val vars =
-      fold Term.add_vars negated_literals []
-      (* reuse variable names for binder names *)
-      |> map (fn idxname_typ => (fst (fst idxname_typ), Var idxname_typ))
+    val n = Thm.nprems_of th
+    (* original function was 1-based *)
+    val i = cpos + 1
   in
-    if close
-      (* FIXME: remove this `if` and the `close` parameter *)
-      then
-        Logic.close_prop vars negated_literals @{prop "False"}
-        |> Thm.cterm_of ctxt
-      else
-        Logic.list_implies (negated_literals, @{prop "False"})
-        |> Thm.cterm_of ctxt
+    if i >= 1 andalso i <= n then Thm.permute_prems (i - 1) 1 th
+    else raise THM ("select_literal", i, [th])
   end
 
-(* with index 2 turn \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False into \<not>A \<Longrightarrow> \<not>C \<Longrightarrow> B *)
-(* fun move_literal_to_conclusion literal_index *)
+fun abstract_over_tpos (tpos, term, maxidx) =
+  let
+    val green_subterm = JTerm.subterm_at term tpos
+    (* Note: we can only compute the type because green subterms aren't below lambdas. *)
+    val T = fastype_of green_subterm
+    val varname = "subterm"
+    val fresh_var = Var ((varname, maxidx + 1), T) 
+    val term_with_fresh_var_at_tpos = JTerm.map_at tpos (K fresh_var) term
+    val lambda_inserting_argument_at_tpos =
+      Abs (varname, T, abstract_over (fresh_var, term_with_fresh_var_at_tpos))
+  in
+    lambda_inserting_argument_at_tpos
+  end
 
+(* Given t=t' and (p, L, maxidx) provides L<t>\<^sub>p = L<t'>\<^sub>p. *)
+fun congruence_wrt_tpos ctxt (equality : thm) tpos_term_maxidx =
+  let
+    (* t = t' therefore ?f t = ?f t' *)
+    val arg_cong_of_equality = @{thm arg_cong} OF [equality]
+    val abstracted_over_tpos =
+      abstract_over_tpos tpos_term_maxidx
+    val ct = Thm.cterm_of ctxt abstracted_over_tpos
+    val cT = Thm.ctyp_of ctxt (fastype_of abstracted_over_tpos)
+  in
+    Thm.instantiate' [SOME cT] [SOME ct] arg_cong_of_equality
+  end
+
+(* FIXME: see also Pure/ML/ml_instantiate.ML *)
 fun instantiate_norm ctxt (tyenv, tenv) thm =
   (* see metis_reconstruct.ML, flexflex_first_order *)
   let
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "instantiating (norm)\n\t" ^
-      Jeha_Common.pretty_term ctxt (Thm.prop_of thm) ^
+      Thm.string_of_thm ctxt thm ^
       "\nwith substitution\n\t" ^
       Jeha_Common.pretty_tenv ctxt (tenv) ^
       "\n\t" ^
@@ -85,7 +92,7 @@ fun instantiate ctxt (tyenv, tenv) thm =
   let
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "instantiating\n\t" ^
-      Jeha_Common.pretty_term ctxt (Thm.prop_of thm) ^
+      Thm.string_of_thm ctxt thm ^
       "\nwith substitution\n\t" ^
       Jeha_Common.pretty_tenv ctxt (tenv) ^
       "\n\t" ^
@@ -104,11 +111,145 @@ fun instantiate_with_env ctxt env = instantiate ctxt (Envir.type_env env, Envir.
 
 val excluded_middle =  @{lemma "P \<Longrightarrow> \<not> P \<Longrightarrow> False" by (rule notE)}
 
+fun resolve_against_arg_cong_contrapositive_n_times debug_ctxt number_of_vars (premise_proved, cpos) =
+  let
+    val () = Jeha_Common.trace_msg debug_ctxt (fn () => "RS_ARG_CONG premise_proved: " ^ Thm.string_of_thm debug_ctxt premise_proved)
+  in
+    if number_of_vars < 0 then
+      error "can't do something a negative number of times"
+    else
+      funpow number_of_vars (fn th =>
+        let
+          val () = Jeha_Common.trace_msg debug_ctxt (fn () => "RS_ARG_CONG current (cpos=" ^ @{make_string} cpos ^"): " ^ Thm.string_of_thm debug_ctxt th)
+        in
+          @{thm arg_cong_contrapositive} RSN (cpos + 1, th)
+        end
+      ) premise_proved
+  end
+
+fun reconstruct_arg_cong ctxt number_of_vars (premise, cpos) goal =
+  let
+    val goal_proved_but_with_schematic_vars =
+      resolve_against_arg_cong_contrapositive_n_times ctxt number_of_vars (premise, cpos)
+  in
+      goal
+      |> Goal.init
+      |> ((* print_tac ctxt "A"
+        THEN *) resolve_tac ctxt [goal_proved_but_with_schematic_vars] 1
+        (* THEN print_tac ctxt "B" *)
+        (* assume_tac is needed one or two times (in the examples I've seen so far) *)
+        THEN ALLGOALS (assume_tac ctxt)
+        (* THEN print_tac ctxt "D" *))
+      |> Seq.hd
+      |> Goal.finish ctxt
+  end
+
+(* fun forall_rw_lemma ctxt t =
+  let
+    val thm = @{thm "verit_sko_forall"}
+    val ct = Thm.cterm_of ctxt t
+    val instsT = Thm.ctyp_of ctxt (fastype_of t)
+    val insts = error ""
+    val instantiated = Thm.instantiate (TVars.make instsT, Vars.make insts) thm
+  in
+    error "unimplemented"
+  end *)
+
+fun impl_forall_exists_hoist_lemma
+  ctxt
+  clause_db
+  is_forall_hoist
+  {premise = premise, subterm = subterm, substitution = substitution, fresh_x = fresh_x}
+=
+  let
+    (* Only the instantiation of the type is strictly necessary, as the fresh variable will remain
+    unchanged in the conclusion (except for its type). *)
+    val x = JTerm.norm_beta_eta_qeta_env substitution fresh_x
+    val cx = Thm.cterm_of ctxt x
+    val T = Thm.ctyp_of ctxt (fastype_of x)
+    
+    val premise = clause_db premise
+    val (quantifier $ predicate_variable) = JClause.subterm_at_full_pos premise subterm
+    val () = \<^assert> (JTerm.is_quantifier quantifier)
+    val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
+    val P = Thm.cterm_of ctxt predicate
+    (* val _ = Jeha_Common.trace_msg ctxt (fn () => "forall_rw_lemma: P = " ^ Jeha_Common.pretty_term ctxt predicate)
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "forall_rw_lemma: typ_of_x = " ^ Jeha_Common.pretty_typ ctxt (fastype_of fresh_x)) *)
+  in
+    if is_forall_hoist then
+      (* [Thm.instantiate'
+        [SOME typ_of_x]
+        [SOME P, SOME cx]
+        @{lemma \<open>P (x :: 'b) = False \<Longrightarrow> (\<forall>x. P x) = True \<Longrightarrow> False\<close> by auto}] *)
+      [\<^instantiate>\<open>
+          'T=T and P and cx in
+          lemma (open) \<open>P (cx :: 'T) = False \<Longrightarrow> (\<forall>x. P x) = True \<Longrightarrow> False\<close> by auto\<close>]
+    else
+      [\<^instantiate>\<open>
+          'T=T and P and cx in
+          lemma (open) \<open>P (cx :: 'T) = True \<Longrightarrow> (\<exists>x. P x) = False \<Longrightarrow> False\<close> by auto\<close>]
+  end
+
+fun forall_hoist_lemma ctxt clause_db (Jeha_Log.ForallHoist args) =
+  impl_forall_exists_hoist_lemma ctxt clause_db true args
+
+fun exists_hoist_lemma ctxt clause_db (Jeha_Log.ExistsHoist args) =
+  impl_forall_exists_hoist_lemma ctxt clause_db false args
+    
+(* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
+
 (* some inference rules require additional lemmas *)
-fun get_lemmas (Jeha_Log.EqHoist _) = [excluded_middle]
-  | get_lemmas (Jeha_Log.NeqHoist _) = [excluded_middle]
-  | get_lemmas (Jeha_Log.ForallRw _) = [@{thm "verit_sko_forall"}]
-  | get_lemmas _ = [excluded_middle]
+(* All variables occuring the lemma, which don't come from the substitution must be greater than
+maxidx. *)
+fun get_lemmas _ _ _ (Jeha_Log.EqHoist _) _ maxidx = [Thm.incr_indexes (maxidx + 1) excluded_middle]
+  | get_lemmas _ _ _ (Jeha_Log.NeqHoist _) _ maxidx = [Thm.incr_indexes (maxidx + 1) excluded_middle]
+  | get_lemmas ctxt clause_db _ (origin as (Jeha_Log.ForallHoist _)) _ _ =
+      forall_hoist_lemma ctxt clause_db origin
+  | get_lemmas ctxt clause_db _ (origin as (Jeha_Log.ExistsHoist _)) _ _ =
+      exists_hoist_lemma ctxt clause_db origin
+  (* need to instantiate verit_sko_forall, and use auto to reconstruct instead of metis *)
+  | get_lemmas
+      ctxt
+      clause_db
+      _
+      (Jeha_Log.ForallRw {premise = premise, subterm = subterm, substitution = substitution})
+      (* todo: use these two *)
+      _
+      maxidx
+    =
+      let
+        val clause = clause_db premise
+        val (quantifier $ predicate_variable) = JClause.subterm_at_full_pos clause subterm
+        val () = \<^assert> (JTerm.is_quantifier quantifier)
+        val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
+      in
+        [forall_rw_lemma ctxt predicate]
+      end
+  (* | get_lemmas _ _ (Jeha_Log.ArgCong { number_of_vars = number_of_vars, ... }) =
+      [resolve_against_arg_cong_contrapositive_n_times
+        (number_of_vars - 1)
+        @{thm arg_cong_contrapositive}] *)
+  | get_lemmas
+      ctxt
+      _
+      reconstructed_clause_db
+      (Jeha_Log.ArgCong { premise = premise, literal = literal, number_of_vars = number_of_vars })
+      conclusion
+      _
+    =
+      let
+        val premise = the (Inttab.lookup reconstructed_clause_db premise) handle Option.Option =>
+          error "get_lemmas ArgCong: premise not in reconstructed clause db"
+      in
+        (* This is not really a lemma but rather the full goal. *)
+        [reconstruct_arg_cong ctxt number_of_vars (premise, literal) conclusion]
+      end
+  | get_lemmas _ _ _ (Jeha_Log.Sup _) _ _ = []
+  | get_lemmas _ _ _ _ _ maxidx = [Thm.incr_indexes (maxidx + 1) excluded_middle]
+
+(* fun forall_rw_lemma P = @{thm "verit_sko_forall"[of P]} *)
+(*  \<^instantiate>\<open>P in lemma (open) \<open>(\<forall>x. P x) \<longleftrightarrow> P (SOME x. \<not>P x)\<close> by (rule notE)\<close> *)
+
 
 fun fix_vars ctxt instantiated_premises_thms conclusion_prop =
   let
@@ -123,57 +264,131 @@ fun fix_vars ctxt instantiated_premises_thms conclusion_prop =
     error ""
   end
 
-fun impl_reconstruct_with_metis ctxt (clause_db : int -> JClause.T) id =
+(*
+(* FIXME: not needed right now *)
+fun instantiate_env (Envir.Envir { maxidx, tenv, tyenv }) =
+  (* TODO: maxidx *)
+  let
+    (* Why does tenv store type * term pairs? Why typ? *)
+    val tenv_keys_values = Vartab.dest tenv
+    val tyenv_keys_values = Vartab.dest tyenv
+    (* val tenv = Vartab.map (fn indexname => fn (typ, term) => error "fix") *)
+  in
+    error "unimplemented"
+  end
+*)
+
+
+
+(* This just threads the reconstructed_clause_db cache through get_instantiated_premises but doesn't
+directly modify it. *)
+fun impl_reconstruct_with_metis
+  ctxt
+  (clause_db : int -> JClause.T)
+  (reconstructed_clause_db: thm Inttab.table)
+  id
+=
   let
     val clause =
       clause_db id
-    val conclusion = hol_of_clause ctxt false clause
+    val conclusion = HClause.hol_of_clause ctxt false clause
 
-    val (instantiated_premises, lemmas) =
-      id
-      |> clause_db
-      |> JClause.origin
-      (* recursive calls *)
-      |> get_prems_and_lemmas ctxt clause_db
-
-    (* only start logging here to avoid nesting *)
+    val origin = JClause.origin (clause_db id)
+    
+    (* recursive calls *)
+    val (new_reconstructed_clause_db, instantiated_premises) = get_instantiated_premises ctxt clause_db reconstructed_clause_db origin
+    
+    val maxidx = fold Thm.maxidx_thm instantiated_premises (JClause.maxidx clause)
+    
+    (* only start logging after the recursive calls to avoid nesting *)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "START PROOF")
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clause: " ^ JClause.pretty_clause ctxt (clause_db id))
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "origin: " ^ @{make_string} (JClause.origin (clause_db id)))
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "origin: " ^ (* @{make_string} *) Jeha_Log.pretty ctxt (JClause.origin (clause_db id)))
 
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "Instantiated Premises: " ^ (Jeha_Common.pretty_terms ctxt (map Thm.prop_of instantiated_premises)))
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Instantiated Premises: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) instantiated_premises))
+    
+    val lemmas = get_lemmas ctxt clause_db new_reconstructed_clause_db origin conclusion maxidx
+    
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Lemmas:" ^ space_implode "\n" (map (Thm.string_of_thm ctxt) lemmas))
+
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.term_of conclusion)))
 
     val goal = Goal.init conclusion
     
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "Goal: " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of goal)))
-    
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Goal: " ^ Thm.string_of_thm ctxt goal)
+
+    (* Idea: fix only those variables occuring in the premises. Fix those variables in the lemma.
+    Name apart the remaining variables in the lemma (probably not necessary). Fix the variables in
+    the lemma (this operation might take care of renaming). *)
     val ((tables, goal_fixed::instantiated_premises_fixed), ctxt_fixed) =
       Variable.import false (goal::instantiated_premises) ctxt
 
-    val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Fixed Instantiated Premises: " ^ (Jeha_Common.pretty_terms ctxt (map Thm.prop_of instantiated_premises_fixed)))
-    val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Proving Fixed Goal: " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of goal_fixed)))
+    (* Use tables to replace variables in the lemma by fixed variants of the premise variables. *)
+    (* This works because the all variables occuring in the lemmas that are not from the
+    substitution, have index greater than the maxidx of the premises and the conclusion *)
+    val lemmas_fixed = map (Thm.instantiate tables) lemmas
+    
+    (* Idea: fix variables in the substitution before instantiating the lemma. Then name apart the lemma. *)
+    (* How: Envir.env consists of two Vartab's which have map functions that we can use to replace
+    the original terms by their fixed variants. *)
+    (* Problem: we don't have the substiution anymore :( *)
 
-    (* from metis_tactic.ML *)
-    val method = METHOD oo Metis_Tactic.metis_method
-    (* The proof context returned by METHOD is the same as the context that was passed in, see
-    TACTIC_CONTEXT in Pure/context_tactic.ML.
-    Using the tactic directly (i.e. not as a method) would not yield a new context, but this doesn't
-    work, despite leading to (almost?) the same metis trace (iirc). *)
-    val SOME (Seq.Result (_, final_goal_fixed), _) =
-      method
-        ((NONE, NONE (* SOME "opaque_lifting" *)), instantiated_premises_fixed @ lemmas)
-        ctxt
-        instantiated_premises_fixed
-        (ctxt_fixed, goal_fixed)
-      |> Seq.pull
+    val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Fixed Instantiated Premises: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) instantiated_premises_fixed))
+    val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Fixed Lemmas: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) lemmas_fixed))
+    val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Proving Fixed Goal: " ^ Thm.string_of_thm ctxt goal_fixed)
+    
+    val final_goal_fixed =
+      case Jeha_Common.get_proof_reconstruction_mode ctxt of
+        Jeha_Common.Metis =>
+        (* from metis_tactic.ML *)
+        let
+          val method = METHOD oo Metis_Tactic.metis_method
+          (* The proof context returned by METHOD is the same as the context that was passed in, see
+          TACTIC_CONTEXT in Pure/context_tactic.ML.
+          Using the tactic directly (i.e. not as a method) would not yield a new context, but this doesn't
+          work, despite leading to (almost?) the same metis trace (iirc). *)
+          val SOME (Seq.Result (_, final_goal_fixed), _) =
+            method
+              ((NONE, NONE (* SOME "opaque_lifting" *)), instantiated_premises_fixed @ lemmas_fixed)
+              ctxt
+              instantiated_premises_fixed
+              (ctxt_fixed, goal_fixed)
+            |> Seq.pull
+        in 
+          final_goal_fixed
+        end
+      | Jeha_Common.Argo =>
+        let
+          val SOME (final_goal_fixed, _) = goal_fixed |> (
+            (* Use insert_tac instead of passing to argo directly to make repair of undeclared hyps
+            work. *)
+            Method.insert_tac ctxt_fixed (instantiated_premises_fixed @ lemmas_fixed) 1
+            (* Argo proof reconstruction fails even on simple goals involving meta-implication. This
+            solves some of the undeclared hyps issues but breaks the fix for eta-contracted
+            undeclared hyps below because that relies on meta-hypotheses which aren't available to
+            Subgoal.FOCUS after atomization. *)
+            (* THEN PRIMITIVE (Conv.gconv_rule (Object_Logic.atomize ctxt_fixed) 1) *)
+            (* Fixes eta-contracted undeclared hyps *) 
+            THEN Jeha_Argo.repaired_argo_tac ctxt_fixed [] 1
+            )
+            |> Seq.pull
+        in
+          final_goal_fixed
+        end
+      | Jeha_Common.Blast =>
+        let
+          val SOME (final_goal_fixed, _) = goal_fixed |> blast_tac ctxt_fixed 1 |> Seq.pull
+        in
+          final_goal_fixed
+        end
+      | Jeha_Common.None => error "We're in proof reconstruction even though it has beeen disabled."
 
     val proved_conclusion_fixed = Goal.finish ctxt final_goal_fixed
 
     val [proved_conclusion] = Variable.export ctxt_fixed ctxt [proved_conclusion_fixed]
 
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
-      "Proved conclusion (new vars): " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of proved_conclusion)))
+      "Proved conclusion (new vars): " ^ Thm.string_of_thm ctxt proved_conclusion)
 
     val old_vars = Term.add_vars (Thm.term_of conclusion) []
     val new_vars = Term.add_vars (Thm.prop_of proved_conclusion) []
@@ -181,10 +396,10 @@ fun impl_reconstruct_with_metis ctxt (clause_db : int -> JClause.T) id =
     (* Doesn't work with Unify.matchers *)
     val new_to_old_matcher =
       fold (Pattern.first_order_match (Proof_Context.theory_of ctxt)) (ListPair.zip (map Var new_vars, map Var old_vars)) (Vartab.empty, Vartab.empty)
-    
+
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
     "instantiating proved conclusion\n\t" ^
-    Jeha_Common.pretty_term ctxt (Thm.prop_of proved_conclusion) ^
+    Thm.string_of_thm ctxt proved_conclusion ^
     "\nwith substitution\n\t" ^
     Jeha_Common.pretty_tenv ctxt (#2 new_to_old_matcher) ^
     "\n\t" ^
@@ -193,7 +408,7 @@ fun impl_reconstruct_with_metis ctxt (clause_db : int -> JClause.T) id =
     val proved_conclusion_with_old_vars = instantiate ctxt new_to_old_matcher proved_conclusion
     
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
-      "Proved conclusion (old vars): " ^ (Jeha_Common.pretty_term ctxt (Thm.prop_of proved_conclusion_with_old_vars)))
+      "Proved conclusion (old vars): " ^  Thm.string_of_thm ctxt proved_conclusion_with_old_vars)
 
     (* sanity check *)
     val () = if not (Thm.prop_of proved_conclusion_with_old_vars aconv Thm.term_of conclusion)
@@ -203,20 +418,77 @@ fun impl_reconstruct_with_metis ctxt (clause_db : int -> JClause.T) id =
         ^ @{make_string} (Thm.term_of conclusion))
       else ()
   in
-    proved_conclusion_with_old_vars
+    (new_reconstructed_clause_db, proved_conclusion_with_old_vars)
   end
 
-and get_prems_and_lemmas ctxt clause_db origin =
-  (get_premises ctxt clause_db origin, get_lemmas origin)
+(*
+FIXME: some lemmas need to be instantiated and fixed others don't
+Q: Do I need to partially instantiate any lemmas?
+A: probably
+Q: To what extend do we have to do renaming of Var's and TVar's in the lemma, w.r.t. the
+    instantiated premises
+A: Need to rename all variables that are not part of the instantiation (i.e. that come from the
+    substitution and are thus part of the premises' shared namespace)
+*)
+(* Idea:
+introduce a concept of namespace: everything between minindex and maxidx is a namespace. This allows
+us to differentiate between the lemma's variables and the variables from the substitution *)
+(* Plan
+1. get uninstantiated premises and substitution
+2. instantiate premises
+Option 1
+3. fix premises (FIXME: can this destroy any subterms that we need for our lemmas (e.g. by
+    \<beta>-reduction)? And if yes, isn't this precisely what we want? Because we need the same subterm
+    in our lemma as in our fixed clause, at least if we're using a prover that doesn't reason about
+    \<lambda>s)
+4. instantiate lemma using subterms from fixed clauses 
+5. name apart instantiated lemma
+6. fix remaining variables in lemma
+Option 2
+3. Name apart lemma
+4. Use Thm.instantiate' to instantiate lemma (without having to know the variable's names) (IDEA: define instantiate helpers in the jeha_lemmas.thy file inside of ML... blocks?)
+5. fix premises and lemmas
+*)
 
-and get_premises _ _ (Jeha_Log.Axiom { thm = thm }) = [thm]
-  | get_premises ctxt clause_db origin =
+(* This function manipulates the reconstructed_clause_db cache. *)
+(* FIXME: Insert axioms into cache? But they dont have an ID at this point... (or ever?) Or are they being inserted on the recursive calls one level up? *)
+and get_instantiated_premises _ _ reconstructed_clause_db (Jeha_Log.Axiom { thm = thm })
+      = (reconstructed_clause_db, [thm])
+  | get_instantiated_premises ctxt clause_db reconstructed_clause_db origin =
       let
         val ids_and_shifts_and_substituitons = Jeha_Log.premises_shift_substitution origin
-        val instantiated_premises =
-          ids_and_shifts_and_substituitons
-          |> map (fn { id, shift, substitution } =>
-              impl_reconstruct_with_metis ctxt clause_db id
+        (* recursive calls *)
+        val (
+          premises_and_shifts_and_substitutions:
+            { premise: thm, shift: int, substitution: Envir.env } list,
+          new_reconstructed_clause_db
+          )
+          = fold_map
+              (fn { id, shift, substitution } => fn old_reconstructed_clause_db =>
+                case Inttab.lookup old_reconstructed_clause_db id of
+                  SOME premise => ({ premise = premise, shift = shift, substitution = substitution }, old_reconstructed_clause_db)
+                | NONE =>
+                    let
+                      val (new_reconstructed_clause_db, premise) = impl_reconstruct_with_metis ctxt clause_db old_reconstructed_clause_db id
+                    in
+                      (
+                        { premise = premise,
+                          shift = shift,
+                          substitution = substitution
+                        },
+                        (* insert into cache *)
+                        Inttab.default (id, premise) new_reconstructed_clause_db 
+                      )
+                    end
+              )
+            ids_and_shifts_and_substituitons
+            reconstructed_clause_db
+
+        (* FIXME: Move this to the top level of the file, it's only here for a cleaner diff. *)
+        fun instantiate_premises ctxt premises_and_shifts_and_substituitons =
+          premises_and_shifts_and_substituitons
+          |> map (fn { premise = premise, shift, substitution } =>
+              premise
               |> Thm.incr_indexes shift
               |> (fn premise =>
                 let
@@ -234,12 +506,13 @@ and get_premises _ _ (Jeha_Log.Axiom { thm = thm }) = [thm]
                   instantiate_norm_with_env ctxt substitution premise
                 end)
              )
+
+        val instantiated_premises = instantiate_premises ctxt premises_and_shifts_and_substitutions
       in
-        instantiated_premises
+        (new_reconstructed_clause_db, instantiated_premises)
       end
 
 fun reconstruct_with_metis ctxt (clause_db : int -> JClause.T) id =
-  impl_reconstruct_with_metis ctxt clause_db id
-
+  #2 (impl_reconstruct_with_metis ctxt clause_db Inttab.empty id)
 
 end;

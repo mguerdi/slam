@@ -1,13 +1,13 @@
 theory misc
 
-imports "JEHA_TEST_BASE.test_base"
+imports "JEHA_TEST_BASE.test_base" HOL.Num
 
 begin
 
 declare [[jeha_trace]]
 declare [[metis_trace]]
 
-declare [[jeha_proof_reconstruction]]
+declare [[jeha_proof_reconstruction=argo]]
 
 lemma funs_eq_then_comp_id_eq:
   shows "f = g \<Longrightarrow> (\<And> x. f x = (id o g) x)"
@@ -25,6 +25,11 @@ lemma funs_eq_then_comp_id_eq:
 lemma arg_cong_test:
   shows "g = f \<Longrightarrow> g a = f a"
   (* by metis *)
+  using [[jeha_disable_all, jeha_rule_arg_cong, jeha_rule_sup, jeha_rule_e_res]]
+  by jeha
+
+lemma arg_cong_multiple_vars_test:
+  shows "g = f \<Longrightarrow> g a b c = f a b c"
   using [[jeha_disable_all, jeha_rule_arg_cong, jeha_rule_sup, jeha_rule_e_res]]
   by jeha
 
@@ -64,7 +69,6 @@ lemma ap_fa_eq_test:
         jeha_rule_eq_hoist,
         jeha_rule_bool_hoist,
         jeha_rule_false_elim,
-        jeha_proof_reconstruction = false,
         metis_trace ]]
   by jeha (* 455 ms *)
 
@@ -93,5 +97,13 @@ lemma
 lemma
   shows "\<forall> x y. g x y = f y x \<Longrightarrow> g c \<noteq> (\<lambda> y. f y c) \<Longrightarrow> False"
   using ext by jeha (* 223 ms *)
+
+declare [[show_hyps]]
+
+lemma "argo_bug":
+  shows "\<forall> x. P x \<and> Q x \<Longrightarrow> \<not> (\<forall> x. Q x) \<Longrightarrow> False"
+  (* Argo produces "Undeclared hyps" *)
+  (* by argo *)
+  using [[jeha_proof_reconstruction=argo, argo_trace=full]] by jeha
 
 end

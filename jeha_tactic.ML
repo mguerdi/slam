@@ -43,10 +43,13 @@ fun reconstruct_proof
 
 fun jeha_tac options ctxt ths i st0 =
   let
+    (* validate config *)
+    val _ = Jeha_Common.get_proof_reconstruction_mode ctxt
+    (* tracing *)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "st0: " ^ @{make_string} st0)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Thm.prop_of st0: " ^ @{make_string} (Thm.prop_of st0))
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
-      "jeha called with theorems\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths))
+      "jeha called with theorems:\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths))
     fun handle_exception (e, state) = 
       if exists (curry (op =) "dump") options
         then
@@ -66,15 +69,15 @@ fun jeha_tac options ctxt ths i st0 =
             let val () =
               writeln ("total elapsed time until contradiction: " ^ @{make_string} time ^ " ms")
             in
-              if Config.get context Jeha_Common.proof_reconstruction
-                then reconstruct_proof final_state st
+              case Jeha_Common.get_proof_reconstruction_mode context of
                 (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
                 (* we provide #False *)
-                else ALLGOALS (Skip_Proof.cheat_tac context) st
+                Jeha_Common.None => ALLGOALS (Skip_Proof.cheat_tac context) st
+              | _ => reconstruct_proof final_state st
             end
         | ((Jeha.MaybeSat, final_state), _) => Seq.empty
         | ((Jeha.Next, final_state), _) => error "Bug: Next in final result")
-      ) ctxt i'
+      ) ctxt i' (* FIXME: why not ctxt'? *)
     val seq =
       (* SELECT_GOAL applies the tactic (it's first argument) to the selected
       subgoal, i.e. an element in the list
@@ -83,14 +86,13 @@ fun jeha_tac options ctxt ths i st0 =
           2. ...
           ... *)
       SELECT_GOAL
-        (EVERY
-          [ Object_Logic.atomize_prems_tac ctxt 1
+        (EVERY [ Object_Logic.atomize_prems_tac ctxt 1
           (* turn the goal
             A \<Longrightarrow> ... \<Longrightarrow> B
           into
             A \<Longrightarrow> ... \<Longrightarrow> \<not> B \<Longrightarrow> False *)
           , resolve_tac ctxt @{thms ccontr} 1
-          , tac ctxt 1 ] )
+          , tac ctxt 1 ])
         i
         st0
   in

@@ -829,6 +829,9 @@ to get the boolean implication simplifications from oSup. (Note oSup: "assuming 
 than \<longrightarrow>") *)
 (* Implementation of BoolRw, EqHoist, NeqHoist, ForallHoist and ExistsHoist.
 unifies u with boolean pattern, returns C<\<top>> or C<\<bottom>> and checks relevant conditions *)
+(* WARNING: Do not change disjunct_with, except for applying the appropriate unifier to it (i.e. no
+changing of maxidx). Proof reconstruction for \<forall>- and \<exists>Hoist relies on knowing the exact indexname of
+the variable x occuring in disjunct_with. *)
 fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   ctxt
   (c : JClause.T)
@@ -1041,7 +1044,7 @@ val infer_neq_hoist = impl_eq_neq_hoist false
 fun impl_forall_exists_hoist is_forall ctxt c u_pos =
   let
     val maxidx = JClause.maxidx c
-    val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt))
+    val fresh_typ = TVar (("'fresh_x_typ", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt))
     (* FIXME: use variable name from the quantifiers Abs. *)
     val fresh_x = Var (("x", maxidx + 1), fresh_typ)
     val fresh_predicate = Var (("y_faexhoist", maxidx + 1), fresh_typ --> @{typ bool})
@@ -1058,7 +1061,7 @@ fun impl_forall_exists_hoist is_forall ctxt c u_pos =
     impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos pattern true insert_for_u (SOME new_lit)
     |> map (fn (unifier, clause) => clause |> JClause.set_origin (
         (if is_forall then Jeha_Log.ForallHoist else Jeha_Log.ExistsHoist)
-          { premise = JClause.id c, subterm = u_pos, substitution = unifier }))
+          { premise = JClause.id c, subterm = u_pos, substitution = unifier, fresh_x = fresh_x }))
   end
 
 val infer_forall_hoist = impl_forall_exists_hoist true
