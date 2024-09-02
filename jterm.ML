@@ -35,11 +35,10 @@ struct
 
 fun ml_bool_of @{term True} = true
   | ml_bool_of @{term False} = false
-  | ml_bool_of _ = error "term is not HOL.True or HOL.False"
+  | ml_bool_of _ = error "ml_bool_of: term is not HOL.True or HOL.False"
 
 fun hol_bool_of true = @{term "True"}
   | hol_bool_of false = @{term "False"}
-  | hol_bool_of _ = error "term is not true of false"
 
 val negate_hol_bool = hol_bool_of o not o ml_bool_of
 
@@ -56,8 +55,8 @@ fun is_Abs (Abs _) = true
 fun quantified_typ (t as Const (_, T_to_bool_to_bool)) =
   if is_quantifier t
     then domain_type (domain_type (T_to_bool_to_bool))
-    else error "not a quantifier"
-  | quantified_typ _ = error ""
+    else error ("quantified_typ: not a quantifier:  " ^ @{make_string} t)
+  | quantified_typ t = error ("quantified_typ: got " ^ @{make_string} t)
 
 fun strip_comb_fun_types_args1 (boundTs, t) = error "strip_comb_fun_types_args1 incorrectly implemented"
   (* FIXME: the below returns the types of the arguments not the type arguments *)
@@ -82,7 +81,8 @@ fun subterm_at t [] = t
   you call the function from somewhere else, where a t has been declared it uses
   that. Scoping broken?? *)
   | subterm_at (t as (_$_)) (i :: p) = subterm_at (nth (uncurry cons (strip_comb t)) i) p
-  | subterm_at _ _ = error ""
+  | subterm_at t pos =
+      error ("subterm_at: Can't get subterm of " ^ @{make_string} t ^ " at tpos " ^ @{make_string} pos)
 
 fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
   | tposs_of (t as (_$_)) =
@@ -197,14 +197,16 @@ fun is_green_tpos [] _ = true
       can_have_green_args (head_of t) andalso is_green_tpos is (subterm_at t [i])
   | is_green_tpos _ _ = false
 
-fun head_tail_pair [] = error ""
+fun head_tail_pair [] = error "head_tail_pair: empty"
   | head_tail_pair (x :: xs) = (x, xs)
 
 fun map_at [] f t = f t
   | map_at (0 :: p) f (Abs(x,T,u)) = Abs(x,T,map_at p f u)
   | map_at (i :: p) f (t as (_$_)) =
       t |> strip_comb |> uncurry cons |> nth_map i (map_at p f) |> head_tail_pair |> list_comb
-  | map_at _ _ _ = error ""
+  | map_at pos _ t = error ("map_at: can't map subterm"
+      ^ " at pos " ^ @{make_string} pos
+      ^ " in term " ^ @{make_string} t)
 
 fun fold_non_greens_lvl (f : int -> term -> 'a -> 'a) (lvl : int) (t : term) (acc : 'a) =
   case t of
@@ -302,7 +304,7 @@ fun norm_quantifier_poly_eq t =
           ) 0 s false
         then SOME a
         else NONE
-      | bound_occurs_free_nongreen _ = error "not a \<lambda>-abstraction"
+      | bound_occurs_free_nongreen t = error ("bound_occurs_free_nongreen: not a \<lambda>-abstraction: " ^ @{make_string} t)
     fun rewrite_quantifier (t as Const(quantifier, _)) (x : string) =
       let
         val T = quantified_typ t
@@ -313,11 +315,11 @@ fun norm_quantifier_poly_eq t =
           | @{const_name HOL.Ex} =>
               HOLogic.mk_not
                 (HOLogic.mk_eq (Free("y", yT), Abs(x, T, @{term False})))
-          | _ => error "not a quantifier"
+          | t => error ("rewrite_quantifier: not a quantifier" ^ @{make_string} t)
       in
         absfree ("y", T --> HOLogic.boolT) body
       end
-      | rewrite_quantifier _ _ = error "not a constant"
+      | rewrite_quantifier t _ = error ("rewrite_quantifier: not a constant: " ^ @{make_string} t)
   in
     case t of
       (* case 1: lone term w/o args *)
