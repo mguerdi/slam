@@ -115,4 +115,7 @@ lemma forall_hoist_just_to_be_safe:
   "((\<forall>x. P x) = True \<Longrightarrow> (\<forall>x. P x) = False \<Longrightarrow> False) \<equiv> (\<And>x.((\<forall>x. P x) = True \<Longrightarrow> P x = False \<Longrightarrow> False))"
   by auto
 
+lemma not_atomize: "(\<not> A \<Longrightarrow> False) \<equiv> Trueprop A"
+by (cut_tac atomize_not [of "\<not> A"]) simp
+
 end

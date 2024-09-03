@@ -9,7 +9,7 @@ sig
   
   val reconstruct_with_metis : Proof.context -> (int -> JClause.T) -> int -> thm
   val instantiate : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
-  
+
   val fix_vars : Proof.context -> thm list -> cterm -> Proof.context * thm list * cterm
 
   (* FIXME: for debugging *)
@@ -19,48 +19,8 @@ sig
   val reconstruct_arg_cong : Proof.context -> int -> thm * int -> cterm -> thm 
 end;
 
-structure Jeha_Proof : JEHA_PROOF = 
+structure Jeha_Proof : JEHA_PROOF =
 struct
-
-(* from metis_reconstruct.ML *)
-(* with index 1 turn \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False into \<not>A \<Longrightarrow> \<not>C \<Longrightarrow> B *)
-(*Permute a rule's premises to move the i-th premise to the last position.*)
-fun make_last cpos th =
-  let
-    val n = Thm.nprems_of th
-    (* original function was 1-based *)
-    val i = cpos + 1
-  in
-    if i >= 1 andalso i <= n then Thm.permute_prems (i - 1) 1 th
-    else raise THM ("select_literal", i, [th])
-  end
-
-fun abstract_over_tpos (tpos, term, maxidx) =
-  let
-    val green_subterm = JTerm.subterm_at term tpos
-    (* Note: we can only compute the type because green subterms aren't below lambdas. *)
-    val T = fastype_of green_subterm
-    val varname = "subterm"
-    val fresh_var = Var ((varname, maxidx + 1), T) 
-    val term_with_fresh_var_at_tpos = JTerm.map_at tpos (K fresh_var) term
-    val lambda_inserting_argument_at_tpos =
-      Abs (varname, T, abstract_over (fresh_var, term_with_fresh_var_at_tpos))
-  in
-    lambda_inserting_argument_at_tpos
-  end
-
-(* Given t=t' and (p, L, maxidx) provides L<t>\<^sub>p = L<t'>\<^sub>p. *)
-fun congruence_wrt_tpos ctxt (equality : thm) tpos_term_maxidx =
-  let
-    (* t = t' therefore ?f t = ?f t' *)
-    val arg_cong_of_equality = @{thm arg_cong} OF [equality]
-    val abstracted_over_tpos =
-      abstract_over_tpos tpos_term_maxidx
-    val ct = Thm.cterm_of ctxt abstracted_over_tpos
-    val cT = Thm.ctyp_of ctxt (fastype_of abstracted_over_tpos)
-  in
-    Thm.instantiate' [SOME cT] [SOME ct] arg_cong_of_equality
-  end
 
 (* FIXME: see also Pure/ML/ml_instantiate.ML *)
 fun instantiate_norm ctxt (tyenv, tenv) thm =
@@ -142,6 +102,57 @@ fun reconstruct_arg_cong ctxt number_of_vars (premise, cpos) goal =
         (* THEN print_tac ctxt "D" *))
       |> Seq.hd
       |> Goal.finish ctxt
+  end
+  
+
+(* \<not> is to be viewed as a metafunction, i.e. \<not>D' is not a proper term but a list of assumptions:
+
+\<not>D' \<Longrightarrow> t /\<approx> t' \<Longrightarrow> False   \<not>C\<langle>t\<rangle>\<^sub>p \<Longrightarrow> False
+-------------------------------------------- GroundSup
+         \<not>D' \<Longrightarrow> \<not>C\<langle>t'\<rangle>\<^sub>p \<Longrightarrow> False
+*)
+fun reconstruct_sup
+  ctxt
+  (left_premise, clause_position, literal_orientation)
+  (right_premise, subterm_position)
+=
+  let
+    (* \<not>D' \<Longrightarrow> t \<approx> t' *)
+    val D'_imp_t_eq_t' =
+      left_premise
+      |> HClause.make_last clause_position
+      |> HClause.negate_head ctxt
+      |> (if literal_orientation = JLit.Left
+            then I
+            else HClause.orient_positive_consequent_lit literal_orientation)
+    val (ct, ct') =
+      D'_imp_t_eq_t'
+      |> Thm.concl_of
+      |> HOLogic.dest_Trueprop
+      |> HOLogic.dest_eq
+      |> apply2 (Thm.cterm_of ctxt)
+    val cT = Thm.ctyp_of_cterm ct
+    (* x \<mapsto> C\<langle>x\<rangle>\<^sub>p *)
+    val C_abs =
+      HClause.abstract_over_green_subterm
+        subterm_position
+        (Thm.prop_of right_premise)
+        (* We could do without this if we could assume that all schematic variables are fixed
+        because this variable is short lived anyways. *)
+        (Thm.maxidx_of right_premise)
+      |> Thm.cterm_of ctxt
+    val C_congruence_wrt_subterm_position =
+      (* Without PROP the parser refuses to read f as having return type prop (instead of bool). *)
+      \<^instantiate>\<open>x=ct and y=ct' and f=C_abs and 'a=cT in
+        lemma \<open>(x :: 'a) = y \<Longrightarrow> PROP f x \<Longrightarrow> PROP f y\<close> by auto\<close>
+    (* \<not>D' \<Longrightarrow> C t \<Longrightarrow> C t' *)
+    val notD'_imp_Ct_imp_Ct' = D'_imp_t_eq_t' RS C_congruence_wrt_subterm_position
+    val Ct_cpos = Logic.count_prems (Thm.prop_of left_premise) (* number of literals of D *)
+    (* FIXME: does right_premise just work here? *)
+    val notD'_imp_Ct' = Drule.compose (right_premise, Ct_cpos, notD'_imp_Ct_imp_Ct')
+  in
+    (* This is an HClause.T if right_premise is an HClause.T. *)
+    notD'_imp_Ct' 
   end
 
 (* fun forall_rw_lemma ctxt t =
