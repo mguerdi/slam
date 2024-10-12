@@ -39,6 +39,10 @@ sig
     , right_literal: JLit.lpos * JClause.cpos }
     -> HClause.hthm
   val reconstruct_eres: { premise: HClause.hthm, literal: JClause.cpos } -> HClause.hthm
+  val reconstruct_false_elim:
+    Proof.context
+    -> { premise: HClause.hthm, literal: JLit.lpos * JClause.cpos }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -260,14 +264,21 @@ fun reconstruct_efact {premise, left_literal, right_literal} =
     conclusion
   end
 
-fun reconstruct_false_elim _ =
+fun reconstruct_false_elim ctxt { premise, literal } =
   (* \<not>C' \<Longrightarrow> \<bottom> /\<approx> \<top> \<Longrightarrow> False *)
-  (* \<not>C' \<Longrightarrow> \<bottom> \<approx> \<top> *)            (* make_last of premise 0*)
+  (* \<not>C' \<Longrightarrow> \<bottom> \<approx> \<top> *)            (* make_last of premise *)
   (* Lemma *)
   (* \<bottom> \<approx> \<top> \<Longrightarrow> False *)
-  (* Drule.compose *)
+  (* Drule.comp_no_flatten *)
   (* \<not>C' \<Longrightarrow> False *)
-  error "reconstruct_false_elim unimplemented"
+  let
+    val C = premise
+      |> HClause.orient_lit_at literal
+      |> HClause.make_last (snd literal)
+      |> HClause.negate_head ctxt
+  in
+    Drule.comp_no_flatten (C, Thm.nprems_of C) 1 @{lemma \<open>False = True \<Longrightarrow> False\<close> by auto}
+  end
 
 fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
   let
