@@ -12,11 +12,33 @@ sig
 
   val fix_vars : Proof.context -> thm list -> cterm -> Proof.context * thm list * cterm
 
-  (* FIXME: for debugging *)
-  val get_lemmas : Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference -> cterm -> int -> thm list 
-  val get_instantiated_premises : Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference -> thm Inttab.table * thm list
+  (* for testing and debugging *) 
+  val get_lemmas:
+    Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference -> cterm -> int
+    -> thm list 
+  val get_instantiated_premises:
+    Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference
+    -> thm Inttab.table * thm list
   val resolve_against_arg_cong_contrapositive_n_times : Proof.context -> int -> thm * int -> thm
+  (* The records are modelled after those in Jeha_Log, but with int replace by HClause.htm *)
   val reconstruct_arg_cong : Proof.context -> int -> thm * int -> cterm -> thm 
+  val reconstruct_sup:
+    Proof.context
+    -> { left_premise: HClause.hthm
+       , literal: JLit.lpos * JClause.cpos
+       , right_premise: thm
+       , subterm: JClause.full_pos }
+    -> HClause.hthm
+  val reconstruct_delete_duplicated_lits:
+    { premise: HClause.hthm
+    , duplicate_cposs: { duplicate: JClause.cpos, duplicate_of: JClause.cpos } list }
+    -> HClause.hthm
+  val reconstruct_efact:
+    { premise: HClause.hthm
+    , left_literal: JLit.lpos * JClause.cpos
+    , right_literal: JLit.lpos * JClause.cpos }
+    -> HClause.hthm
+  val reconstruct_eres: { premise: HClause.hthm, literal: JClause.cpos } -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -113,26 +135,27 @@ fun reconstruct_arg_cong ctxt number_of_vars (premise, cpos) goal =
 *)
 fun reconstruct_sup
   ctxt
-  (left_premise, clause_position, literal_orientation)
-  (right_premise, subterm_position)
+  { left_premise
+  , right_premise
+  , literal = (literal_orientation, clause_position)
+  , subterm = subterm_position }
 =
   let
     (* \<not>D' \<Longrightarrow> t \<approx> t' *)
-    val D'_imp_t_eq_t' =
+    val notD'_imp_t_eq_t' =
       left_premise
       |> HClause.make_last clause_position
       |> HClause.negate_head ctxt
-      |> (if literal_orientation = JLit.Left
-            then I
-            else HClause.orient_positive_consequent_lit literal_orientation)
+      (* FIXME: Use HClause.orient_lit_at before negate_head. *)
+      |> HClause.orient_positive_consequent_lit literal_orientation
     val (ct, ct') =
-      D'_imp_t_eq_t'
+      notD'_imp_t_eq_t'
       |> Thm.concl_of
       |> HOLogic.dest_Trueprop
       |> HOLogic.dest_eq
       |> apply2 (Thm.cterm_of ctxt)
     val cT = Thm.ctyp_of_cterm ct
-    (* x \<mapsto> C\<langle>x\<rangle>\<^sub>p *)
+    (* x \<mapsto> (\<not>C\<langle>x\<rangle>\<^sub>p \<Longrightarrow> False) *)
     val C_abs =
       HClause.abstract_over_green_subterm
         subterm_position
@@ -145,14 +168,125 @@ fun reconstruct_sup
       (* Without PROP the parser refuses to read f as having return type prop (instead of bool). *)
       \<^instantiate>\<open>x=ct and y=ct' and f=C_abs and 'a=cT in
         lemma \<open>(x :: 'a) = y \<Longrightarrow> PROP f x \<Longrightarrow> PROP f y\<close> by auto\<close>
-    (* \<not>D' \<Longrightarrow> C t \<Longrightarrow> C t' *)
-    val notD'_imp_Ct_imp_Ct' = D'_imp_t_eq_t' RS C_congruence_wrt_subterm_position
+    (* \<not>D' \<Longrightarrow> (\<not>C t \<Longrightarrow> False) \<Longrightarrow> (\<not>C t' \<Longrightarrow> False) *)
+    val notD'_imp_Ct_imp_Ct' = notD'_imp_t_eq_t' RS C_congruence_wrt_subterm_position
     val Ct_cpos = Logic.count_prems (Thm.prop_of left_premise) (* number of literals of D *)
-    (* FIXME: does right_premise just work here? *)
+    (* compose (\<not>C t \<Longrightarrow> False) and (\<not>D' \<Longrightarrow> (\<not>C t \<Longrightarrow> False) \<Longrightarrow> (\<not>C t' \<Longrightarrow> False))
+    obtaining \<not>D' \<Longrightarrow> (\<not>C t' \<Longrightarrow> False) *)
     val notD'_imp_Ct' = Drule.compose (right_premise, Ct_cpos, notD'_imp_Ct_imp_Ct')
   in
     (* This is an HClause.T if right_premise is an HClause.T. *)
     notD'_imp_Ct' 
+  end
+
+(*
+\<not>C' \<Longrightarrow> u=u \<Longrightarrow> False
+--------------------- ERes
+    \<not>C' \<Longrightarrow> False
+*)
+fun reconstruct_eres {premise, literal} =
+  let
+    val (u, _, false) = HClause.dest_lit_at literal premise 
+    val uT = Thm.ctyp_of_cterm u
+  in
+    Drule.compose
+    ( \<^instantiate>\<open>u=u and 'a=uT in lemma \<open>(u :: 'a) = u\<close> by auto\<close>
+    , literal + 1 (* convert JClause.cpos to 1-based *)
+    , premise )
+  end
+
+(*
+\<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u /\<approx> v \<Longrightarrow> False
+------------------------------------- EFact
+\<not>C' \<Longrightarrow> v \<approx> v' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> False
+*)
+fun reconstruct_efact {premise, left_literal, right_literal} =
+  (* Premise *)
+  (* u /\<approx> v' \<Longrightarrow> u /\<approx> v \<Longrightarrow> False *)
+  (* Conclusion *)
+  (* u /\<approx> v' \<Longrightarrow> v \<approx> v' \<Longrightarrow> False *)
+
+  (* Rewriting clause: *)
+  (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u \<approx> v *)    (* make_last of premise *)
+  (* Lemma: *)
+  (* u /\<approx> v' \<Longrightarrow> u \<approx> v' \<Longrightarrow> False *)
+  (*              ^-rewrite here   *)
+  (* Result *)
+  (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> v \<approx> v' \<Longrightarrow> False *)
+  (* To remove double literal *)
+    (* Lemma *)
+    (* (A \<Longrightarrow> A \<Longrightarrow> B \<Longrightarrow> False) \<Longrightarrow> (A \<Longrightarrow> B \<Longrightarrow> False) *)
+    (* Drule.compose ? FIXME: ??? *)
+  let
+    (* left_literal and right_literal refer to the rule in the paper, not to how they are actually
+    ordered in the premise. *)
+    val () = \<^assert> ((snd left_literal : JClause.cpos) <> snd right_literal)
+    val premise = 
+      premise
+      |> HClause.orient_lit_at left_literal
+      |> HClause.orient_lit_at right_literal
+    val (_, [u, v]) =
+      (Thm.cprem_of premise (snd right_literal + 1))
+      |> Thm.dest_arg (* dest_Trueprop *)
+      |> Thm.dest_arg (* strip negation *)
+      |> Drule.strip_comb
+    val (_, [_, v']) =
+      (Thm.cprem_of premise (snd left_literal + 1))
+      |> Thm.dest_arg (* dest_Trueprop *)
+      |> Thm.dest_arg (* strip negation *)
+      |> Drule.strip_comb
+    val left_literal_cpos = snd left_literal
+    val right_literal_cpos = snd right_literal
+    val left_literal_left_of_right_literal_in_premise = left_literal_cpos < right_literal_cpos
+    val C =
+      premise
+      |> HClause.make_last left_literal_cpos
+      |> HClause.make_last (
+          right_literal_cpos
+          (* Moving a list element past another (to the right) decrements the latter's index. *)
+          + (if left_literal_left_of_right_literal_in_premise then ~1 else 0))
+    val length_of_C' = Thm.nprems_of premise - 2
+    val uT = Thm.ctyp_of_cterm u
+    val lemma = \<^instantiate>\<open>u=u and v=v and v'=v' and 'a = uT in
+      lemma \<open>((u :: 'a) \<noteq> v' \<Longrightarrow> u \<noteq> v \<Longrightarrow> False) \<Longrightarrow> v = v' \<Longrightarrow> u \<noteq> v' \<Longrightarrow> False\<close>
+      by auto\<close>
+    val D = Drule.comp_no_flatten (C, length_of_C') 1 lemma
+    (* Rotate back, compare JClause.add_literal. Note: cpos, i.e. 0-based *)
+    val conclusion =
+      D
+      |> HClause.move_last_to 0
+      |> HClause.move_last_to 1
+  in
+    conclusion
+  end
+
+fun reconstruct_false_elim _ =
+  (* \<not>C' \<Longrightarrow> \<bottom> /\<approx> \<top> \<Longrightarrow> False *)
+  (* \<not>C' \<Longrightarrow> \<bottom> \<approx> \<top> *)            (* make_last of premise 0*)
+  (* Lemma *)
+  (* \<bottom> \<approx> \<top> \<Longrightarrow> False *)
+  (* Drule.compose *)
+  (* \<not>C' \<Longrightarrow> False *)
+  error "reconstruct_false_elim unimplemented"
+
+fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
+  let
+    val () = \<^assert> (duplicate_of < duplicate)
+  in
+    premise
+    |> HClause.make_last duplicate_of
+    |> HClause.make_last duplicate 
+    |> HClause.merge_duplicated_lit_last
+    |> HClause.move_last_to duplicate_of
+  end
+
+(* fun reconstruct_delete_duplicated_lits { premise = premise, literal, duplicate } = *)
+fun reconstruct_delete_duplicated_lits { premise, duplicate_cposs } =
+  let
+    (* jeha.ML already guarantees this, just to be safe *)
+    val sorted = sort (rev_order o int_ord o apply2 #duplicate) duplicate_cposs
+  in
+    fold impl_delete_duplicated_lit sorted premise
   end
 
 (* fun forall_rw_lemma ctxt t =
@@ -392,6 +526,7 @@ fun impl_reconstruct_with_metis
         in
           final_goal_fixed
         end
+      | Jeha_Common.Manual => error "Manual proof should happen at an earlier point"
       | Jeha_Common.None => error "We're in proof reconstruction even though it has beeen disabled."
 
     val proved_conclusion_fixed = Goal.finish ctxt final_goal_fixed

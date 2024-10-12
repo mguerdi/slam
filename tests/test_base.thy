@@ -11,4 +11,10 @@ setup \<open>Jeha_Common.term_pat_setup\<close>
 setup \<open>Jeha_Common.term_schem_setup\<close>
 setup \<open>Jeha_Common.type_pat_setup\<close>
 
+ML \<open>
+  fun cant f x = (not oo Basics.can) f x
+  fun report cant = if cant then () else raise General.Fail "Did not raise exception"
+  val _ = Theory.setup (ML_Antiquotation.special_form \<^binding>\<open>assert_cant\<close> "() |> (report oo cant)")
+\<close>
+
 end

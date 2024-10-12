@@ -66,3 +66,14 @@ session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
     (* kbo.thy *)
     (* index.thy *)
     (* smash_unify_fluid.thy *)
+
+session "JEHA_TEST_RECONSTRUCTION" in Reconstruction = JEHA_TEST_BASE +
+  description "
+    proof reconstruction unit tests
+  "
+  theories
+    dd
+    efact
+    eres
+    hclause
+    sup

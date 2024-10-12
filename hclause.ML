@@ -1,14 +1,20 @@
 signature HCLAUSE =
 sig
+  (* s = t \<Longrightarrow> u \<noteq> v \<Longrightarrow> ... \<Longrightarrow> False *)
   type hterm (* = term *)
   type hcterm (* = cterm *)
   type hthm (* = thm *)
 
   val make_last: JClause.cpos -> hthm -> hthm
-  val negate_head: Proof.context -> hthm -> hthm 
-  val green_subterm_at_full_pos: hterm -> JClause.full_pos -> hterm
-  val term_at_lpos: hterm -> JLit.lpos -> hterm
-  val negated_lit_at: JClause.cpos -> hterm -> hterm 
+  val move_last_to: JClause.cpos -> hthm -> hthm
+  val move_from_to: JClause.cpos -> JClause.cpos -> hthm -> hthm
+  val negate_head: Proof.context -> hthm -> thm 
+  val green_subterm_at_full_pos: hterm -> JClause.full_pos -> term
+  val term_at_lpos: term -> JLit.lpos -> term
+  val negated_lit_trueprop_cterm_at: JClause.cpos -> hthm -> cterm
+  val negated_lit_trueprop_term_at: JClause.cpos -> hterm -> term
+  val dest_lit_at: JClause.cpos -> hthm -> hcterm * hcterm * bool (* compare JLit.T *)
+  val orient_lit_at: (JLit.lpos * JClause.cpos) -> hthm -> hthm
   (* Does not operate on hclauses! *)
   val orient_positive_consequent_lit: JLit.lpos -> thm -> thm
   val abstract_over_green_subterm: JClause.full_pos -> hterm -> int -> hterm
@@ -16,6 +22,9 @@ sig
   val map_green_subterm_at_full_pos: JClause.full_pos -> (term -> term) -> hterm -> hterm
 
   val hol_of_clause: Proof.context -> bool -> JClause.T -> hcterm
+  
+  val merge_duplicated_lit_last: hthm -> hthm 
+  
   (* Don't use this. *)
   val cterm_of: hcterm -> cterm
   val term_of: hcterm -> term
@@ -24,11 +33,14 @@ end
 structure HClause: HCLAUSE =
 struct
 
+val dest_Trueprop = Thm.dest_arg
+
 (* s = t \<Longrightarrow> u \<noteq> v \<Longrightarrow> ... \<Longrightarrow> False *)
 (* The antecedents are called negated (!) literals. *)
 (* Properties:
   1. Every antecedent is either an equality or an inequality (no double negations!)
   2. The consequent is "False" *)
+(* FIXME: Use constructors to make these opaque? *)
 type hterm = term
 type hcterm = cterm
 type hthm = thm
@@ -60,21 +72,69 @@ fun make_last cpos th =
     else raise THM ("make_last", i, [th])
   end
 
+(* Like make_last but rotate right by one instead of left. *)
+fun move_last_to cpos th =
+  let
+    val n = Thm.nprems_of th
+    val i = cpos + 1
+  in
+    if i >= 1 andalso i <= n then Thm.permute_prems (i - 1) ~1 th
+    else raise THM ("move_last_to", i, [th])
+  end
+
+fun move_from_to (from: JClause.cpos) (to: JClause.cpos) = move_last_to to o make_last from
+
 (* \<not>C' \<Longrightarrow> t \<approx> t' *)
 (* see JLit.orient *)
 (* FIXME: needs to work for disequations? *)
 fun orient_positive_consequent_lit JLit.Left C = C
-  | orient_positive_consequent_lit JLit.Right C = C COMP_INCR @{thm HOL.sym}
+  | orient_positive_consequent_lit JLit.Right C =
+      Drule.comp_no_flatten (C, Thm.nprems_of C) 1 (Drule.incr_indexes C @{thm HOL.sym})
 
 (* Given 1 and (\<not>A \<Longrightarrow> \<not>B \<Longrightarrow> False) returns \<not>B.
 Terminology: A and B are the literals of the above clause! *)
-fun negated_lit_at cpos hol_clause = 
+fun negated_lit_trueprop_cterm_at cpos hol_clause = 
   let
-    val negated_lits = Logic.strip_imp_prems hol_clause
-    val () = \<^assert> (@{prop "False"} = Logic.strip_imp_concl hol_clause)
+    val negated_lits = Drule.strip_imp_prems (Thm.cprop_of hol_clause)
+    val () = \<^assert> (@{cprop "False"} aconvc Drule.strip_imp_concl (Thm.cprop_of hol_clause))
   in
     nth negated_lits cpos
   end
+
+fun dest_lit_at cpos hol_clause =
+  let
+    val negated_lit = Thm.dest_arg (negated_lit_trueprop_cterm_at cpos hol_clause)
+    val negated_lit_is_positive = not (can HOLogic.dest_not (Thm.term_of negated_lit))
+    val (left, right) =
+      negated_lit
+      |> (if negated_lit_is_positive then I else Thm.dest_arg)
+      |> Drule.strip_comb 
+      |> (fn (_, [left, right]) => (left, right))
+  in
+    (left, right, not negated_lit_is_positive)
+  end
+
+(* Given 1 and (\<not>A \<Longrightarrow> \<not>B \<Longrightarrow> False) returns \<not>B.
+Terminology: A and B are the literals of the above clause! *)
+fun negated_lit_trueprop_term_at cpos hol_clause =
+  let
+    val negated_lits = Logic.strip_imp_prems hol_clause
+    val () = \<^assert> (@{prop "False"} aconv Logic.strip_imp_concl (hol_clause))
+  in
+    nth negated_lits cpos
+  end
+
+(* compare JLit.orient *)
+fun orient_lit_at (JLit.Left, _) hclause = hclause
+  | orient_lit_at (JLit.Right, cpos) hclause =
+      let
+        val negated_lit =
+          HOLogic.dest_Trueprop (negated_lit_trueprop_term_at cpos (Thm.prop_of hclause))
+        val is_positive = can HOLogic.dest_not negated_lit
+        val lemma = if is_positive then @{thm "HOL.not_sym"} else @{thm "HOL.sym"}
+      in
+        lemma RSN (cpos + 1, hclause)
+      end
 
 fun map_equality_at_lpos JLit.Left f (Const ("HOL.eq", _) $ x $ y) = HOLogic.mk_eq (f x, y)
   | map_equality_at_lpos JLit.Right f (Const ("HOL.eq", _) $ x $ y) = HOLogic.mk_eq (x, f y)
@@ -109,7 +169,7 @@ Must-haves:
 of o\<lambda>Sup and the one used in proof reconstruction. *)
 fun green_subterm_at_full_pos hol_clause (tp, lp, cp) =
   let
-    val negated_literal = HOLogic.dest_Trueprop (negated_lit_at cp hol_clause)
+    val negated_literal = HOLogic.dest_Trueprop (negated_lit_trueprop_term_at cp hol_clause)
     (* Note: Doesn't matter if we do this with the literal or the negated literal. *)
     val side_of_literal = term_at_lpos negated_literal lp
   in
@@ -161,12 +221,12 @@ fun hol_clause_pos_of_full_pos ((tpos, lpos, cpos), target_literal_is_positive) 
 
 fun proof_steps_of_inference *)
 
-(* turn jeha clause [A, B, C] into formula \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False *)
+(* Turn jeha clause [A, B, C] into formula \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False, avoiding double negations. *)
 fun hol_of_clause ctxt close c =
   let
     val negated_literals = 
       JClause.literals c
-      |> map (fn (s, t, b) => (s, t, not b))
+      |> map (fn (s, t, b) => (s, t, not b)) (* avoid double negations *)
       |> map JLit.term_of
       |> map HOLogic.mk_Trueprop
     (* FIXME: remove *)
@@ -193,7 +253,7 @@ fun abstract_over_green_subterm full_pos hol_clause maxidx =
     val T = fastype_of green_subterm
     val varname = "subterm_at_full_pos"
     val fresh_var = Var ((varname, maxidx + 1), T)
-    val term_with_fresh_var_at_tpos = map_green_subterm_at_full_pos full_pos (K fresh_var) hol_clause
+    val term_with_fresh_var_at_tpos: hterm = map_green_subterm_at_full_pos full_pos (K fresh_var) hol_clause
     val lambda_inserting_argument_at_tpos =
       Abs (varname, T, abstract_over (fresh_var, term_with_fresh_var_at_tpos))
   in
@@ -215,5 +275,31 @@ fun congruence_wrt_tpos ctxt (equality : thm) tpos_term_maxidx =
     Thm.instantiate' [SOME cT] [SOME ct] arg_cong_of_equality
   end
 *)
+
+(* C = \<not>C' \<Longrightarrow> A \<Longrightarrow> A \<Longrightarrow> False *)
+(* ============================= *)
+(*      \<not>C' \<Longrightarrow> A \<Longrightarrow> False      *)
+fun merge_duplicated_lit_last C =
+  let
+    val length_of_C' = Thm.nprems_of C - 2
+    val A = Thm.dest_arg (Thm.cprem_of C (Thm.nprems_of C))
+    val () = \<^assert> ((Thm.term_of A) aconv Thm.term_of (Thm.dest_arg (Thm.cprem_of C (Thm.nprems_of C - 1))))
+    val lemma = \<^instantiate>\<open>P = A in lemma \<open>(P \<Longrightarrow> P \<Longrightarrow> False) \<Longrightarrow> P \<Longrightarrow> False\<close> by auto\<close>
+                                            (* ^^^^^^^^^^^^^^ *)
+                                            (*      |         *)
+    val D = Drule.comp_no_flatten (C, length_of_C') 1 lemma
+      (* See also: comp_hhf_tac (Pure/Isar/proof_context.ML) *)
+      (* Thm.bicompose
+        (SOME ctxt)
+        {flatten = false,  match = false, incremented = false}
+        (false, C, 1)
+        1
+        lemma
+      |> Seq.hd *)
+  in
+    D 
+  end
+
+
 
 end

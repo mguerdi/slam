@@ -147,15 +147,15 @@ fun simp_delete_duplicated_lits ctxt c =
     val cposs_of_dups =
       fold_index
         (fn (i, l) => fn (dup_is, head_list) =>
-          if exists (curry JLit.aconv l) head_list
-            (* duplicate of l has already been seen *)
-            then (i::dup_is, head_list)
+          (case find_index (curry JLit.aconv l) head_list of
             (* l is new, add it to the seen lits *)
-            else (dup_is, l::head_list))
+              ~1 => (dup_is, l::head_list)
+            (* duplicate of l has already been seen *)
+            | index_of_existing => ({duplicate_of = index_of_existing, duplicate = i}::dup_is, head_list)))
         (JClause.literals c)
         ([], [])
       |> fst
-    val c' = fold JClause.delete_lit_at cposs_of_dups c
+    val c' = fold JClause.delete_lit_at (map #duplicate cposs_of_dups) c
   in
     if JClause.length c' = JClause.length c
       then NONE
@@ -165,7 +165,7 @@ fun simp_delete_duplicated_lits ctxt c =
         SOME (
           JClause.refresh_id () c'
           |> JClause.set_origin
-            (Jeha_Log.DeleteDuplicatedLits { premise = JClause.id c})
+            (Jeha_Log.DeleteDuplicatedLits { premise = JClause.id c, dups_mapping = cposs_of_dups })
         ))
   end
   (* ) *)

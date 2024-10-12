@@ -38,7 +38,7 @@ sig
   val trace_msg_simp_results : Proof.context -> (unit -> string) -> unit
 
   val proof_reconstruction : string Config.T
-  datatype proof_reconstruction_mode = None | Argo | Metis | Blast
+  datatype proof_reconstruction_mode = None | Argo | Metis | Blast | Manual
   val get_proof_reconstruction_mode : Proof.context -> proof_reconstruction_mode
 
   val term_pat_setup : theory -> theory
@@ -143,21 +143,23 @@ fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_m
 (* internal *)
 fun trace_msg_simp_results ctxt msg = if Config.get ctxt trace_simp_results then trace_msg ctxt msg else ();
 
-datatype proof_reconstruction_mode = None | Argo | Metis | Blast
+datatype proof_reconstruction_mode = None | Argo | Metis | Blast | Manual
 
 fun string_of_proof_reconstruction_mode None = "none"
   | string_of_proof_reconstruction_mode Argo = "argo"
   | string_of_proof_reconstruction_mode Metis = "metis"
   | string_of_proof_reconstruction_mode Blast = "blast"
+  | string_of_proof_reconstruction_mode Manual = "manual"
 
 fun parse_proof_reconstruction_mode "none" = None
   | parse_proof_reconstruction_mode "argo" = Argo
   | parse_proof_reconstruction_mode "metis" = Metis
   | parse_proof_reconstruction_mode "blast" = Blast
+  | parse_proof_reconstruction_mode "manual" = Manual
   | parse_proof_reconstruction_mode s = error
       ( "Not a valid jeha proof reconstruction mode: "
       ^ s
-      ^ " (must be either of \"none\", \"argo\", \"metis\" or \"blast\")" )
+      ^ " (must be either of \"none\", \"argo\", \"metis\", \"blast\" or \"manual\")" )
 
 val proof_reconstruction =
   Attrib.setup_config_string
