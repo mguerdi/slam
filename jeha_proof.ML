@@ -47,6 +47,14 @@ sig
     Proof.context
     -> { premise: HClause.hthm, subterm: JClause.full_pos }
     -> HClause.hthm
+  val reconstruct_eq_hoist:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos }
+    -> HClause.hthm
+  val reconstruct_neq_hoist:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -309,9 +317,48 @@ fun reconstruct_bool_hoist ctxt { premise, subterm = subterm_position } =
         , right_premise = premise
         , subterm = subterm_position }
   in
-    HClause.make_last 0 conclusion_from_sup 
+    HClause.make_last 0 conclusion_from_sup
   end
-  
+
+fun reconstruct_eq_hoist ctxt { premise, subterm = subterm_position } =
+  let
+    val (x, y) =
+      HClause.green_subterm_at_full_pos (Thm.prop_of premise) subterm_position
+      |> HOLogic.dest_eq
+      |> apply2 (Thm.cterm_of ctxt)
+    val T = Thm.ctyp_of_cterm x
+    val lemma = \<^instantiate>\<open>x=x and y=y and 'a=T in lemma \<open>(x :: 'a) \<noteq> y \<Longrightarrow> (x = y) \<noteq> False \<Longrightarrow> False\<close> by auto\<close>
+    val conclusion_from_sup = 
+      reconstruct_sup
+        ctxt
+        { left_premise = lemma
+        , literal = (JLit.Left, 1)
+        , right_premise = premise
+        , subterm = subterm_position }
+  in
+    HClause.make_last 0 conclusion_from_sup
+  end
+
+fun reconstruct_neq_hoist ctxt { premise, subterm = subterm_position } =
+  let
+    val (x, y) =
+      HClause.green_subterm_at_full_pos (Thm.prop_of premise) subterm_position
+      |> snd o dest_comb (* remove \<not> *)
+      |> HOLogic.dest_eq
+      |> apply2 (Thm.cterm_of ctxt)
+    val T = Thm.ctyp_of_cterm x
+    val lemma = \<^instantiate>\<open>x=x and y=y and 'a=T in lemma \<open>(x :: 'a) \<noteq> y \<Longrightarrow> (x \<noteq> y) \<noteq> True \<Longrightarrow> False\<close> by auto\<close>
+    val conclusion_from_sup = 
+      reconstruct_sup
+        ctxt
+        { left_premise = lemma
+        , literal = (JLit.Left, 1)
+        , right_premise = premise
+        , subterm = subterm_position }
+  in
+    HClause.make_last 0 conclusion_from_sup
+  end
+
 (* fun reconstruct_delete_duplicated_lits { premise = premise, literal, duplicate } = *)
 fun reconstruct_delete_duplicated_lits { premise, duplicate_cposs } =
   let
@@ -372,7 +419,7 @@ fun forall_hoist_lemma ctxt clause_db (Jeha_Log.ForallHoist args) =
 
 fun exists_hoist_lemma ctxt clause_db (Jeha_Log.ExistsHoist args) =
   impl_forall_exists_hoist_lemma ctxt clause_db false args
-    
+
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
 (* some inference rules require additional lemmas *)
