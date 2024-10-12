@@ -43,6 +43,10 @@ sig
     Proof.context
     -> { premise: HClause.hthm, literal: JLit.lpos * JClause.cpos }
     -> HClause.hthm
+  val reconstruct_bool_hoist:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -291,6 +295,23 @@ fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
     |> HClause.move_last_to duplicate_of
   end
 
+fun reconstruct_bool_hoist ctxt { premise, subterm = subterm_position } =
+  let
+    val subterm =
+      HClause.green_subterm_at_full_pos (Thm.prop_of premise) subterm_position
+      |> Thm.cterm_of ctxt 
+    val lemma = \<^instantiate>\<open>x=subterm in lemma \<open>x \<noteq> True \<Longrightarrow> x \<noteq> False \<Longrightarrow> False\<close> by auto\<close>
+    val conclusion_from_sup =
+      reconstruct_sup
+        ctxt
+        { left_premise = lemma
+        , literal = (JLit.Left, 1)
+        , right_premise = premise
+        , subterm = subterm_position }
+  in
+    HClause.make_last 0 conclusion_from_sup 
+  end
+  
 (* fun reconstruct_delete_duplicated_lits { premise = premise, literal, duplicate } = *)
 fun reconstruct_delete_duplicated_lits { premise, duplicate_cposs } =
   let
