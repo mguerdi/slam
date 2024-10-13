@@ -6,22 +6,22 @@ sig
   (* val hol_thm_of_clause : Proof.context -> (int -> JClause.T) -> int -> thm *)
   (* elaborates a \<lambda>oSup inference into a series of more smaller proof steps *)
   (* val fun proof_steps_of_inference : Jeha_Log.inference -> proof_step *)
-  
+
   val reconstruct_with_metis : Proof.context -> (int -> JClause.T) -> int -> thm
   val instantiate : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
 
   val fix_vars : Proof.context -> thm list -> cterm -> Proof.context * thm list * cterm
 
-  (* for testing and debugging *) 
+  (* for testing and debugging *)
   val get_lemmas:
     Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference -> cterm -> int
-    -> thm list 
+    -> thm list
   val get_instantiated_premises:
     Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference
     -> thm Inttab.table * thm list
   val resolve_against_arg_cong_contrapositive_n_times : Proof.context -> int -> thm * int -> thm
   (* The records are modelled after those in Jeha_Log, but with int replace by HClause.htm *)
-  val reconstruct_arg_cong : Proof.context -> int -> thm * int -> cterm -> thm 
+  val reconstruct_arg_cong : Proof.context -> int -> thm * int -> cterm -> thm
   val reconstruct_sup:
     Proof.context
     -> { left_premise: HClause.hthm
@@ -82,7 +82,7 @@ fun instantiate_norm ctxt (tyenv, tenv) thm =
   in
     Thm.instantiate (TVars.make instsT, Vars.make insts) thm
   end
-  
+
 fun instantiate_norm_with_env ctxt env = instantiate_norm ctxt (Envir.type_env env, Envir.term_env env)
 
 fun instantiate ctxt (tyenv, tenv) thm =
@@ -141,7 +141,7 @@ fun reconstruct_arg_cong ctxt number_of_vars (premise, cpos) goal =
       |> Seq.hd
       |> Goal.finish ctxt
   end
-  
+
 
 (* \<not> is to be viewed as a metafunction, i.e. \<not>D' is not a proper term but a list of assumptions:
 
@@ -192,7 +192,7 @@ fun reconstruct_sup
     val notD'_imp_Ct' = Drule.compose (right_premise, Ct_cpos, notD'_imp_Ct_imp_Ct')
   in
     (* This is an HClause.T if right_premise is an HClause.T. *)
-    notD'_imp_Ct' 
+    notD'_imp_Ct'
   end
 
 (*
@@ -202,7 +202,7 @@ fun reconstruct_sup
 *)
 fun reconstruct_eres {premise, literal} =
   let
-    val (u, _, false) = HClause.dest_lit_at literal premise 
+    val (u, _, false) = HClause.dest_lit_at literal premise
     val uT = Thm.ctyp_of_cterm u
   in
     Drule.compose
@@ -237,7 +237,7 @@ fun reconstruct_efact {premise, left_literal, right_literal} =
     (* left_literal and right_literal refer to the rule in the paper, not to how they are actually
     ordered in the premise. *)
     val () = \<^assert> ((snd left_literal : JClause.cpos) <> snd right_literal)
-    val premise = 
+    val premise =
       premise
       |> HClause.orient_lit_at left_literal
       |> HClause.orient_lit_at right_literal
@@ -298,7 +298,7 @@ fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
   in
     premise
     |> HClause.make_last duplicate_of
-    |> HClause.make_last duplicate 
+    |> HClause.make_last duplicate
     |> HClause.merge_duplicated_lit_last
     |> HClause.move_last_to duplicate_of
   end
@@ -307,7 +307,7 @@ fun reconstruct_bool_hoist ctxt { premise, subterm = subterm_position } =
   let
     val subterm =
       HClause.green_subterm_at_full_pos (Thm.prop_of premise) subterm_position
-      |> Thm.cterm_of ctxt 
+      |> Thm.cterm_of ctxt
     val lemma = \<^instantiate>\<open>x=subterm in lemma \<open>x \<noteq> True \<Longrightarrow> x \<noteq> False \<Longrightarrow> False\<close> by auto\<close>
     val conclusion_from_sup =
       reconstruct_sup
@@ -328,7 +328,7 @@ fun reconstruct_eq_hoist ctxt { premise, subterm = subterm_position } =
       |> apply2 (Thm.cterm_of ctxt)
     val T = Thm.ctyp_of_cterm x
     val lemma = \<^instantiate>\<open>x=x and y=y and 'a=T in lemma \<open>(x :: 'a) \<noteq> y \<Longrightarrow> (x = y) \<noteq> False \<Longrightarrow> False\<close> by auto\<close>
-    val conclusion_from_sup = 
+    val conclusion_from_sup =
       reconstruct_sup
         ctxt
         { left_premise = lemma
@@ -348,7 +348,7 @@ fun reconstruct_neq_hoist ctxt { premise, subterm = subterm_position } =
       |> apply2 (Thm.cterm_of ctxt)
     val T = Thm.ctyp_of_cterm x
     val lemma = \<^instantiate>\<open>x=x and y=y and 'a=T in lemma \<open>(x :: 'a) \<noteq> y \<Longrightarrow> (x \<noteq> y) \<noteq> True \<Longrightarrow> False\<close> by auto\<close>
-    val conclusion_from_sup = 
+    val conclusion_from_sup =
       reconstruct_sup
         ctxt
         { left_premise = lemma
@@ -477,7 +477,7 @@ fun get_lemmas _ _ _ (Jeha_Log.EqHoist _) _ maxidx = [Thm.incr_indexes (maxidx +
 
 fun fix_vars ctxt instantiated_premises_thms conclusion_prop =
   let
-    (* val vars = 
+    (* val vars =
       []
       |> fold (Term.add_vars o Thm.prop_of) instantiated_premises_thms
       |> Term.add_vars (Thm.term_of conclusion_prop)
@@ -513,32 +513,26 @@ fun impl_reconstruct_with_metis
   id
 =
   let
-    val clause =
-      clause_db id
+    val clause = clause_db id
     val conclusion = HClause.hol_of_clause ctxt false clause
-
     val origin = JClause.origin (clause_db id)
-    
     (* recursive calls *)
     val (new_reconstructed_clause_db, instantiated_premises) = get_instantiated_premises ctxt clause_db reconstructed_clause_db origin
-    
     val maxidx = fold Thm.maxidx_thm instantiated_premises (JClause.maxidx clause)
-    
+
     (* only start logging after the recursive calls to avoid nesting *)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "START PROOF")
     val _ = Jeha_Common.trace_msg ctxt (fn () => "clause: " ^ JClause.pretty_clause ctxt (clause_db id))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "origin: " ^ (* @{make_string} *) Jeha_Log.pretty ctxt (JClause.origin (clause_db id)))
-
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Instantiated Premises: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) instantiated_premises))
-    
-    val lemmas = get_lemmas ctxt clause_db new_reconstructed_clause_db origin conclusion maxidx
-    
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "Lemmas:" ^ space_implode "\n" (map (Thm.string_of_thm ctxt) lemmas))
 
+    val lemmas = get_lemmas ctxt clause_db new_reconstructed_clause_db origin conclusion maxidx
+
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Lemmas:" ^ space_implode "\n" (map (Thm.string_of_thm ctxt) lemmas))
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.term_of conclusion)))
 
     val goal = Goal.init conclusion
-    
+
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Goal: " ^ Thm.string_of_thm ctxt goal)
 
     (* Idea: fix only those variables occuring in the premises. Fix those variables in the lemma.
@@ -546,12 +540,11 @@ fun impl_reconstruct_with_metis
     the lemma (this operation might take care of renaming). *)
     val ((tables, goal_fixed::instantiated_premises_fixed), ctxt_fixed) =
       Variable.import false (goal::instantiated_premises) ctxt
-
     (* Use tables to replace variables in the lemma by fixed variants of the premise variables. *)
     (* This works because the all variables occuring in the lemmas that are not from the
     substitution, have index greater than the maxidx of the premises and the conclusion *)
     val lemmas_fixed = map (Thm.instantiate tables) lemmas
-    
+
     (* Idea: fix variables in the substitution before instantiating the lemma. Then name apart the lemma. *)
     (* How: Envir.env consists of two Vartab's which have map functions that we can use to replace
     the original terms by their fixed variants. *)
@@ -560,7 +553,7 @@ fun impl_reconstruct_with_metis
     val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Fixed Instantiated Premises: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) instantiated_premises_fixed))
     val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Fixed Lemmas: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) lemmas_fixed))
     val _ = Jeha_Common.trace_msg ctxt_fixed (fn () => "Proving Fixed Goal: " ^ Thm.string_of_thm ctxt goal_fixed)
-    
+
     val final_goal_fixed =
       case Jeha_Common.get_proof_reconstruction_mode ctxt of
         Jeha_Common.Metis =>
@@ -578,7 +571,7 @@ fun impl_reconstruct_with_metis
               instantiated_premises_fixed
               (ctxt_fixed, goal_fixed)
             |> Seq.pull
-        in 
+        in
           final_goal_fixed
         end
       | Jeha_Common.Argo =>
@@ -592,7 +585,7 @@ fun impl_reconstruct_with_metis
             undeclared hyps below because that relies on meta-hypotheses which aren't available to
             Subgoal.FOCUS after atomization. *)
             (* THEN PRIMITIVE (Conv.gconv_rule (Object_Logic.atomize ctxt_fixed) 1) *)
-            (* Fixes eta-contracted undeclared hyps *) 
+            (* Fixes eta-contracted undeclared hyps *)
             THEN Jeha_Argo.repaired_argo_tac ctxt_fixed [] 1
             )
             |> Seq.pull
@@ -631,7 +624,7 @@ fun impl_reconstruct_with_metis
     Jeha_Common.pretty_tyenv ctxt (#1 new_to_old_matcher))
 
     val proved_conclusion_with_old_vars = instantiate ctxt new_to_old_matcher proved_conclusion
-    
+
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "Proved conclusion (old vars): " ^  Thm.string_of_thm ctxt proved_conclusion_with_old_vars)
 
@@ -666,7 +659,7 @@ Option 1
     \<beta>-reduction)? And if yes, isn't this precisely what we want? Because we need the same subterm
     in our lemma as in our fixed clause, at least if we're using a prover that doesn't reason about
     \<lambda>s)
-4. instantiate lemma using subterms from fixed clauses 
+4. instantiate lemma using subterms from fixed clauses
 5. name apart instantiated lemma
 6. fix remaining variables in lemma
 Option 2
@@ -702,7 +695,7 @@ and get_instantiated_premises _ _ reconstructed_clause_db (Jeha_Log.Axiom { thm 
                           substitution = substitution
                         },
                         (* insert into cache *)
-                        Inttab.default (id, premise) new_reconstructed_clause_db 
+                        Inttab.default (id, premise) new_reconstructed_clause_db
                       )
                     end
               )
