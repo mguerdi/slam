@@ -165,7 +165,7 @@ fun simp_delete_duplicated_lits ctxt c =
         SOME (
           JClause.refresh_id () c'
           |> JClause.set_origin
-            (Jeha_Log.DeleteDuplicatedLits { premise = JClause.id c, dups_mapping = cposs_of_dups })
+            (Jeha_Log.DeleteDuplicatedLits { premise = JClause.id c, duplicate_cposs = cposs_of_dups })
         ))
   end
   (* ) *)
