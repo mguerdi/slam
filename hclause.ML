@@ -1,5 +1,7 @@
 signature HCLAUSE =
 sig
+  val comp_no_flatten_no_incr: thm * int -> int -> thm -> thm
+
   (* s = t \<Longrightarrow> u \<noteq> v \<Longrightarrow> ... \<Longrightarrow> False *)
   type hterm (* = term *)
   type hcterm (* = cterm *)
@@ -32,6 +34,15 @@ end
 
 structure HClause: HCLAUSE =
 struct
+
+(* Drule.comp_no_flatten but without incr_indexes *)
+fun comp_no_flatten_no_incr (th, n) i rule =
+  (case distinct Thm.eq_thm (Seq.list_of
+      (Thm.bicompose NONE {flatten = false, match = false, incremented = true}
+        (false, th, n) i rule)) of
+    [th'] => Thm.solve_constraints th'
+  | [] => raise THM ("comp_no_flatten", i, [th, rule])
+  | _ => raise THM ("comp_no_flatten: unique result expected", i, [th, rule]));
 
 val dest_Trueprop = Thm.dest_arg
 

@@ -120,6 +120,8 @@ fun resolve_against_arg_cong_contrapositive_n_times debug_ctxt number_of_vars (p
         let
           val () = Jeha_Common.trace_msg debug_ctxt (fn () => "RS_ARG_CONG current (cpos=" ^ @{make_string} cpos ^"): " ^ Thm.string_of_thm debug_ctxt th)
         in
+          (* FIXME: Test in the presence of schematic vars (should work because only
+          arg_cong_contrapositive should get renamed by RSN but who knows) *)
           @{thm arg_cong_contrapositive} RSN (cpos + 1, th)
         end
       ) premise_proved
@@ -185,7 +187,10 @@ fun reconstruct_sup
       \<^instantiate>\<open>x=ct and y=ct' and f=C_abs and 'a=cT in
         lemma \<open>(x :: 'a) = y \<Longrightarrow> PROP f x \<Longrightarrow> PROP f y\<close> by auto\<close>
     (* \<not>D' \<Longrightarrow> (\<not>C t \<Longrightarrow> False) \<Longrightarrow> (\<not>C t' \<Longrightarrow> False) *)
-    val notD'_imp_Ct_imp_Ct' = notD'_imp_t_eq_t' RS C_congruence_wrt_subterm_position
+    val length_of_D' = Thm.nprems_of notD'_imp_t_eq_t'
+    val notD'_imp_Ct_imp_Ct' =
+      HClause.comp_no_flatten_no_incr
+        (notD'_imp_t_eq_t', length_of_D') 1 C_congruence_wrt_subterm_position
     val Ct_cpos = Logic.count_prems (Thm.prop_of left_premise) (* number of literals of D *)
     (* compose (\<not>C t \<Longrightarrow> False) and (\<not>D' \<Longrightarrow> (\<not>C t \<Longrightarrow> False) \<Longrightarrow> (\<not>C t' \<Longrightarrow> False))
     obtaining \<not>D' \<Longrightarrow> (\<not>C t' \<Longrightarrow> False) *)
