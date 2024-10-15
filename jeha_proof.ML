@@ -66,6 +66,10 @@ sig
     Proof.context
     -> { premise: HClause.hthm, subterm: JClause.full_pos, fresh_x: cterm, predicate: cterm }
     -> HClause.hthm
+  val reconstruct_exists_hoist:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, fresh_x: cterm, predicate: cterm }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -455,12 +459,13 @@ fun impl_forall_exists_hoist_lemma
 fun exists_hoist_lemma ctxt clause_db (Jeha_Log.ExistsHoist args) =
   impl_forall_exists_hoist_lemma ctxt clause_db false args *)
 
-fun reconstruct_forall_hoist
+fun impl_reconstruct_forall_exists_hoist
+  is_forall_hoist
   ctxt
   { premise, subterm = subterm_position, fresh_x, predicate }
 =
   let
-    val lemma = impl_forall_exists_hoist_lemma true { fresh_x = fresh_x , predicate = predicate }
+    val lemma = impl_forall_exists_hoist_lemma is_forall_hoist { fresh_x = fresh_x , predicate = predicate }
     val conclusion_from_sup =
       reconstruct_sup
         ctxt
@@ -472,6 +477,10 @@ fun reconstruct_forall_hoist
   in
     conclusion_rotated
   end
+
+val reconstruct_forall_hoist = impl_reconstruct_forall_exists_hoist true
+
+val reconstruct_exists_hoist = impl_reconstruct_forall_exists_hoist false
 
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
