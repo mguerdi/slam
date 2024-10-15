@@ -20,6 +20,13 @@ sig
     Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference
     -> thm Inttab.table * thm list
   val resolve_against_arg_cong_contrapositive_n_times : Proof.context -> int -> thm * int -> thm
+  val prepare_forall_exists_hoist_log:
+    Proof.context
+    -> (int -> JClause.T)
+    (* args of Jeha_Log.ForallHoist and Jeha_Log.ExistsHoist *)
+    -> {fresh_x: term, substitution: Envir.env, subterm: JClause.full_pos, uninstantiated_premise: int}
+    -> {fresh_x: cterm, predicate: cterm, subterm: JClause.full_pos, uninstantiated_premise: JClause.T}
+  val impl_forall_exists_hoist_lemma: bool -> { fresh_x: cterm, predicate: cterm } -> thm
   (* The records are modelled after those in Jeha_Log, but with int replace by HClause.htm *)
   val reconstruct_arg_cong : Proof.context -> int -> thm * int -> cterm -> thm
   val reconstruct_sup:
@@ -54,6 +61,10 @@ sig
   val reconstruct_neq_hoist:
     Proof.context
     -> { premise: HClause.hthm, subterm: JClause.full_pos }
+    -> HClause.hthm
+  val reconstruct_forall_hoist:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, fresh_x: cterm, predicate: cterm }
     -> HClause.hthm
 end;
 
@@ -384,46 +395,83 @@ fun reconstruct_delete_duplicated_lits { premise, duplicate_cposs } =
     error "unimplemented"
   end *)
 
-fun impl_forall_exists_hoist_lemma
+(* Extract the required information from the JClause. Reason for the separation is to make
+reconstruct_forall_hoist testable without having to create a JClause, substituion etc. *)
+fun prepare_forall_exists_hoist_log
   ctxt
   clause_db
+  (* Args of Jeha_Log.ForallHoist and Jeha_Log.ExistsHoist *)
+  { uninstantiated_premise = uninstantiated_premise, subterm = subterm, substitution = substitution, fresh_x = fresh_x }
+=
+  let
+    (* This shouldn't do anything except for changing the type, s.t. it is compatible in the
+    application y\<sigma> x. But does it do that? If so, why? Answer: Yes, because the type of y
+    contains the TVar used in the creation of x. *)
+    val x = JTerm.norm_beta_eta_qeta_env substitution fresh_x
+    val x = Thm.cterm_of ctxt x
+
+    val uninstantiated_premise = clause_db uninstantiated_premise
+    val (quantifier $ predicate_variable) = JClause.subterm_at_full_pos uninstantiated_premise subterm
+    val () = \<^assert> (JTerm.is_quantifier quantifier)
+    val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
+    val predicate = Thm.cterm_of ctxt predicate
+  in
+    { uninstantiated_premise = uninstantiated_premise, subterm = subterm, fresh_x = x, predicate = predicate }
+  end
+
+fun impl_forall_exists_hoist_lemma
   is_forall_hoist
-  {premise = premise, subterm = subterm, substitution = substitution, fresh_x = fresh_x}
+  { fresh_x, predicate }
 =
   let
     (* Only the instantiation of the type is strictly necessary, as the fresh variable will remain
     unchanged in the conclusion (except for its type). *)
-    val x = JTerm.norm_beta_eta_qeta_env substitution fresh_x
-    val cx = Thm.cterm_of ctxt x
-    val T = Thm.ctyp_of ctxt (fastype_of x)
-    
-    val premise = clause_db premise
-    val (quantifier $ predicate_variable) = JClause.subterm_at_full_pos premise subterm
-    val () = \<^assert> (JTerm.is_quantifier quantifier)
-    val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
-    val P = Thm.cterm_of ctxt predicate
+    val T = Thm.ctyp_of_cterm fresh_x
+    val _ = writeln (@{make_string} T) (* FIXME remove *)
     (* val _ = Jeha_Common.trace_msg ctxt (fn () => "forall_rw_lemma: P = " ^ Jeha_Common.pretty_term ctxt predicate)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "forall_rw_lemma: typ_of_x = " ^ Jeha_Common.pretty_typ ctxt (fastype_of fresh_x)) *)
-  in
-    if is_forall_hoist then
-      (* [Thm.instantiate'
-        [SOME typ_of_x]
-        [SOME P, SOME cx]
-        @{lemma \<open>P (x :: 'b) = False \<Longrightarrow> (\<forall>x. P x) = True \<Longrightarrow> False\<close> by auto}] *)
-      [\<^instantiate>\<open>
-          'T=T and P and cx in
-          lemma (open) \<open>P (cx :: 'T) = False \<Longrightarrow> (\<forall>x. P x) = True \<Longrightarrow> False\<close> by auto\<close>]
-    else
-      [\<^instantiate>\<open>
-          'T=T and P and cx in
-          lemma (open) \<open>P (cx :: 'T) = True \<Longrightarrow> (\<exists>x. P x) = False \<Longrightarrow> False\<close> by auto\<close>]
+    val lemma =
+      if is_forall_hoist then
+        (* Alternative:
+        [Thm.instantiate'
+          [SOME typ_of_x]
+          [SOME P, SOME cx]
+          @{lemma \<open>P (x :: 'b) = False \<Longrightarrow> (\<forall>x. P x) = True \<Longrightarrow> False\<close> by auto}]
+        *)
+        \<^instantiate>\<open>
+            'T=T and y=predicate and x=fresh_x in
+            lemma (open) \<open>y (x :: 'T) \<noteq> True \<Longrightarrow> (\<forall>x. y x) \<noteq> False \<Longrightarrow> False\<close> by auto\<close>
+      else
+        \<^instantiate>\<open>
+            'T=T and y=predicate and x=fresh_x in
+            lemma (open) \<open>y (x :: 'T) \<noteq> False \<Longrightarrow> (\<exists>x. y x) \<noteq> True \<Longrightarrow> False\<close> by auto\<close>
+    in
+      lemma
   end
 
-fun forall_hoist_lemma ctxt clause_db (Jeha_Log.ForallHoist args) =
+(* fun forall_hoist_lemma ctxt clause_db (Jeha_Log.ForallHoist args) =
   impl_forall_exists_hoist_lemma ctxt clause_db true args
 
 fun exists_hoist_lemma ctxt clause_db (Jeha_Log.ExistsHoist args) =
-  impl_forall_exists_hoist_lemma ctxt clause_db false args
+  impl_forall_exists_hoist_lemma ctxt clause_db false args *)
+
+fun reconstruct_forall_hoist
+  ctxt
+  { premise, subterm = subterm_position, fresh_x, predicate }
+=
+  let
+    val lemma = impl_forall_exists_hoist_lemma true { fresh_x = fresh_x , predicate = predicate }
+    val conclusion_from_sup =
+      reconstruct_sup
+        ctxt
+        { left_premise = lemma
+        , literal = (JLit.Left, 1)
+        , right_premise = premise
+        , subterm = subterm_position }
+    val conclusion_rotated = HClause.make_last 0 conclusion_from_sup
+  in
+    conclusion_rotated
+  end
 
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
@@ -432,10 +480,10 @@ fun exists_hoist_lemma ctxt clause_db (Jeha_Log.ExistsHoist args) =
 maxidx. *)
 fun get_lemmas _ _ _ (Jeha_Log.EqHoist _) _ maxidx = [Thm.incr_indexes (maxidx + 1) excluded_middle]
   | get_lemmas _ _ _ (Jeha_Log.NeqHoist _) _ maxidx = [Thm.incr_indexes (maxidx + 1) excluded_middle]
-  | get_lemmas ctxt clause_db _ (origin as (Jeha_Log.ForallHoist _)) _ _ =
-      forall_hoist_lemma ctxt clause_db origin
+  (* | get_lemmas ctxt clause_db _ (origin as (Jeha_Log.ForallHoist _)) _ _ =
+      fst (forall_hoist_lemma ctxt clause_db origin)
   | get_lemmas ctxt clause_db _ (origin as (Jeha_Log.ExistsHoist _)) _ _ =
-      exists_hoist_lemma ctxt clause_db origin
+      fst (exists_hoist_lemma ctxt clause_db origin) *)
   (* need to instantiate verit_sko_forall, and use auto to reconstruct instead of metis *)
   | get_lemmas
       ctxt
