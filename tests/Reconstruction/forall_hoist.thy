@@ -65,7 +65,6 @@ ML_val \<open>
       , subterm = ([1], JLit.Left, 0)
       , fresh_x = mkc @{term_schem "?fresh_x :: ?'a"}
       , predicate = Thm.cterm_of @{context} @{term_schem "\<lambda>x. (f :: ?'a \<Rightarrow> 'b \<Rightarrow> bool) x c"} }
-  (* FIXME: broken by replacing Drule.comp_no_flatten by HClause.comp_no_flatten_no_incr in Jeha_Reconstruction.reconstruct_sup *)
   val () = \<^assert> (Thm.eq_thm_prop (expected, conclusion))
 \<close>
 
