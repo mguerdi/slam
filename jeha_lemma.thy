@@ -1,6 +1,6 @@
 theory jeha_lemma
 
-imports (* HOL.Sledgehammer *) HOL.Hilbert_Choice
+imports jeha_base (* HOL.Sledgehammer *) HOL.Hilbert_Choice
 
 begin
 

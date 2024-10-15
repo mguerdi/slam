@@ -5,6 +5,9 @@ session "JEHA" = HOL +
     an implementation of lambda-superposition with booleans
   "
   theories
+    jeha_base
+    jeha_lemma
+    jeha_tactic
     jeha
     (* jeha_debug *)
 
