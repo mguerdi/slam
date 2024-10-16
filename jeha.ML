@@ -155,6 +155,7 @@ fun simp_delete_duplicated_lits ctxt c =
         (JClause.literals c)
         ([], [])
       |> fst
+    (* FIXME: use JClause.delete_lits_at *)
     val c' = fold JClause.delete_lit_at (map #duplicate cposs_of_dups) c
   in
     if JClause.length c' = JClause.length c
@@ -177,7 +178,13 @@ fun simp_delete_resolved_lits ctxt c =
   let
     (* literal of the from s \<noteq> s *)
     fun is_false_disequation (s, t, is_positive) = not is_positive andalso s aconv t
-    val c' = JClause.filter_out_lits is_false_disequation c
+    val cposs =
+      c
+      |> JClause.literals
+      |> map_index (fn x => x)
+      |> filter (is_false_disequation o snd)
+      |> map fst
+    val c' = JClause.delete_lits_at cposs c
   in
     if JClause.length c' = JClause.length c
       then NONE
@@ -187,7 +194,7 @@ fun simp_delete_resolved_lits ctxt c =
         SOME (
           JClause.refresh_id () c'
           |> JClause.set_origin
-            (Jeha_Log.DeleteResolvedLits  { premise = JClause.id c })
+            (Jeha_Log.DeleteResolvedLits { premise = JClause.id c, cposs = cposs })
         ))
   end
   (* ) *)

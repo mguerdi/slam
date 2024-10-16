@@ -20,6 +20,7 @@ sig
   val add_literal : JLit.T -> T -> T
   val combine : T -> T -> T
   val delete_lit_at : cpos -> T -> T
+  val delete_lits_at : cpos list -> T -> T
   val filter_out_lits : (JLit.T -> bool) -> T -> T
   val length : T -> int
   val of_literals : JLit.T list * int -> T
@@ -116,6 +117,13 @@ fun delete_lit_at cp clause =
   |> map_literals (nth_drop cp)
   |> refresh_id ()
   |> map_maxidx (K (maxidx clause))
+
+fun delete_lits_at cps clause =
+  let
+    val sorted = sort (rev_order o int_ord) cps
+  in
+    fold delete_lit_at sorted clause
+  end
 
 fun filter_out_lits f clause =
   clause

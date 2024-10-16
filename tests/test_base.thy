@@ -17,4 +17,8 @@ ML \<open>
   val _ = Theory.setup (ML_Antiquotation.special_form \<^binding>\<open>assert_cant\<close> "() |> (report oo cant)")
 \<close>
 
+ML \<open>
+  val mk = Skip_Proof.make_thm @{theory}
+\<close>
+
 end

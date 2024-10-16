@@ -30,7 +30,7 @@ sig
   (* FIXME: | DeleteDuplicatedLits of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
   | DeleteDuplicatedLits of { premise: int, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
   (* FIXME: | DeleteResolvedLits of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env } *)
-  | DeleteResolvedLits of { premise: int }
+  | DeleteResolvedLits of { premise: int, cposs: JClause_Pos.cpos list }
   | RewritePositiveLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   (* FIXME: add substitution *)
@@ -88,7 +88,7 @@ datatype inference =
   | Choice
   (** simplification **)
   | DeleteDuplicatedLits of { premise: int, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
-  | DeleteResolvedLits of { premise: int }
+  | DeleteResolvedLits of { premise: int, cposs: JClause_Pos.cpos list }
   | RewritePositiveLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
   | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }

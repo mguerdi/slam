@@ -36,10 +36,6 @@ sig
        , right_premise: thm
        , subterm: JClause.full_pos }
     -> HClause.hthm
-  val reconstruct_delete_duplicated_lits:
-    { premise: HClause.hthm
-    , duplicate_cposs: { duplicate: JClause.cpos, duplicate_of: JClause.cpos } list }
-    -> HClause.hthm
   val reconstruct_efact:
     { premise: HClause.hthm
     , left_literal: JLit.lpos * JClause.cpos
@@ -81,6 +77,14 @@ sig
   val reconstruct_exists_rw:
     Proof.context
     -> { premise: HClause.hthm, subterm: JClause.full_pos, predicate: term }
+    -> HClause.hthm
+  val reconstruct_delete_duplicated_lits:
+    { premise: HClause.hthm
+    , duplicate_cposs: { duplicate: JClause.cpos, duplicate_of: JClause.cpos } list }
+    -> HClause.hthm
+  val reconstruct_delete_resolved_lits:
+    { premise: HClause.hthm
+    , cposs: JClause.cpos list }
     -> HClause.hthm
 end;
 
@@ -324,17 +328,6 @@ fun reconstruct_false_elim ctxt { premise, literal } =
     Drule.comp_no_flatten (C, Thm.nprems_of C) 1 @{lemma \<open>False = True \<Longrightarrow> False\<close> by auto}
   end
 
-fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
-  let
-    val () = \<^assert> (duplicate_of < duplicate)
-  in
-    premise
-    |> HClause.make_last duplicate_of
-    |> HClause.make_last duplicate
-    |> HClause.merge_duplicated_lit_last
-    |> HClause.move_last_to duplicate_of
-  end
-
 fun reconstruct_bool_hoist ctxt { premise, subterm = subterm_position } =
   let
     val subterm =
@@ -389,15 +382,6 @@ fun reconstruct_neq_hoist ctxt { premise, subterm = subterm_position } =
         , subterm = subterm_position }
   in
     HClause.make_last 0 conclusion_from_sup
-  end
-
-(* fun reconstruct_delete_duplicated_lits { premise = premise, literal, duplicate } = *)
-fun reconstruct_delete_duplicated_lits { premise, duplicate_cposs } =
-  let
-    (* jeha.ML already guarantees this, just to be safe *)
-    val sorted = sort (rev_order o int_ord o apply2 #duplicate) duplicate_cposs
-  in
-    fold impl_delete_duplicated_lit sorted premise
   end
 
 (* fun forall_rw_lemma ctxt t =
@@ -547,6 +531,36 @@ fun impl_reconstruct_forall_exists_rw
 val reconstruct_forall_rw = impl_reconstruct_forall_exists_rw true
 
 val reconstruct_exists_rw = impl_reconstruct_forall_exists_rw false
+
+fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
+  let
+    val () = \<^assert> (duplicate_of < duplicate)
+  in
+    premise
+    |> HClause.make_last duplicate_of
+    |> HClause.make_last duplicate
+    |> HClause.merge_duplicated_lit_last
+    |> HClause.move_last_to duplicate_of
+  end
+
+fun reconstruct_delete_duplicated_lits { premise, duplicate_cposs } =
+  let
+    (* jeha.ML already guarantees this, just to be safe *)
+    val sorted = sort (rev_order o int_ord o apply2 #duplicate) duplicate_cposs
+  in
+    fold impl_delete_duplicated_lit sorted premise
+  end
+
+fun impl_delete_resolved_lit literal premise =
+  reconstruct_eres { premise = premise, literal = literal }
+
+fun reconstruct_delete_resolved_lits { premise, cposs } =
+  let
+    (* VERY IMPORTANT, not as above *)
+    val sorted = sort (rev_order o int_ord) cposs
+  in
+    fold impl_delete_resolved_lit sorted premise
+  end
 
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
