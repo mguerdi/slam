@@ -79,8 +79,10 @@ session "JEHA_TEST_RECONSTRUCTION" in Reconstruction = JEHA_TEST_BASE +
     eq_hoist
     eres
     exists_hoist
+    exists_rw
     false_elim
     forall_hoist
+    forall_rw
     hclause
     neq_hoist
     sup

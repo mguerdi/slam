@@ -74,6 +74,14 @@ sig
     Proof.context
     -> { premise: HClause.hthm, subterm: JClause.full_pos, subrule: HClause.hthm }
     -> HClause.hthm
+  val reconstruct_forall_rw:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, predicate: term }
+    -> HClause.hthm
+  val reconstruct_exists_rw:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, predicate: term }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -500,6 +508,46 @@ fun reconstruct_bool_rw ctxt { premise, subterm, subrule } =
     conclusion_from_sup
   end
 
+fun prepare_forall_exists_rw_log
+  ctxt
+  clause_db
+  (* Args of Jeha_Log.ForallRw and Jeha_Log.ExistsRw *)
+  { uninstantiated_premise = uninstantiated_premise, subterm = subterm, substitution = substitution }
+=
+  let
+    val uninstantiated_premise = clause_db uninstantiated_premise
+    val (quantifier $ predicate_variable) = JClause.subterm_at_full_pos uninstantiated_premise subterm
+    val () = \<^assert> (JTerm.is_quantifier quantifier)
+    val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
+    val predicate = Thm.cterm_of ctxt predicate
+  in
+    { uninstantiated_premise = uninstantiated_premise
+    , subterm = subterm
+    , predicate = predicate }
+  end
+
+fun impl_reconstruct_forall_exists_rw
+  is_forall_rw
+  ctxt
+  { premise, subterm = subterm_position, predicate }
+=
+  let
+    val lemma = Jeha_Lemma.forall_exists_rw_lemma ctxt predicate is_forall_rw
+    val conclusion_from_sup =
+      reconstruct_sup
+        ctxt
+        { left_premise = lemma
+        , literal = (JLit.Left, 0)
+        , right_premise = premise
+        , subterm = subterm_position }
+  in
+    conclusion_from_sup
+  end
+
+val reconstruct_forall_rw = impl_reconstruct_forall_exists_rw true
+
+val reconstruct_exists_rw = impl_reconstruct_forall_exists_rw false
+
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
 (* some inference rules require additional lemmas *)
@@ -512,7 +560,7 @@ fun get_lemmas _ _ _ (Jeha_Log.EqHoist _) _ maxidx = [Thm.incr_indexes (maxidx +
   | get_lemmas ctxt clause_db _ (origin as (Jeha_Log.ExistsHoist _)) _ _ =
       fst (exists_hoist_lemma ctxt clause_db origin) *)
   (* need to instantiate verit_sko_forall, and use auto to reconstruct instead of metis *)
-  | get_lemmas
+  (* | get_lemmas
       ctxt
       clause_db
       _
@@ -528,7 +576,7 @@ fun get_lemmas _ _ _ (Jeha_Log.EqHoist _) _ maxidx = [Thm.incr_indexes (maxidx +
         val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
       in
         [forall_rw_lemma ctxt predicate]
-      end
+      end *)
   (* | get_lemmas _ _ (Jeha_Log.ArgCong { number_of_vars = number_of_vars, ... }) =
       [resolve_against_arg_cong_contrapositive_n_times
         (number_of_vars - 1)

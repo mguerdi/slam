@@ -34,17 +34,7 @@ ML \<open>
       (* we can't say [NONE] and have it figure out the type by itself *)
       (* Thm.instantiate' [SOME T] [SOME P] @{thm verit_sko_forall} *)
   
-  fun forall_rw_lemma ctxt predicate =
-    let
-      val T = fastype_of predicate |> domain_type |> Thm.ctyp_of ctxt
-      val P = Thm.cterm_of ctxt predicate
-      (* val cinsT = TVars.make [((("'a", 0), error "Thm.instantiate requires us to know the precise sort of the TVar we're trying to instantiate"), T)]
-      val cinst = Vars.make [((("P", 0), error "Thm.instantiate requires us to know the precise type of the Var we're trying to instantiate"), P)] *)
-    in
-      (* \<^instantiate>\<open>P and 'a=T in lemma (open) \<open>(\<forall>x. P x) \<longleftrightarrow> P (SOME x. \<not>P x)\<close> by (insert verit_sko_forall[of P], auto)\<close> *)
-      Thm.instantiate' [SOME T] [SOME P] @{thm verit_sko_forall}
-    end
-  
+
   (* Alternative: Old Version 
   fun forall_rw_lemma ctxt predicate =
     let
@@ -122,7 +112,9 @@ by (cut_tac atomize_not [of "\<not> A"]) simp
 
 ML \<open>
 signature JEHA_LEMMA = sig
+  (* FIXME: the result of these should really be HClause.hthm *)
   val hclause_of_uninstantiated_bool_rw_rule: Proof.context -> term * term -> thm
+  val forall_exists_rw_lemma: Proof.context -> term -> bool -> thm
 end
 
 structure Jeha_Lemma: JEHA_LEMMA = struct
@@ -143,6 +135,19 @@ fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
       then error "BUG: hclause_of_bool_rw_non_var_rule: lhs and rhs in proved lemma are not equal to those given as arguments. Perhaps a schematic variable has been renamed?"
       else lemma
   end
+
+  fun forall_exists_rw_lemma ctxt predicate is_forall_rw =
+    let
+      val T = fastype_of predicate |> domain_type |> Thm.ctyp_of ctxt
+      val P = Thm.cterm_of ctxt predicate
+    in
+      if is_forall_rw then
+        \<^instantiate>\<open>P and 'a=T in
+          lemma \<open>(\<forall>x. P x) \<noteq> P (SOME x. \<not>P x) \<Longrightarrow> False\<close> by (insert someI[of \<open>\<lambda>x. \<not>P x\<close>], auto)\<close>
+      else
+        \<^instantiate>\<open>P and 'a=T in
+          lemma \<open>(\<exists>x. P x) \<noteq> P (SOME x. P x) \<Longrightarrow> False\<close> by (insert someI[of \<open>P\<close>], auto)\<close>
+    end
 end
 \<close>
 
