@@ -70,6 +70,10 @@ sig
     Proof.context
     -> { premise: HClause.hthm, subterm: JClause.full_pos, fresh_x: cterm, predicate: cterm }
     -> HClause.hthm
+  val reconstruct_bool_rw:
+    Proof.context
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, subrule: HClause.hthm }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -481,6 +485,20 @@ fun impl_reconstruct_forall_exists_hoist
 val reconstruct_forall_hoist = impl_reconstruct_forall_exists_hoist true
 
 val reconstruct_exists_hoist = impl_reconstruct_forall_exists_hoist false
+
+(* Note: subrule has to be proved and instantiated (like premise). *)
+fun reconstruct_bool_rw ctxt { premise, subterm, subrule } =
+  let
+    val conclusion_from_sup =
+      reconstruct_sup
+        ctxt
+        { left_premise = subrule
+        , literal = (JLit.Left, 0)
+        , right_premise = premise
+        , subterm = subterm }
+  in
+    conclusion_from_sup
+  end
 
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 

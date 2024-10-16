@@ -118,4 +118,32 @@ lemma forall_hoist_just_to_be_safe:
 lemma not_atomize: "(\<not> A \<Longrightarrow> False) \<equiv> Trueprop A"
 by (cut_tac atomize_not [of "\<not> A"]) simp
 
+(* BoolRw *)
+
+ML \<open>
+signature JEHA_LEMMA = sig
+  val hclause_of_uninstantiated_bool_rw_rule: Proof.context -> term * term -> thm
+end
+
+structure Jeha_Lemma: JEHA_LEMMA = struct
+(* see Jeha.bool_rw_non_var_rules *)
+fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
+  let
+    val (lhs, rhs) = apply2 (Thm.cterm_of ctxt) (lhs, rhs)
+    val T = Thm.ctyp_of_cterm lhs
+    val cprop = \<^instantiate>\<open>lhs and rhs and 'a=T in cprop \<open>(lhs :: 'a) \<noteq> rhs \<Longrightarrow> False\<close>\<close>
+    val lemma =
+      cprop
+      |> Goal.init
+      |> Clasimp.auto_tac ctxt
+      |> Seq.hd
+      |> Goal.finish ctxt
+  in
+    if not (Thm.term_of cprop aconv Thm.prop_of lemma)
+      then error "BUG: hclause_of_bool_rw_non_var_rule: lhs and rhs in proved lemma are not equal to those given as arguments. Perhaps a schematic variable has been renamed?"
+      else lemma
+  end
+end
+\<close>
+
 end
