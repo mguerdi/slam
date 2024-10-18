@@ -36,7 +36,7 @@ fun reconstruct_proof
       |> Jeha_Common.map_some JClause.id
     val clause_db = Jeha.make_clause_db state
     val false_proved =
-      Jeha_Proof.reconstruct_with_metis context clause_db false_id
+      Jeha_Proof.reconstruct context clause_db false_id
   in
     Seq.single (Goal.protect 0 false_proved)
   end

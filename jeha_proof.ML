@@ -7,7 +7,7 @@ sig
   (* elaborates a \<lambda>oSup inference into a series of more smaller proof steps *)
   (* val fun proof_steps_of_inference : Jeha_Log.inference -> proof_step *)
 
-  val reconstruct_with_metis : Proof.context -> (int -> JClause.T) -> int -> thm
+  val reconstruct : Proof.context -> (int -> JClause.T) -> int -> thm
   val instantiate : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
 
   val fix_vars : Proof.context -> thm list -> cterm -> Proof.context * thm list * cterm
@@ -648,37 +648,14 @@ fun instantiate_env (Envir.Envir { maxidx, tenv, tyenv }) =
   end
 *)
 
-
-
-(* This just threads the reconstructed_clause_db cache through get_instantiated_premises but doesn't
-directly modify it. *)
-fun impl_reconstruct_with_metis
+fun impl_reconstruct_with_automation
   ctxt
-  (clause_db : int -> JClause.T)
-  (reconstructed_clause_db: thm Inttab.table)
-  id
+  expected_conclusion
+  instantiated_premises
+  lemmas
 =
   let
-    val clause = clause_db id
-    val conclusion = HClause.hol_of_clause ctxt false clause
-    val origin = JClause.origin (clause_db id)
-    (* recursive calls *)
-    val (new_reconstructed_clause_db, instantiated_premises) =
-      get_instantiated_premises ctxt clause_db reconstructed_clause_db origin
-    val maxidx = fold Thm.maxidx_thm instantiated_premises (JClause.maxidx clause)
-
-    (* only start logging after the recursive calls to avoid nesting *)
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "START PROOF")
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "clause: " ^ JClause.pretty_clause ctxt (clause_db id))
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "origin: " ^ (* @{make_string} *) Jeha_Log.pretty ctxt (JClause.origin (clause_db id)))
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "Instantiated Premises: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) instantiated_premises))
-
-    val lemmas = get_lemmas ctxt clause_db new_reconstructed_clause_db origin conclusion maxidx
-
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "Lemmas:" ^ space_implode "\n" (map (Thm.string_of_thm ctxt) lemmas))
-    val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.term_of conclusion)))
-
-    val goal = Goal.init conclusion
+    val goal = Goal.init expected_conclusion
 
     val _ = Jeha_Common.trace_msg ctxt (fn () => "Goal: " ^ Thm.string_of_thm ctxt goal)
 
@@ -755,7 +732,7 @@ fun impl_reconstruct_with_metis
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "Proved conclusion (new vars): " ^ Thm.string_of_thm ctxt proved_conclusion)
 
-    val old_vars = Term.add_vars (Thm.term_of conclusion) []
+    val old_vars = Term.add_vars (Thm.term_of expected_conclusion) []
     val new_vars = Term.add_vars (Thm.prop_of proved_conclusion) []
     val () = \<^assert> (length old_vars = length new_vars)
     (* Doesn't work with Unify.matchers *)
@@ -766,7 +743,7 @@ fun impl_reconstruct_with_metis
         (Vartab.empty, Vartab.empty)
 
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
-    "instantiating proved conclusion\n\t" ^
+    "renaming variables in proved conclusion\n\t" ^
     Thm.string_of_thm ctxt proved_conclusion ^
     "\nwith substitution\n\t" ^
     Jeha_Common.pretty_tenv ctxt (#2 new_to_old_matcher) ^
@@ -774,19 +751,61 @@ fun impl_reconstruct_with_metis
     Jeha_Common.pretty_tyenv ctxt (#1 new_to_old_matcher))
 
     val proved_conclusion_with_old_vars = instantiate ctxt new_to_old_matcher proved_conclusion
+  in
+    proved_conclusion_with_old_vars
+  end
+
+(* This just threads the reconstructed_clause_db cache through get_instantiated_premises but doesn't
+directly modify it. *)
+fun impl_reconstruct
+  ctxt
+  (clause_db : int -> JClause.T)
+  (reconstructed_clause_db: thm Inttab.table)
+  id
+=
+  let
+    val clause = clause_db id
+    val expected_conclusion = HClause.hol_of_clause ctxt false clause
+    val origin = JClause.origin (clause_db id)
+    (* recursive calls *)
+    val (new_reconstructed_clause_db, instantiated_premises) =
+      get_instantiated_premises ctxt clause_db reconstructed_clause_db origin
+
+    val maxidx = fold Thm.maxidx_thm instantiated_premises (JClause.maxidx clause)
+
+    (* only start logging after the recursive calls to avoid nesting *)
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "START PROOF")
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "clause: " ^ JClause.pretty_clause ctxt (clause_db id))
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "origin: " ^ (* @{make_string} *) Jeha_Log.pretty ctxt (JClause.origin (clause_db id)))
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Instantiated Premises: " ^ space_implode "\n" (map (Thm.string_of_thm ctxt) instantiated_premises))
+
+    val lemmas = get_lemmas ctxt clause_db new_reconstructed_clause_db origin expected_conclusion maxidx
+
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Lemmas:" ^ space_implode "\n" (map (Thm.string_of_thm ctxt) lemmas))
+    val _ = Jeha_Common.trace_msg ctxt (fn () => "Proving: " ^ (Jeha_Common.pretty_term ctxt (Thm.term_of expected_conclusion)))
+
+    val proved_conclusion =
+      case Jeha_Common.get_proof_reconstruction_mode ctxt of
+        Jeha_Common.Manual => error "manual reconstruction unimplemented"
+      | _ =>
+        impl_reconstruct_with_automation
+          ctxt
+          expected_conclusion
+          instantiated_premises
+          lemmas
 
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
-      "Proved conclusion (old vars): " ^  Thm.string_of_thm ctxt proved_conclusion_with_old_vars)
+      "Proved conclusion (old vars): " ^  Thm.string_of_thm ctxt proved_conclusion)
 
     (* sanity check *)
-    val () = if not (Thm.prop_of proved_conclusion_with_old_vars aconv Thm.term_of conclusion)
+    val () = if not (Thm.prop_of proved_conclusion aconv Thm.term_of expected_conclusion)
       then error ("not aconv:\n"
-        ^ @{make_string} (Thm.prop_of proved_conclusion_with_old_vars)
+        ^ @{make_string} (Thm.prop_of proved_conclusion)
         ^ "\nand\n"
-        ^ @{make_string} (Thm.term_of conclusion))
+        ^ @{make_string} (Thm.term_of expected_conclusion))
       else ()
   in
-    (new_reconstructed_clause_db, proved_conclusion_with_old_vars)
+    (new_reconstructed_clause_db, proved_conclusion)
   end
 
 (*
@@ -842,7 +861,7 @@ and get_instantiated_premises _ _ reconstructed_clause_db (Jeha_Log.Axiom { thm 
                 | NONE =>
                     let
                       val (new_reconstructed_clause_db, premise) =
-                        impl_reconstruct_with_metis ctxt clause_db old_reconstructed_clause_db id
+                        impl_reconstruct ctxt clause_db old_reconstructed_clause_db id
                     in
                       ( { premise = premise
                         , shift = shift
@@ -882,7 +901,7 @@ and get_instantiated_premises _ _ reconstructed_clause_db (Jeha_Log.Axiom { thm 
         (new_reconstructed_clause_db, instantiated_premises)
       end
 
-fun reconstruct_with_metis ctxt (clause_db : int -> JClause.T) id =
-  #2 (impl_reconstruct_with_metis ctxt clause_db Inttab.empty id)
+fun reconstruct ctxt (clause_db : int -> JClause.T) id =
+  #2 (impl_reconstruct ctxt clause_db Inttab.empty id)
 
 end;
