@@ -416,7 +416,10 @@ fun prepare_forall_exists_hoist_log
     val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
     val predicate = Thm.cterm_of ctxt predicate
   in
-    { uninstantiated_premise = uninstantiated_premise, subterm = subterm, fresh_x = x, predicate = predicate }
+    { uninstantiated_premise = uninstantiated_premise
+    , subterm = subterm
+    , fresh_x = x
+    , predicate = predicate }
   end
 
 fun impl_forall_exists_hoist_lemma
@@ -461,7 +464,8 @@ fun impl_reconstruct_forall_exists_hoist
   { premise, subterm = subterm_position, fresh_x, predicate }
 =
   let
-    val lemma = impl_forall_exists_hoist_lemma is_forall_hoist { fresh_x = fresh_x , predicate = predicate }
+    val lemma =
+      impl_forall_exists_hoist_lemma is_forall_hoist { fresh_x = fresh_x , predicate = predicate }
     val conclusion_from_sup =
       reconstruct_sup
         ctxt
@@ -659,7 +663,8 @@ fun impl_reconstruct_with_metis
     val conclusion = HClause.hol_of_clause ctxt false clause
     val origin = JClause.origin (clause_db id)
     (* recursive calls *)
-    val (new_reconstructed_clause_db, instantiated_premises) = get_instantiated_premises ctxt clause_db reconstructed_clause_db origin
+    val (new_reconstructed_clause_db, instantiated_premises) =
+      get_instantiated_premises ctxt clause_db reconstructed_clause_db origin
     val maxidx = fold Thm.maxidx_thm instantiated_premises (JClause.maxidx clause)
 
     (* only start logging after the recursive calls to avoid nesting *)
@@ -755,7 +760,10 @@ fun impl_reconstruct_with_metis
     val () = \<^assert> (length old_vars = length new_vars)
     (* Doesn't work with Unify.matchers *)
     val new_to_old_matcher =
-      fold (Pattern.first_order_match (Proof_Context.theory_of ctxt)) (ListPair.zip (map Var new_vars, map Var old_vars)) (Vartab.empty, Vartab.empty)
+      fold
+        (Pattern.first_order_match (Proof_Context.theory_of ctxt))
+        (ListPair.zip (map Var new_vars, map Var old_vars))
+        (Vartab.empty, Vartab.empty)
 
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
     "instantiating proved conclusion\n\t" ^
@@ -806,12 +814,14 @@ Option 1
 6. fix remaining variables in lemma
 Option 2
 3. Name apart lemma
-4. Use Thm.instantiate' to instantiate lemma (without having to know the variable's names) (IDEA: define instantiate helpers in the jeha_lemmas.thy file inside of ML... blocks?)
+4. Use Thm.instantiate' to instantiate lemma (without having to know the variable's names) (IDEA:
+    define instantiate helpers in the jeha_lemmas.thy file inside of ML... blocks?)
 5. fix premises and lemmas
 *)
 
 (* This function manipulates the reconstructed_clause_db cache. *)
-(* FIXME: Insert axioms into cache? But they dont have an ID at this point... (or ever?) Or are they being inserted on the recursive calls one level up? *)
+(* FIXME: Insert axioms into cache? But they dont have an ID at this point... (or ever?) Or are they
+    being inserted on the recursive calls one level up? *)
 and get_instantiated_premises _ _ reconstructed_clause_db (Jeha_Log.Axiom { thm = thm })
       = (reconstructed_clause_db, [thm])
   | get_instantiated_premises ctxt clause_db reconstructed_clause_db origin =
@@ -826,19 +836,19 @@ and get_instantiated_premises _ _ reconstructed_clause_db (Jeha_Log.Axiom { thm 
           = fold_map
               (fn { id, shift, substitution } => fn old_reconstructed_clause_db =>
                 case Inttab.lookup old_reconstructed_clause_db id of
-                  SOME premise => ({ premise = premise, shift = shift, substitution = substitution }, old_reconstructed_clause_db)
+                  SOME premise =>
+                    ( { premise = premise, shift = shift, substitution = substitution }
+                    , old_reconstructed_clause_db )
                 | NONE =>
                     let
-                      val (new_reconstructed_clause_db, premise) = impl_reconstruct_with_metis ctxt clause_db old_reconstructed_clause_db id
+                      val (new_reconstructed_clause_db, premise) =
+                        impl_reconstruct_with_metis ctxt clause_db old_reconstructed_clause_db id
                     in
-                      (
-                        { premise = premise,
-                          shift = shift,
-                          substitution = substitution
-                        },
+                      ( { premise = premise
+                        , shift = shift
+                        , substitution = substitution }
                         (* insert into cache *)
-                        Inttab.default (id, premise) new_reconstructed_clause_db
-                      )
+                      , Inttab.default (id, premise) new_reconstructed_clause_db )
                     end
               )
             ids_and_shifts_and_substituitons
