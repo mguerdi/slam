@@ -114,7 +114,7 @@ ML \<open>
 signature JEHA_LEMMA = sig
   (* FIXME: the result of these should really be HClause.hthm *)
   val hclause_of_uninstantiated_bool_rw_rule: Proof.context -> term * term -> thm
-  val forall_exists_rw_lemma: Proof.context -> term -> bool -> thm
+  val forall_exists_rw_lemma: Proof.context -> cterm -> bool -> thm
 end
 
 structure Jeha_Lemma: JEHA_LEMMA = struct
@@ -138,8 +138,8 @@ fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
 
   fun forall_exists_rw_lemma ctxt predicate is_forall_rw =
     let
-      val T = fastype_of predicate |> domain_type |> Thm.ctyp_of ctxt
-      val P = Thm.cterm_of ctxt predicate
+      val T = predicate |> Thm.term_of |> fastype_of |> domain_type |> Thm.ctyp_of ctxt
+      val P = predicate
     in
       if is_forall_rw then
         \<^instantiate>\<open>P and 'a=T in

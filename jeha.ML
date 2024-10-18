@@ -256,8 +256,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
               (if positive then Jeha_Log.RewritePositiveLits else Jeha_Log.RewriteNegativeLits)
                 { unit = JClause.id unit_clause
                 , unit_shift = unit_shift
+                , unit_orientation = lp
                 , right_premise = JClause.id target_clause
-                , literal = target_cp 
+                , subterm = j 
                 , substitution = matcher}
              )
           |> SOME)

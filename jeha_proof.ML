@@ -14,10 +14,10 @@ sig
 
   (* for testing and debugging *)
   val get_lemmas:
-    Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference -> cterm -> int
+    Proof.context -> (int -> JClause.T) -> thm Inttab.table -> int Jeha_Log.inference -> cterm -> int
     -> thm list
   val get_instantiated_premises:
-    Proof.context -> (int -> JClause.T) -> thm Inttab.table -> Jeha_Log.inference
+    Proof.context -> (int -> JClause.T) -> thm Inttab.table -> int Jeha_Log.inference
     -> thm Inttab.table * thm list
   val resolve_against_arg_cong_contrapositive_n_times : Proof.context -> int -> thm * int -> thm
   val prepare_forall_exists_hoist_log:
@@ -68,15 +68,15 @@ sig
     -> HClause.hthm
   val reconstruct_bool_rw:
     Proof.context
-    -> { premise: HClause.hthm, subterm: JClause.full_pos, subrule: HClause.hthm }
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, instantiated_subrule: HClause.hthm }
     -> HClause.hthm
   val reconstruct_forall_rw:
     Proof.context
-    -> { premise: HClause.hthm, subterm: JClause.full_pos, predicate: term }
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, predicate: cterm }
     -> HClause.hthm
   val reconstruct_exists_rw:
     Proof.context
-    -> { premise: HClause.hthm, subterm: JClause.full_pos, predicate: term }
+    -> { premise: HClause.hthm, subterm: JClause.full_pos, predicate: cterm }
     -> HClause.hthm
   val reconstruct_delete_duplicated_lits:
     { premise: HClause.hthm
@@ -483,12 +483,12 @@ val reconstruct_forall_hoist = impl_reconstruct_forall_exists_hoist true
 val reconstruct_exists_hoist = impl_reconstruct_forall_exists_hoist false
 
 (* Note: subrule has to be proved and instantiated (like premise). *)
-fun reconstruct_bool_rw ctxt { premise, subterm, subrule } =
+fun reconstruct_bool_rw ctxt { premise, subterm, instantiated_subrule } =
   let
     val conclusion_from_sup =
       reconstruct_sup
         ctxt
-        { left_premise = subrule
+        { left_premise = instantiated_subrule
         , literal = (JLit.Left, 0)
         , right_premise = premise
         , subterm = subterm }
@@ -648,6 +648,247 @@ fun instantiate_env (Envir.Envir { maxidx, tenv, tyenv }) =
   end
 *)
 
+fun replay_inference ctxt clause_db origin =
+  let
+    val get_thm = error ""
+    (* FIXME rename to get_and_instantiate or something *)
+    fun instantiate _ (shift: int option) (id: int) = error ""
+    val only_instantiate = error ""
+    val only_instantiate_thm = error ""
+  in
+    case origin of
+      Jeha_Log.Axiom { thm } =>
+        error "unimplemented: thm needs to be turned into an HClause.hthm" (* thm *)
+    | Jeha_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
+        reconstruct_sup
+          ctxt
+          { left_premise = instantiate substitution (SOME left_premise_shift) left_premise
+          , right_premise = instantiate substitution NONE right_premise
+          , literal = literal
+          , subterm = subterm }
+    (*
+    | Jeha_Log.FluidSup =>
+        Jeha_Log.FluidSup
+    *)
+    | Jeha_Log.ERes { premise, literal, substitution } =>
+        reconstruct_eres { literal = literal, premise = instantiate substitution NONE premise }
+    | Jeha_Log.EFact { premise, left_literal, right_literal, substitution } =>
+        reconstruct_efact
+          { left_literal = left_literal
+          , right_literal = right_literal
+          , premise = instantiate substitution NONE premise }
+    | Jeha_Log.ArgCong { premise, literal, number_of_vars } =>
+       error "manual proof reconstruction for ArgCong unimplemented" 
+    | Jeha_Log.BoolHoist { premise, subterm, substitution } =>
+        reconstruct_bool_hoist
+          ctxt
+          { premise = instantiate substitution NONE premise, subterm = subterm }
+    | Jeha_Log.FalseElim { premise, literal, substitution } =>
+        reconstruct_false_elim
+          ctxt
+          { premise = instantiate substitution NONE premise, literal = literal }
+    | Jeha_Log.EqHoist { premise, subterm, substitution } =>
+        reconstruct_eq_hoist
+          ctxt
+          { premise = instantiate substitution NONE premise, subterm = subterm }
+    | Jeha_Log.NeqHoist { premise, subterm, substitution } =>
+        reconstruct_neq_hoist
+         ctxt
+         { premise = instantiate substitution NONE premise, subterm = subterm }
+    | Jeha_Log.ForallHoist { premise, subterm, substitution, fresh_x } =>
+        let
+          val { uninstantiated_premise, predicate, subterm, fresh_x } =
+            prepare_forall_exists_hoist_log
+              ctxt
+              clause_db
+              { uninstantiated_premise = premise
+              , subterm = subterm
+              , substitution = substitution
+              , fresh_x = fresh_x }
+          val premise = only_instantiate substitution uninstantiated_premise
+        in
+          reconstruct_forall_hoist
+            ctxt
+            { premise = premise, predicate = predicate, subterm = subterm, fresh_x = fresh_x }
+        end
+    | Jeha_Log.ExistsHoist { premise, subterm, substitution, fresh_x } =>
+        let
+          val { uninstantiated_premise, predicate, subterm, fresh_x } =
+            prepare_forall_exists_hoist_log
+              ctxt
+              clause_db
+              { uninstantiated_premise = premise
+              , subterm = subterm
+              , substitution = substitution
+              , fresh_x = fresh_x }
+          val premise = only_instantiate substitution uninstantiated_premise
+        in
+          reconstruct_exists_hoist
+            ctxt
+            { premise = premise, predicate = predicate, subterm = subterm, fresh_x = fresh_x }
+        end
+    | Jeha_Log.BoolRw { premise, subterm, subrule, substitution } =>
+        let
+          val instantiated_subrule =
+            subrule
+            |> Jeha_Lemma.hclause_of_uninstantiated_bool_rw_rule ctxt
+            |> only_instantiate_thm substitution
+        in
+          reconstruct_bool_rw
+            ctxt
+            { premise = instantiate substitution NONE premise
+            , subterm = subterm
+            , instantiated_subrule = instantiated_subrule }
+        end
+    | Jeha_Log.ForallRw { premise, subterm, substitution } =>
+        let
+          val { predicate, subterm, uninstantiated_premise } =
+            prepare_forall_exists_rw_log
+              ctxt
+              clause_db
+              { uninstantiated_premise = premise, subterm = subterm, substitution = substitution }
+          val premise = only_instantiate substitution uninstantiated_premise
+        in
+          reconstruct_forall_rw ctxt { predicate = predicate, subterm = subterm, premise = premise }
+        end
+    | Jeha_Log.ExistsRw { premise, subterm, substitution } =>
+        let
+          val { predicate, subterm, uninstantiated_premise } =
+            prepare_forall_exists_rw_log
+              ctxt
+              clause_db
+              { uninstantiated_premise = premise, subterm = subterm, substitution = substitution }
+          val premise = only_instantiate substitution uninstantiated_premise
+        in
+          reconstruct_exists_rw ctxt { predicate = predicate, subterm = subterm, premise = premise }
+        end
+    | Jeha_Log.FluidBoolHoist { premise, subterm, substitution } =>
+        error "manual FluidBoolHoist reconstruction unimplemented"
+    | Jeha_Log.FluidLoobHoist { premise, subterm, substitution } =>
+        error "manual FluidLoobHoist reconstruction unimplemented"
+    | Jeha_Log.Ext =>
+        error "manual Ext reconstruction unimplemented" 
+    | Jeha_Log.Choice =>
+        error "manual Choice reconstruction unimplemented" 
+    | Jeha_Log.DeleteDuplicatedLits { premise, duplicate_cposs } =>
+        reconstruct_delete_duplicated_lits
+          { premise = get_thm premise, duplicate_cposs = duplicate_cposs }
+    | Jeha_Log.DeleteResolvedLits { premise, cposs } =>
+        reconstruct_delete_resolved_lits { premise = get_thm premise, cposs = cposs }
+    | Jeha_Log.RewritePositiveLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
+        reconstruct_sup
+          ctxt
+          { left_premise = instantiate substitution (SOME unit_shift) unit
+          , right_premise = instantiate substitution NONE right_premise
+          , literal = (unit_orientation, 0)
+          , subterm = subterm }
+    | Jeha_Log.RewriteNegativeLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
+        reconstruct_sup
+          ctxt
+          { left_premise = instantiate substitution (SOME unit_shift) unit
+          , right_premise = instantiate substitution NONE right_premise
+          , literal = (unit_orientation, 0)
+          , subterm = subterm }
+          (*
+    | Jeha_Log.PositiveSimplifyReflect { unit, right_premise, disagreement } =>
+        Jeha_Log.PositiveSimplifyReflect { unit = f unit, right_premise = f right_premise, disagreement = disagreement }
+    | Jeha_Log.NegativeSimplifyReflect { unit, substitution, unit_shift, right_premise, literal } =>
+        Jeha_Log.NegativeSimplifyReflect { unit = f unit, substitution = substitution, unit_shift = unit_shift , right_premise = f right_premise, literal = literal }
+    | Jeha_Log.SimpPosNegOuterClaus { premise, literal }  =>
+        Jeha_Log.SimpPosNegOuterClaus { premise = f premise, literal = literal } 
+    | Jeha_Log.SimpBoolRw { premise, subterm, subrule, substitution } =>
+        Jeha_Log.SimpBoolRw { premise = f premise, subterm = subterm, subrule = subrule, substitution = substitution }
+    | Jeha_Log.SimpFalseElim { premise, literal, substitution } =>
+        Jeha_Log.SimpFalseElim { premise = f premise, literal = literal, substitution = substitution }
+    | Jeha_Log.SimpNormalizePredLits { premise } =>
+        Jeha_Log.SimpNormalizePredLits { premise = f premise }
+    | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
+        Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
+    | Jeha_Log.SyntacticTautologyDeletion2 { premise, left_literal, right_literal, substitution } =>
+        Jeha_Log.SyntacticTautologyDeletion2 { premise = f premise, left_literal = left_literal, right_literal = right_literal, substitution = substitution }
+    | Jeha_Log.ClauseSubsumption { subsumer, subsumed, substitution } =>
+        Jeha_Log.ClauseSubsumption { subsumer = subsumer, subsumed = subsumed, substitution = substitution }
+    | Jeha_Log.EqualitySubsumption { unit, disagreement, substitution } =>
+        Jeha_Log.EqualitySubsumption { unit = f unit, disagreement = disagreement, substitution = substitution }
+    | Jeha_Log.Invalid =>
+        Jeha_Log.Invalid
+*)
+    | _ => error "replay_inference unimplemented"
+  end
+
+fun map_premises f origin =
+    case origin of
+      Jeha_Log.Axiom { thm } =>
+        Jeha_Log.Axiom { thm = thm }
+    | Jeha_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
+        Jeha_Log.Sup { left_premise = f left_premise, left_premise_shift = left_premise_shift, right_premise = f right_premise, literal = literal, subterm = subterm, substitution = substitution }
+    | Jeha_Log.FluidSup =>
+        Jeha_Log.FluidSup
+    | Jeha_Log.ERes { premise, literal, substitution } =>
+        Jeha_Log.ERes { premise = f premise, literal = literal, substitution = substitution }
+    | Jeha_Log.EFact { premise, left_literal, right_literal, substitution } =>
+        Jeha_Log.EFact { premise = f premise, left_literal = left_literal, right_literal = right_literal, substitution = substitution }
+    | Jeha_Log.ArgCong { premise, literal, number_of_vars } =>
+        Jeha_Log.ArgCong { premise = f premise, literal = literal, number_of_vars = number_of_vars }
+    | Jeha_Log.BoolHoist { premise, subterm, substitution } =>
+        Jeha_Log.BoolHoist { premise = f premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.FalseElim { premise, literal, substitution } =>
+        Jeha_Log.FalseElim { premise = f premise, literal = literal, substitution = substitution }
+    | Jeha_Log.EqHoist { premise, subterm, substitution } =>
+        Jeha_Log.EqHoist { premise = f premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.NeqHoist { premise, subterm, substitution } =>
+        Jeha_Log.NeqHoist { premise = f premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.ForallHoist { premise, subterm, substitution, fresh_x } =>
+        Jeha_Log.ForallHoist { premise = f premise, subterm = subterm, substitution = substitution, fresh_x = fresh_x }
+    | Jeha_Log.ExistsHoist { premise, subterm, substitution, fresh_x } =>
+        Jeha_Log.ExistsHoist { premise = f premise, subterm = subterm, substitution = substitution, fresh_x = fresh_x }
+    | Jeha_Log.BoolRw { premise, subterm, subrule, substitution } =>
+        Jeha_Log.BoolRw { premise = f premise, subterm = subterm, subrule = subrule, substitution = substitution }
+    | Jeha_Log.ForallRw { premise, subterm, substitution } =>
+        Jeha_Log.ForallRw { premise = f premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.ExistsRw { premise, subterm, substitution } =>
+        Jeha_Log.ExistsRw { premise = f premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.FluidBoolHoist { premise, subterm, substitution } =>
+        Jeha_Log.FluidBoolHoist { premise = f premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.FluidLoobHoist { premise, subterm, substitution } =>
+        Jeha_Log.FluidLoobHoist { premise = f premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.Ext =>
+        Jeha_Log.Ext
+    | Jeha_Log.Choice =>
+        Jeha_Log.Choice
+    | Jeha_Log.DeleteDuplicatedLits { premise, duplicate_cposs } =>
+        Jeha_Log.DeleteDuplicatedLits { premise = f premise, duplicate_cposs = duplicate_cposs }
+    | Jeha_Log.DeleteResolvedLits { premise, cposs } =>
+        Jeha_Log.DeleteResolvedLits { premise = f premise, cposs = cposs }
+    | Jeha_Log.RewritePositiveLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
+        Jeha_Log.RewritePositiveLits { unit = f unit, unit_shift = unit_shift, unit_orientation = unit_orientation, right_premise = f right_premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.RewriteNegativeLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
+        Jeha_Log.RewriteNegativeLits { unit = f unit, unit_shift = unit_shift, unit_orientation = unit_orientation, right_premise = f right_premise, subterm = subterm, substitution = substitution }
+    | Jeha_Log.PositiveSimplifyReflect { unit, right_premise, disagreement } =>
+        Jeha_Log.PositiveSimplifyReflect { unit = f unit, right_premise = f right_premise, disagreement = disagreement }
+    | Jeha_Log.NegativeSimplifyReflect { unit, substitution, unit_shift, right_premise, literal } =>
+        Jeha_Log.NegativeSimplifyReflect { unit = f unit, substitution = substitution, unit_shift = unit_shift , right_premise = f right_premise, literal = literal }
+    | Jeha_Log.SimpPosNegOuterClaus { premise, literal }  =>
+        Jeha_Log.SimpPosNegOuterClaus { premise = f premise, literal = literal } 
+    | Jeha_Log.SimpBoolRw { premise, subterm, subrule, substitution } =>
+        Jeha_Log.SimpBoolRw { premise = f premise, subterm = subterm, subrule = subrule, substitution = substitution }
+    | Jeha_Log.SimpFalseElim { premise, literal, substitution } =>
+        Jeha_Log.SimpFalseElim { premise = f premise, literal = literal, substitution = substitution }
+    | Jeha_Log.SimpNormalizePredLits { premise } =>
+        Jeha_Log.SimpNormalizePredLits { premise = f premise }
+    | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
+        Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
+    | Jeha_Log.SyntacticTautologyDeletion2 { premise, left_literal, right_literal, substitution } =>
+        Jeha_Log.SyntacticTautologyDeletion2 { premise = f premise, left_literal = left_literal, right_literal = right_literal, substitution = substitution }
+    | Jeha_Log.ClauseSubsumption { subsumer, subsumed, substitution } =>
+        Jeha_Log.ClauseSubsumption { subsumer = subsumer, subsumed = subsumed, substitution = substitution }
+    | Jeha_Log.EqualitySubsumption { unit, disagreement, substitution } =>
+        Jeha_Log.EqualitySubsumption { unit = f unit, disagreement = disagreement, substitution = substitution }
+    | Jeha_Log.Invalid =>
+        Jeha_Log.Invalid
+
+fun impl_reconstruct_manual ctxt origin = error "impl_reconstruct_manual unimplemented"
+
 fun impl_reconstruct_with_automation
   ctxt
   expected_conclusion
@@ -786,13 +1027,16 @@ fun impl_reconstruct
 
     val proved_conclusion =
       case Jeha_Common.get_proof_reconstruction_mode ctxt of
-        Jeha_Common.Manual => error "manual reconstruction unimplemented"
+        Jeha_Common.Manual =>
+          impl_reconstruct_manual
+            ctxt
+            origin
       | _ =>
-        impl_reconstruct_with_automation
-          ctxt
-          expected_conclusion
-          instantiated_premises
-          lemmas
+          impl_reconstruct_with_automation
+            ctxt
+            expected_conclusion
+            instantiated_premises
+            lemmas
 
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "Proved conclusion (old vars): " ^  Thm.string_of_thm ctxt proved_conclusion)

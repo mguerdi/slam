@@ -12,8 +12,8 @@ sig
   val maxidx : T -> int
   val maxidx_of2 : T * T -> int
   val map_maxidx : (int -> int) -> T -> T
-  val set_origin : Jeha_Log.inference -> T -> T
-  val origin : T -> Jeha_Log.inference
+  val set_origin : int Jeha_Log.inference -> T -> T
+  val origin : T -> int Jeha_Log.inference
   val lit_at : cpos -> T -> JLit.T
   val dummy : JLit.T list -> T
   val refresh_id : unit -> T -> T
@@ -59,7 +59,7 @@ type T =
   { literals: JLit.T list
   , id : int
   , maxidx : int
-  , origin: Jeha_Log.inference
+  , origin: int Jeha_Log.inference
   }
 
 type cpos = int

@@ -2,106 +2,106 @@
 
 signature JEHA_LOG =
 sig
-  datatype inference =
+  datatype 'a inference =
   (* part of the input problem or auxilliary like lem, boolean tautologies *)
     Axiom of { thm: thm }
   (* proper inferences *)
-  | Sup of { left_premise: int, left_premise_shift: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidSup
-  | ERes of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | EFact of { premise: int, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | ArgCong of { premise: int, literal: JClause_Pos.cpos, number_of_vars: int }
+  | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | ArgCong of { premise: 'a, literal: JClause_Pos.cpos, number_of_vars: int }
   (* Booleans *)
-  | BoolHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | EqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | NeqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
-  | ExistsHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
-  | BoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
-  | ForallRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ExistsRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FluidBoolHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FluidLoobHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | BoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | FalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | EqHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | NeqHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ForallHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
+  | ExistsHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
+  | BoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
+  | ForallRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | FluidBoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | FluidLoobHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (* axioms *)
   | Ext
   | Choice
   (* simplification *)
-  (* FIXME: | DeleteDuplicatedLits of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
-  | DeleteDuplicatedLits of { premise: int, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
-  (* FIXME: | DeleteResolvedLits of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env } *)
-  | DeleteResolvedLits of { premise: int, cposs: JClause_Pos.cpos list }
-  | RewritePositiveLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | RewriteNegativeLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
+  (* FIXME: | DeleteDuplicatedLits of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
+  | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
+  (* FIXME: | DeleteResolvedLits of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env } *)
+  | DeleteResolvedLits of { premise: 'a, cposs: JClause_Pos.cpos list }
+  | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (* FIXME: add substitution *)
-  | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
+  | PositiveSimplifyReflect of { unit: 'a, right_premise: 'a, disagreement: JClause_Pos.full_pos }
   (* FIXME: add substitution *)
-  | NegativeSimplifyReflect of { unit: int, substitution: Envir.env, unit_shift : int, right_premise: int, literal: JClause_Pos.cpos }
-  (* | PosOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | NegOuterClaus of { premise: int, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env } *)
-  | SimpPosNegOuterClaus of { premise: int, literal: JClause_Pos.cpos } 
+  | NegativeSimplifyReflect of { unit: 'a, substitution: Envir.env, unit_shift : int, right_premise: 'a, literal: JClause_Pos.cpos }
+  (* | PosOuterClaus of { premise: 'a, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | NegOuterClaus of { premise: 'a, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env } *)
+  | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos } 
   (* *)
-  | SimpBoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
-  | SimpFalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | SimpNormalizePredLits of { premise: int }
+  | SimpBoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
+  | SimpFalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | SimpNormalizePredLits of { premise: 'a }
   (* redundancy FIXME: different type? these don't make sense in logs in clauses *)
-  | SyntacticTautologyDeletion1 of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | SyntacticTautologyDeletion2 of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
+  | SyntacticTautologyDeletion1 of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | SyntacticTautologyDeletion2 of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
   | ClauseSubsumption of { subsumer: int, subsumed: int, substitution: Envir.env }
-  | EqualitySubsumption of { unit: int, disagreement: JClause_Pos.full_pos, substitution: Envir.env }
+  | EqualitySubsumption of { unit: 'a, disagreement: JClause_Pos.full_pos, substitution: Envir.env }
   (* essentially a NONE value for temporary use *)
   | Invalid
 
-  val premises : inference -> int list
-  val premises_shift_substitution : inference -> { id: int, shift: int, substitution: Envir.env } list
-  val name_of : inference -> string
-  val pretty : Proof.context -> inference -> string
+  val premises : 'a inference -> 'a list
+  val premises_shift_substitution : int inference -> { id: int, shift: int, substitution: Envir.env } list
+  val name_of : 'a inference -> string
+  val pretty : Proof.context -> 'a inference -> string
 end;
 
 structure Jeha_Log : JEHA_LOG =
 struct
 
-datatype inference =
+datatype 'a inference =
   (* part of the input problem or auxilliary like lem, boolean tautologies *)
     Axiom of { thm: thm }
   (* proper inferences *)
   (** general **)
-  | Sup of { left_premise: int, left_premise_shift: int, right_premise: int, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidSup
-  | ERes of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | EFact of { premise: int, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | ArgCong of { premise: int, literal: JClause_Pos.cpos, number_of_vars: int }
+  | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | ArgCong of { premise: 'a, literal: JClause_Pos.cpos, number_of_vars: int }
   (** Booleans **)
-  | BoolHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | EqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | NeqHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ForallHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
-  | ExistsHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
-  | BoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
-  | ForallRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ExistsRw of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FluidBoolHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | FluidLoobHoist of { premise: int, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | BoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | FalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | EqHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | NeqHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ForallHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
+  | ExistsHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
+  | BoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
+  | ForallRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | FluidBoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | FluidLoobHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (** axioms **)
   | Ext
   | Choice
   (** simplification **)
-  | DeleteDuplicatedLits of { premise: int, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
-  | DeleteResolvedLits of { premise: int, cposs: JClause_Pos.cpos list }
-  | RewritePositiveLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | RewriteNegativeLits of { unit: int, unit_shift: int, right_premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | PositiveSimplifyReflect of { unit: int, right_premise: int, disagreement: JClause_Pos.full_pos }
-  | NegativeSimplifyReflect of { unit: int, substitution: Envir.env, unit_shift : int, right_premise: int, literal: JClause_Pos.cpos }
-  | SimpPosNegOuterClaus of { premise: int, literal: JClause_Pos.cpos }
-  | SimpBoolRw of { premise: int, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
-  | SimpFalseElim of { premise: int, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | SimpNormalizePredLits of { premise: int }
+  | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
+  | DeleteResolvedLits of { premise: 'a, cposs: JClause_Pos.cpos list }
+  | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | PositiveSimplifyReflect of { unit: 'a, right_premise: 'a, disagreement: JClause_Pos.full_pos }
+  | NegativeSimplifyReflect of { unit: 'a, substitution: Envir.env, unit_shift : int, right_premise: 'a, literal: JClause_Pos.cpos }
+  | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos }
+  | SimpBoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
+  | SimpFalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | SimpNormalizePredLits of { premise: 'a }
   (* redundancy FIXME: different type? these don't make sense in logs in clauses *)
-  | SyntacticTautologyDeletion1 of { premise: int, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | SyntacticTautologyDeletion2 of { premise: int, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
+  | SyntacticTautologyDeletion1 of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
+  | SyntacticTautologyDeletion2 of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
   | ClauseSubsumption of { subsumer: int, subsumed: int, substitution: Envir.env }
-  | EqualitySubsumption of { unit: int, disagreement: JClause_Pos.full_pos, substitution: Envir.env }
+  | EqualitySubsumption of { unit: 'a, disagreement: JClause_Pos.full_pos, substitution: Envir.env }
   (* essentially a NONE value for temporary use *)
   | Invalid
 
@@ -133,7 +133,7 @@ fun premises (Axiom { thm: thm }) = []
   | premises (SimpPosNegOuterClaus { premise, ... }) = [premise]
   | premises (SimpBoolRw { premise, ...}) = [premise]
   | premises (SimpFalseElim { premise, ... }) = [premise]
-  | premises (SimpNormalizePredLits { premise: int }) = [premise]
+  | premises (SimpNormalizePredLits { premise }) = [premise]
   | premises Invalid = error "\"Invalid\" inference encountered"
 
 fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_premise, substitution, ... })
