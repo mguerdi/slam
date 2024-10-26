@@ -13,7 +13,7 @@ sig
   val is_pos_unit : JClause.T -> bool
   val impl_simp_rewrite_lits : bool -> Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val find_single_green_disagreement : Proof.context -> term * term -> JTerm.tpos option
-  val literal_can_match_single_disagreement : Proof.context -> int * JLit.T -> int * JLit.T -> bool
+  val literal_can_match_single_disagreement : Proof.context -> int * JLit.T -> int * JLit.T -> (int * (JTerm.tpos * (JLit.lpos * Envir.env))) option
   val equality_subsumes : Proof.context -> JClause.T * JClause.T -> bool
   val bool_rw_non_var_rules : bool -> (term * term) list
   (* outer clausification *)
@@ -321,7 +321,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
   end
   (* ) *)
 
-(* given terms s, t, the longest common position p s.t. s, t are equal except
+(* given terms s, t, the longest common position p such that s, t are equal except
 for their subtrees at p *)
 (* FIXME: rename to find_single_blue_disagreement and change appropriately *)
 (* FIXME: how to deal with types???
@@ -349,35 +349,42 @@ fun find_single_green_disagreement ctxt term_pair =
 fun literal_can_match_single_disagreement
       ctxt (unit_maxidx, unit_lit) (target_maxidx, target_lit) =
   let
+    val unit_shift = target_maxidx + 1
     val unit_lit =
-      unit_lit |> JLit.map (Logic.incr_indexes ([], [], target_maxidx + 1))
+      unit_lit |> JLit.map (Logic.incr_indexes ([], [], unit_shift))
     val maxidx = unit_maxidx + target_maxidx + 1
     val (lhs, rhs, true) = unit_lit (* Schulz: s, t *)
     val (target_lhs, target_rhs, _) = target_lit (* Schulz: u[], u[]*)
     (* Schulz: longest possbile p *)
     val longest_prefix_of_disagreements =
       find_single_green_disagreement ctxt (target_lhs, target_rhs)
-    fun can_match_disagreement_position prefix_of_disagreements =
+    fun match_disagreement_position prefix_of_disagreements =
       let
         val (target_term_lhs, target_term_rhs) = (* u|\<^sub>p *)
           (JTerm.subterm_at target_lhs prefix_of_disagreements,
           JTerm.subterm_at target_rhs prefix_of_disagreements)
-        val exists_matcher =
+        val matcher =
           ( [(lhs, target_term_lhs), (rhs, target_term_rhs)]
           , [(lhs, target_term_rhs), (rhs, target_term_lhs)] )
           |> apply2 (Jeha_Unify.matchers (Context.Proof ctxt) maxidx)
+          |> (fn (left_matchers, right_matchers) =>
+            (Seq.map (pair JLit.Left) left_matchers, Seq.map (pair JLit.Right) right_matchers))
           |> Seq.interleave
           |> Seq.pull
-          |> is_some
+          |> Jeha_Common.map_some fst
       in
-        exists_matcher
+        Jeha_Common.map_some (pair prefix_of_disagreements) matcher
       end
   in
       case longest_prefix_of_disagreements of
-        NONE => false (* terms are equal, (TD1) or (DR) will take care of it *)
+        NONE => NONE (* terms are equal, (TD1) or (DR) will take care of it *)
       | SOME longest_prefix_of_disagreements =>
           (* Schulz' p is any of the prefixes of the longest possible p *)
-          exists (can_match_disagreement_position) (prefixes longest_prefix_of_disagreements)
+          fold (fn position => fn matcher =>
+            case matcher of SOME m => SOME m | NONE => match_disagreement_position position)
+          (prefixes longest_prefix_of_disagreements)
+          NONE
+          |> Jeha_Common.map_some (pair unit_shift)
   end
 
 (* Positive simplify-reflect (PS) simplification (Schulz)
@@ -393,7 +400,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   let
     val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
-    val exists_matcher =
+    val matcher =
       literal_can_match_single_disagreement
         ctxt (JClause.maxidx unit_clause, lit) (JClause.maxidx target_clause, target_lit)
     (* tracing *)
@@ -402,15 +409,26 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
       ^ " in " ^ JClause.pretty_clause ctxt target_clause
       ^ " with " ^ JClause.pretty_clause ctxt (unit_clause)
   in
-    if exists_matcher
-      then let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
+    case matcher of
+      SOME (unit_shift, (disagreement, (unit_orientation, matcher))) =>
+        let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
         |> JClause.delete_lit_at target_cp
         |> JClause.refresh_id ()
-        (* FIXME: set origin *)
+        |> JClause.set_origin (
+            Jeha_Log.PositiveSimplifyReflect
+            { unit = JClause.id unit_clause
+            , unit_shift = unit_shift
+            , matcher = matcher
+            , unit_orientation = unit_orientation
+            , right_premise = JClause.id target_clause
+            (* This fixed to be JLit.Left because there is symmetry in the orientation of the unit
+            and which side of the target literal we apply the rewrite to. *)
+            , disagreement = (disagreement, JLit.Left, target_cp) }
+          )
         |> SOME 
-      end
-      else NONE
+        end
+      | NONE => NONE
   end
   (* ) *)
 
@@ -422,7 +440,8 @@ fun equality_subsumes ctxt (unit_clause, target_clause) =
     val unit_lit = (JClause.maxidx unit_clause, the_single (JClause.literals unit_clause))
     val positive_lits =
       map (pair (JClause.maxidx target_clause)) (filter #3 (JClause.literals target_clause))
-    val exists_matcher = exists (literal_can_match_single_disagreement ctxt unit_lit) positive_lits
+    val exists_matcher =
+      exists (is_some o literal_can_match_single_disagreement ctxt unit_lit) positive_lits
     val _ = if exists_matcher then Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
       "equality subsumed by " ^ JClause.pretty_clause ctxt unit_clause) else ()
   in

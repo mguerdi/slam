@@ -86,6 +86,13 @@ sig
     { premise: HClause.hthm
     , cposs: JClause.cpos list }
     -> HClause.hthm
+  val reconstruct_positive_simplify_reflect:
+    Proof.context 
+    -> { unit: HClause.hthm
+       , unit_orientation: JLit.lpos
+       , right_premise: HClause.hthm
+       , disagreement: JClause.full_pos }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -566,6 +573,24 @@ fun reconstruct_delete_resolved_lits { premise, cposs } =
     fold impl_delete_resolved_lit sorted premise
   end
 
+fun reconstruct_positive_simplify_reflect
+  ctxt
+  { unit, unit_orientation, right_premise, disagreement }
+=
+  let
+     val with_resolved_literal =
+       reconstruct_sup
+         ctxt
+         { left_premise = unit
+         , right_premise = right_premise
+         , literal = (unit_orientation, 0)
+         , subterm = disagreement }
+  in
+   reconstruct_delete_resolved_lits
+     { premise = with_resolved_literal 
+     , cposs = [#3 disagreement] }
+  end
+
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
 (* some inference rules require additional lemmas *)
@@ -779,19 +804,25 @@ fun replay_inference ctxt clause_db origin =
         reconstruct_sup
           ctxt
           { left_premise = instantiate substitution (SOME unit_shift) unit
-          , right_premise = instantiate substitution NONE right_premise
+          , right_premise = get_thm right_premise
           , literal = (unit_orientation, 0)
           , subterm = subterm }
     | Jeha_Log.RewriteNegativeLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
         reconstruct_sup
           ctxt
           { left_premise = instantiate substitution (SOME unit_shift) unit
-          , right_premise = instantiate substitution NONE right_premise
+          , right_premise = get_thm right_premise
           , literal = (unit_orientation, 0)
           , subterm = subterm }
+    | Jeha_Log.PositiveSimplifyReflect { unit, unit_shift, unit_orientation, matcher, right_premise, disagreement } =>
+        reconstruct_positive_simplify_reflect
+          ctxt
+          { unit = instantiate matcher (SOME unit_shift) unit
+          , unit_orientation = unit_orientation
+          , right_premise = get_thm right_premise
+          , disagreement = disagreement }
+        
           (*
-    | Jeha_Log.PositiveSimplifyReflect { unit, right_premise, disagreement } =>
-        Jeha_Log.PositiveSimplifyReflect { unit = f unit, right_premise = f right_premise, disagreement = disagreement }
     | Jeha_Log.NegativeSimplifyReflect { unit, substitution, unit_shift, right_premise, literal } =>
         Jeha_Log.NegativeSimplifyReflect { unit = f unit, substitution = substitution, unit_shift = unit_shift , right_premise = f right_premise, literal = literal }
     | Jeha_Log.SimpPosNegOuterClaus { premise, literal }  =>
@@ -816,6 +847,7 @@ fun replay_inference ctxt clause_db origin =
     | _ => error "replay_inference unimplemented"
   end
 
+(* FIXME: delete this doesn't work at all with shifts, substitutions etc. *)
 fun map_premises f origin =
     case origin of
       Jeha_Log.Axiom { thm } =>
@@ -864,8 +896,8 @@ fun map_premises f origin =
         Jeha_Log.RewritePositiveLits { unit = f unit, unit_shift = unit_shift, unit_orientation = unit_orientation, right_premise = f right_premise, subterm = subterm, substitution = substitution }
     | Jeha_Log.RewriteNegativeLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
         Jeha_Log.RewriteNegativeLits { unit = f unit, unit_shift = unit_shift, unit_orientation = unit_orientation, right_premise = f right_premise, subterm = subterm, substitution = substitution }
-    | Jeha_Log.PositiveSimplifyReflect { unit, right_premise, disagreement } =>
-        Jeha_Log.PositiveSimplifyReflect { unit = f unit, right_premise = f right_premise, disagreement = disagreement }
+    | Jeha_Log.PositiveSimplifyReflect { unit, unit_shift, matcher, unit_orientation, right_premise, disagreement } =>
+        Jeha_Log.PositiveSimplifyReflect { unit = f unit, unit_shift = unit_shift, matcher = matcher, unit_orientation = unit_orientation, right_premise = f right_premise, disagreement = disagreement }
     | Jeha_Log.NegativeSimplifyReflect { unit, substitution, unit_shift, right_premise, literal } =>
         Jeha_Log.NegativeSimplifyReflect { unit = f unit, substitution = substitution, unit_shift = unit_shift , right_premise = f right_premise, literal = literal }
     | Jeha_Log.SimpPosNegOuterClaus { premise, literal }  =>
