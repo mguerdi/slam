@@ -18,7 +18,7 @@ ML_val \<open>
       @{context}     
       { premise = premise
       , subterm = ([], JLit.Left, 0)
-      , subrule = subrule }
+      , instantiated_subrule = subrule }
   val () = \<^assert> (Thm.eq_thm_prop (expected, conclusion))
 \<close>
 
@@ -36,7 +36,7 @@ ML_val \<open>
       ctxt
       { premise = premise
       , subterm = subterm
-      , subrule = subrule }
+      , instantiated_subrule = subrule }
 \<close>
 
 ML_val \<open>
@@ -53,7 +53,7 @@ ML_val \<open>
       ctxt
       { premise = premise
       , subterm = subterm
-      , subrule = subrule }
+      , instantiated_subrule = subrule }
 \<close>
 
 end
