@@ -151,6 +151,7 @@ fun simp_delete_duplicated_lits ctxt c =
             (* l is new, add it to the seen lits *)
               ~1 => (dup_is, l::head_list)
             (* duplicate of l has already been seen *)
+            (* FIXME: index_of_existing is wrong somehow, see SAT_Examples *)
             | index_of_existing => ({duplicate_of = index_of_existing, duplicate = i}::dup_is, head_list)))
         (JClause.literals c)
         ([], [])
@@ -498,8 +499,8 @@ fun simp_bool_outer_claus (c, i) =
   in
     if null clausified then [] else (* in particular if head of s is not a logical symbol *)
     clausified
-    |> map
-      (JClause.set_origin (Jeha_Log.SimpPosNegOuterClaus { premise = JClause.id c, literal = i}))
+    |> map_index
+      (fn (index, clause) => clause |> (JClause.set_origin (Jeha_Log.SimpPosNegOuterClaus { premise = JClause.id c, literal = i, conclusion_index = index })))
     (* FIXME: map might be sufficient, i.e. no need for a fold *)
     |> (fn clauses =>
         fold
@@ -824,7 +825,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
         c
         |> JClause.delete_lit_at cp
         |> JClause.refresh_id ()
-        |> JClause.set_origin origin 
+        |> JClause.set_origin origin
         |> SOME
       end
   in

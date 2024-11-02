@@ -37,7 +37,6 @@ lemma paper_example_26:
   shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x))"
   (* sledgehammer
   by metis *)
-  (* FIXME: why no argo trace? Because its successful? *)
-  using [[argo_trace=full]] by jeha (* 29500 ms *)
+  using by jeha (* 29500 ms *)
 
 end

@@ -5,8 +5,6 @@ imports "JEHA.jeha"
 begin
 
 declare [[jeha_trace]]
-declare [[jeha_proof_reconstruction=argo]]
-declare [[metis_trace]]
 
 lemma modus_ponens:
   shows "A \<Longrightarrow> (A \<Longrightarrow> B) \<Longrightarrow> B" 
@@ -38,7 +36,11 @@ lemma and_intro:
 
 lemma and_elim:
   shows "A \<and> B \<Longrightarrow> (A \<Longrightarrow> B \<Longrightarrow> C) \<Longrightarrow> C"
-  using [[show_types=false, argo_trace=full]] by (jeha)
+  by (jeha)
+
+(* lemma argo_issue:
+  "(C \<noteq> True \<Longrightarrow> B \<noteq> False \<Longrightarrow> A \<noteq> False \<Longrightarrow> False) \<Longrightarrow> (C \<noteq> False \<Longrightarrow> False) \<Longrightarrow> B \<noteq> False \<Longrightarrow> A \<noteq> False \<Longrightarrow> True \<noteq> False \<Longrightarrow> False"
+  using [[argo_trace=full]] by argo *)
 
 lemma or_pass_left:
   shows "A \<or> B \<Longrightarrow> (A \<Longrightarrow> C) \<Longrightarrow> C \<or> B"

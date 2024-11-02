@@ -11,9 +11,6 @@ declare [[jeha_rule_sup]]
 declare [[jeha_rule_e_res]]
 declare [[jeha_rule_e_fact]]
 
-declare [[jeha_proof_reconstruction=argo]]
-declare [[metis_trace]]
-
 lemma transitivity:
   shows "x = y \<Longrightarrow> y = z \<Longrightarrow> x = z"
   by (jeha) (* 59 ms *)
@@ -28,6 +25,8 @@ lemma deep_congruence:
 
 lemma beta_reduction:
   shows "ev = (\<lambda> g x. g x) \<Longrightarrow> f = (\<lambda> x. x) \<Longrightarrow> ev f x = x"
+  (* FIXME remove after missing reconstruction have been implemented *)
+  using [[jeha_proof_reconstruction=argo]]
   using [[jeha_rule_clause_subsumption, jeha_rule_arg_cong]] by jeha
 
 end

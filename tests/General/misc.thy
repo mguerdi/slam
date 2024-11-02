@@ -7,6 +7,7 @@ begin
 declare [[jeha_trace]]
 declare [[metis_trace]]
 
+(* FIXME remove after missing reconstruction have been implemented *)
 declare [[jeha_proof_reconstruction=argo]]
 
 lemma funs_eq_then_comp_id_eq:
@@ -19,7 +20,7 @@ lemma funs_eq_then_comp_id_eq:
         jeha_rule_clause_subsumption,
         jeha_rule_e_res,
         unify_search_bound = 7 ]]
-  by jeha
+  using [[jeha_proof_reconstruction=argo]] by jeha
   (* by (jeha comp_apply id_apply) (* 1070 ms *) *)
 
 lemma arg_cong_test:

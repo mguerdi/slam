@@ -164,7 +164,7 @@ fun parse_proof_reconstruction_mode "none" = None
 val proof_reconstruction =
   Attrib.setup_config_string
     \<^binding>\<open>jeha_proof_reconstruction\<close>
-    (K (string_of_proof_reconstruction_mode Argo))
+    (K (string_of_proof_reconstruction_mode Manual))
 (* val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>jeha_proof_reconstruction\<close> (K true) *)
 
 fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)

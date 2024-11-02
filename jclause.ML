@@ -103,7 +103,7 @@ fun recalculate_maxidx clause =
 
 fun add_literal l clause =
   clause
-  |> map_literals (cons l)
+  |> map_literals (fn lits => lits @ [l])
   |> refresh_id ()
   |> map_maxidx (K (Int.max (maxidx clause, JLit.maxidx_of l)))
 

@@ -12,7 +12,6 @@ imports "JEHA.jeha" Main
 begin
 
 declare [[jeha_trace]]
-declare [[jeha_proof_reconstruction]]
 
 lemma "True"
 by jeha (* 0 ms *)
@@ -40,22 +39,22 @@ lemma "P=P=P=P=P=P=P=P=P=P"
 by jeha (* 1609 ms *)
 
 lemma "P=P=P=P=P=P=P=P=P=P"
-using [[ jeha_proof_reconstruction = false ]] by jeha (* 1642 ms *)
+by jeha (* 1642 ms *)
 
-lemma  "!! a b c. [| a | b | c | d ;
-e | f | (a & d) ;
-~(a | (c & ~c)) | b ;
-~(b & (x | ~x)) | c ;
-~(d | False) | c ;
-~(c | (~p & (p | (q & ~q)))) |] ==> False"
+lemma  "\<And> a b c. a \<or> b \<or> c \<or> d \<Longrightarrow>
+e \<or> f \<or> (a & d) \<Longrightarrow>
+~(a \<or> (c & ~c)) \<or> b \<Longrightarrow>
+~(b & (x \<or> ~x)) \<or> c \<Longrightarrow>
+~(d \<or> False) \<or> c \<Longrightarrow>
+~(c \<or> (~p & (p \<or> (q & ~q)))) \<Longrightarrow> False"
 by jeha (* 747 ms *)
 
-lemma  "!! a b c. [| a | b | c | d ;
-e | f | (a & d) ;
-~(a | (c & ~c)) | b ;
-~(b & (x | ~x)) | c ;
-~(d | False) | c ;
-~(c | (~p & (p | (q & ~q)))) |] ==> False"
+lemma  "!! a b c. a \<or> b \<or> c \<or> d \<Longrightarrow>
+e \<or> f \<or> (a & d) \<Longrightarrow>
+~(a \<or> (c & ~c)) \<or> b \<Longrightarrow>
+~(b & (x \<or> ~x)) \<or> c \<Longrightarrow>
+~(d \<or> False) \<or> c \<Longrightarrow>
+~(c \<or> (~p & (p \<or> (q & ~q)))) \<Longrightarrow> False"
 by jeha (* 435 ms *)
 
 end

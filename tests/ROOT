@@ -30,9 +30,10 @@ session "JEHA_TEST_RULES" in Rules = JEHA_TEST_BASE +
     specific rules
   "
   theories
-    sup
     bool_rw
     eq_hoist
+    positive_simplify_reflect
+    sup
 
 session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
   description "
@@ -87,4 +88,5 @@ session "JEHA_TEST_RECONSTRUCTION" in Reconstruction = JEHA_TEST_BASE +
     hclause
     neq_hoist
     positive_simplify_reflect
+    simp_outer_claus
     sup
