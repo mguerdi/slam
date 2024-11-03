@@ -99,6 +99,10 @@ sig
     -> { premise: HClause.hthm
        , literal: JClause.cpos }
     -> HClause.hthm list
+  val reconstruct_simp_normalize_pred_lits:
+    Proof.context
+    -> { premise: HClause.hthm }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -673,7 +677,7 @@ fun reconstruct_simp_outer_claus ctxt { premise, literal } =
     fun neq_true_tac ctxt = resolve_tac ctxt [@{lemma "\<not> A \<Longrightarrow> A \<noteq> True" by auto}]
     fun neq_false_tac ctxt = resolve_tac ctxt [@{lemma "A \<Longrightarrow> A \<noteq> False" by auto}]
     fun lit_to_pred_tac ctxt = FIRST' [neq_true_tac ctxt, neq_false_tac ctxt]
-    
+
     fun eq_to_lit_tac ctxt = resolve_tac ctxt [@{lemma "s = t \<Longrightarrow> s = t" by auto}]
     fun neq_to_lit_tac ctxt = resolve_tac ctxt [@{lemma "s \<noteq> t \<Longrightarrow> s \<noteq> t" by auto}]
     (* We prefer equalities in literals, so inequalities in negated literals. *)
@@ -684,7 +688,7 @@ fun reconstruct_simp_outer_claus ctxt { premise, literal } =
         [eq_to_lit_tac ctxt, neq_to_lit_tac ctxt, not_to_eq_false_tac ctxt, to_eq_true_tac ctxt]
 
     fun dne_tac ctxt = resolve_tac ctxt [@{lemma "A \<Longrightarrow> \<not>\<not>A" by auto}]
-    
+
     fun not_and_tac ctxt = resolve_tac ctxt [@{lemma "\<not>A \<or> \<not>B \<Longrightarrow> \<not>(A \<and> B)" by auto}]
     fun not_or_tac ctxt = resolve_tac ctxt [@{lemma "\<not>A \<and> \<not>B \<Longrightarrow> \<not>(A \<or> B)" by auto}]
     fun demorgan_tac ctxt = FIRST' [not_and_tac ctxt, not_or_tac ctxt]
@@ -705,7 +709,7 @@ fun reconstruct_simp_outer_claus ctxt { premise, literal } =
     fun oc_tac ctxt =
       (* all_tac to ignore equality literals etc. *)
       FIRST' [and_tac ctxt, or_tac ctxt, imp_tac ctxt, not_imp_tac ctxt, K all_tac]
-    
+
     fun oc_wrapper ctxt tac i th =
       let
         val wrapped_tac =
@@ -730,7 +734,7 @@ fun reconstruct_simp_outer_claus ctxt { premise, literal } =
             SOME _ => error "outer_clausification reconstruction produced more than two clauses"
           | NONE => clauses)
       end
-    
+
     fun move_new_literals_to_last conclusion =
       let
         (* Note that one literal has been removed, but we're not counting that. *)
@@ -745,6 +749,19 @@ fun reconstruct_simp_outer_claus ctxt { premise, literal } =
     premise
     |> oc_wrapper ctxt (oc_tac ctxt) (literal + 1)
     |> map move_new_literals_to_last
+  end
+
+fun reconstruct_simp_normalize_pred_lits ctxt { premise } =
+  let
+    val tac =
+      [ @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
+      , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
+      , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}
+      , @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto} ]
+      |> map (fn lemma => (resolve_tac ctxt [lemma]))
+      |> FIRST'
+  in
+    Seq.hd (ALLGOALS (TRY o tac) premise)
   end
 
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
@@ -1011,9 +1028,11 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
         reconstruct_false_elim
           ctxt
           { premise = get_and_instantiate substitution NONE premise, literal = literal }
-    (*
-        Jeha_Log.SimpFalseElim { premise = f premise, literal = literal, substitution = substitution }
     | Jeha_Log.SimpNormalizePredLits { premise } =>
+        reconstruct_simp_normalize_pred_lits
+          ctxt
+          { premise = get_thm premise }
+    (*
         Jeha_Log.SimpNormalizePredLits { premise = f premise }
     | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
         Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
