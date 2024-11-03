@@ -92,12 +92,22 @@ ML_val \<open>
   val () = \<^assert> (Thm.eq_thm_prop (expected, clausified))
 \<close>
 
+ML_val \<open>
+  val C = mk @{prop "((a = b) \<and> c) \<noteq> False \<Longrightarrow> False"}
+  val expected = mk @{prop "a = b \<Longrightarrow> c \<noteq> False \<Longrightarrow> False"}
+  val [clausified] = Jeha_Proof.reconstruct_simp_outer_claus @{context} { premise = C, literal = 0 }
+  val () = \<^assert> (Thm.eq_thm_prop (expected, clausified))
+\<close>
+
 (* Integration tests *)
 
 declare [[jeha_disable_all]]
 declare [[jeha_rule_simp_outer_claus, jeha_rule_sup, jeha_rule_false_elim, jeha_rule_simp_false_elim]]
 
 lemma "(\<not>A \<or> \<not> (B \<longrightarrow> \<not> C)) \<Longrightarrow> A \<Longrightarrow> B"
+  using [[jeha_trace]] by jeha
+
+lemma "((a = b) = True) \<Longrightarrow> a \<Longrightarrow> b"
   using [[jeha_trace]] by jeha
 
 end

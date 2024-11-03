@@ -4,6 +4,7 @@ sig
   (* left or right side of an equational literal *)
   datatype lpos = Left | Right
   val is_positive : T -> bool
+  val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
   val map : (term -> term) -> T -> T
@@ -43,19 +44,17 @@ fun map f (s, t, b) = (f s, f t, b)
 
 fun lposs_of _ = [Left, Right]
 
+fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
+  | of_term_signed b (@{term Not} $ t) = of_term_signed (not b) t
+  (* FIXME: Should we prefer equation to disequations when injecting booleans? *)
+  (* FIXME: us mk_pred_lit here? *)
+  | of_term_signed b t = (t, if b then @{term True} else @{term False}, true)
+
 (* turn a boolean term into an equational literal *)
 fun of_term t =
-  let
-    fun lit_of_aux b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
-      | lit_of_aux b (@{term Not} $ t) = lit_of_aux (not b) t
-      (* FIXME: Should we prefer equation to disequations when injecting booleans? *)
-      (* FIXME: us mk_pred_lit here? *)
-      | lit_of_aux b t = (t, if b then @{term True} else @{term False}, true)
-  in
-    if not (fastype_of t = @{typ bool})
-      then error "can only turn boolean terms into clauses"
-      else lit_of_aux true t
-  end
+  if not (fastype_of t = @{typ bool})
+    then error "can only turn boolean terms into clauses"
+    else of_term_signed true t
 
 fun aconv_as ((s, t, b), (s', t', b')) =
   if b <> b' then NONE

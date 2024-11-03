@@ -101,18 +101,18 @@ of negations above and below) *)
 fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
   | outer_clausify b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
-      then [fold JClause.add_literal [JLit.mk_pred s b, JLit.mk_pred t b] c]
+      then [fold JClause.add_literal [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
       else
-        [ JClause.add_literal (JLit.mk_pred s b) c
-        , JClause.add_literal (JLit.mk_pred t b) c
+        [ JClause.add_literal (JLit.of_term_signed b s) c
+        , JClause.add_literal (JLit.of_term_signed b t) c
         ]
   | outer_clausify b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
       then
-        [ JClause.add_literal (JLit.mk_pred s b) c
-        , JClause.add_literal (JLit.mk_pred t b) c
+        [ JClause.add_literal (JLit.of_term_signed b s) c
+        , JClause.add_literal (JLit.of_term_signed b t) c
         ]
-      else [fold JClause.add_literal [JLit.mk_pred s b, JLit.mk_pred t b] c]
+      else [fold JClause.add_literal [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
   | outer_clausify b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
       outer_clausify b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
