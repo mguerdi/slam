@@ -148,13 +148,13 @@ fun simp_delete_duplicated_lits ctxt c =
     val cposs_of_dups =
       fold_index
         (fn (i, l) => fn dup_is =>
-          (case find_index (curry JLit.aconv l) literals of
-              ~1 => error "simp_delete_duplicated_lits: didn't find literal itself"
-            | index_of_existing =>
+          (case get_index (curry JLit.aconv_as l) literals of
+              NONE => error "simp_delete_duplicated_lits: didn't find literal itself"
+            | SOME (index_of_existing, orientation) =>
                 if i = index_of_existing
                   then dup_is (* found ourselves, not a duplicate *)
-                  else {duplicate_of = index_of_existing, duplicate = i}::dup_is))
-        literals 
+                  else {duplicate_of = index_of_existing, duplicate = i, orientation = orientation}::dup_is))
+        literals
         []
     (* FIXME: use JClause.delete_lits_at *)
     val c' = fold JClause.delete_lit_at (map #duplicate cposs_of_dups) c

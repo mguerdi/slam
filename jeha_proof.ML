@@ -81,7 +81,7 @@ sig
     -> HClause.hthm
   val reconstruct_delete_duplicated_lits:
     { premise: HClause.hthm
-    , duplicate_cposs: { duplicate: JClause.cpos, duplicate_of: JClause.cpos } list }
+    , duplicate_cposs: { duplicate: JClause.cpos, duplicate_of: JClause.cpos, orientation: JLit.lpos } list }
     -> HClause.hthm
   val reconstruct_delete_resolved_lits:
     { premise: HClause.hthm
@@ -623,11 +623,12 @@ val reconstruct_forall_rw = impl_reconstruct_forall_exists_rw true
 
 val reconstruct_exists_rw = impl_reconstruct_forall_exists_rw false
 
-fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
+fun impl_delete_duplicated_lit {duplicate, duplicate_of, orientation} premise =
   let
     val () = \<^assert> (duplicate_of < duplicate)
   in
     premise
+    |> HClause.orient_lit_at (orientation, duplicate)
     |> HClause.make_last duplicate
     |> HClause.make_last duplicate_of
     |> HClause.merge_duplicated_lit_last

@@ -28,7 +28,7 @@ sig
   | Choice
   (* simplification *)
   (* FIXME: | DeleteDuplicatedLits of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
-  | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
+  | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos, orientation: JLit.lpos } list }
   (* FIXME: | DeleteResolvedLits of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env } *)
   | DeleteResolvedLits of { premise: 'a, cposs: JClause_Pos.cpos list }
   | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -87,7 +87,7 @@ datatype 'a inference =
   | Ext
   | Choice
   (** simplification **)
-  | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos } list }
+  | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos, orientation: JLit.lpos } list }
   | DeleteResolvedLits of { premise: 'a, cposs: JClause_Pos.cpos list }
   | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }

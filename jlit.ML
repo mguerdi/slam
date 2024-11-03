@@ -8,6 +8,7 @@ sig
   val lposs_of : T -> lpos list
   val map : (term -> term) -> T -> T
   val aconv : T * T -> bool
+  val aconv_as : T * T -> lpos option
   val swap : T -> T
   val swap_lpos : lpos -> lpos
   (* make predicate literal, by equating the term to the boolean *)
@@ -56,9 +57,13 @@ fun of_term t =
       else lit_of_aux true t
   end
 
-fun aconv ((s, t, b), (s', t', b')) =
-  b = b' andalso
-    (Term.aconv (s, s') andalso Term.aconv (t, t') orelse Term.aconv (s, t') andalso Term.aconv (t, s'))
+fun aconv_as ((s, t, b), (s', t', b')) =
+  if b <> b' then NONE
+  else if Term.aconv (s, s') andalso Term.aconv (t, t') then SOME Left
+  else if Term.aconv (s, t') andalso Term.aconv (t, s') then SOME Right
+  else NONE
+
+val aconv = is_some o aconv_as
 
 fun swap (s, t, b) = (t, s, b)
 
