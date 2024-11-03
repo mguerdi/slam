@@ -389,14 +389,8 @@ fun reconstruct_efact {premise, left_literal, right_literal} =
     val lemma = \<^instantiate>\<open>u=u and v=v and v'=v' and 'a = uT in
       lemma \<open>((u :: 'a) \<noteq> v' \<Longrightarrow> u \<noteq> v \<Longrightarrow> False) \<Longrightarrow> v = v' \<Longrightarrow> u \<noteq> v' \<Longrightarrow> False\<close>
       by auto\<close>
-    val D = Drule.comp_no_flatten (C, length_of_C') 1 lemma
-    (* Rotate back, compare JClause.add_literal. Note: cpos, i.e. 0-based *)
-    val conclusion =
-      D
-      |> HClause.move_last_to 0
-      |> HClause.move_last_to 1
   in
-    conclusion
+    Drule.comp_no_flatten (C, length_of_C') 1 lemma
   end
 
 fun reconstruct_false_elim ctxt { premise, literal } =
