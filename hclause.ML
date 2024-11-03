@@ -294,7 +294,8 @@ fun merge_duplicated_lit_last C =
   let
     val length_of_C' = Thm.nprems_of C - 2
     val A = Thm.dest_arg (Thm.cprem_of C (Thm.nprems_of C))
-    val () = \<^assert> ((Thm.term_of A) aconv Thm.term_of (Thm.dest_arg (Thm.cprem_of C (Thm.nprems_of C - 1))))
+    val A' = Thm.dest_arg (Thm.cprem_of C (Thm.nprems_of C - 1))
+    val () = \<^assert> (A aconvc A')
     val lemma = \<^instantiate>\<open>P = A in lemma \<open>(P \<Longrightarrow> P \<Longrightarrow> False) \<Longrightarrow> P \<Longrightarrow> False\<close> by auto\<close>
                                             (* ^^^^^^^^^^^^^^ *)
                                             (*      |         *)

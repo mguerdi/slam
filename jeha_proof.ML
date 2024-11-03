@@ -624,8 +624,8 @@ fun impl_delete_duplicated_lit {duplicate, duplicate_of} premise =
     val () = \<^assert> (duplicate_of < duplicate)
   in
     premise
-    |> HClause.make_last duplicate_of
     |> HClause.make_last duplicate
+    |> HClause.make_last duplicate_of
     |> HClause.merge_duplicated_lit_last
     |> HClause.move_last_to duplicate_of
   end

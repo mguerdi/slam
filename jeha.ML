@@ -143,19 +143,19 @@ fun contains_syntactic_complementaries [] = false
 fun simp_delete_duplicated_lits ctxt c =
   (* (writeln "DD"; *)
   let
+    val literals = JClause.literals c
     (* positions of duplicates in the clause, critically in reverse order *)
     val cposs_of_dups =
       fold_index
-        (fn (i, l) => fn (dup_is, head_list) =>
-          (case find_index (curry JLit.aconv l) head_list of
-            (* l is new, add it to the seen lits *)
-              ~1 => (dup_is, l::head_list)
-            (* duplicate of l has already been seen *)
-            (* FIXME: index_of_existing is wrong somehow, see SAT_Examples *)
-            | index_of_existing => ({duplicate_of = index_of_existing, duplicate = i}::dup_is, head_list)))
-        (JClause.literals c)
-        ([], [])
-      |> fst
+        (fn (i, l) => fn dup_is =>
+          (case find_index (curry JLit.aconv l) literals of
+              ~1 => error "simp_delete_duplicated_lits: didn't find literal itself"
+            | index_of_existing =>
+                if i = index_of_existing
+                  then dup_is (* found ourselves, not a duplicate *)
+                  else {duplicate_of = index_of_existing, duplicate = i}::dup_is))
+        literals 
+        []
     (* FIXME: use JClause.delete_lits_at *)
     val c' = fold JClause.delete_lit_at (map #duplicate cposs_of_dups) c
   in
