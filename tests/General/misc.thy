@@ -7,9 +7,6 @@ begin
 declare [[jeha_trace]]
 declare [[metis_trace]]
 
-(* FIXME remove after missing reconstruction have been implemented *)
-declare [[jeha_proof_reconstruction=argo]]
-
 lemma funs_eq_then_comp_id_eq:
   shows "f = g \<Longrightarrow> (\<And> x. f x = (id o g) x)"
   (* by (metis fun.map_id) *)
@@ -20,7 +17,7 @@ lemma funs_eq_then_comp_id_eq:
         jeha_rule_clause_subsumption,
         jeha_rule_e_res,
         unify_search_bound = 7 ]]
-  using [[jeha_proof_reconstruction=argo]] by jeha
+  by jeha
   (* by (jeha comp_apply id_apply) (* 1070 ms *) *)
 
 lemma arg_cong_test:
@@ -83,7 +80,7 @@ lemma
   (* by metis *)
   (* lost in unification: *)
   (* using [[ jeha_trace ]] by (jeha ext) *)
-  oops
+  sorry
 
 lemma
   shows "(\<lambda> x. b) = (\<lambda> x. a) \<Longrightarrow> a = b"

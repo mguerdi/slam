@@ -20,7 +20,6 @@ sig
   val get_instantiated_premises_for_automation:
     Proof.context -> (int -> JClause.T) -> thm Inttab.table -> int Jeha_Log.inference
     -> thm Inttab.table * thm list
-  val resolve_against_arg_cong_contrapositive_n_times : Proof.context -> int -> thm * int -> thm
   val prepare_forall_exists_hoist_log:
     Proof.context
     -> (int -> JClause.T)
@@ -29,12 +28,15 @@ sig
     -> {fresh_x: cterm, predicate: cterm, subterm: JClause.full_pos, uninstantiated_premise: JClause.T}
   val impl_forall_exists_hoist_lemma: bool -> { fresh_x: cterm, predicate: cterm } -> thm
   (* The records are modelled after those in Jeha_Log, but with int replace by HClause.htm *)
-  val reconstruct_arg_cong : Proof.context -> int -> thm * int -> cterm -> thm
+  val reconstruct_arg_cong :
+    Proof.context
+    -> { premise: HClause.hthm, literal: JClause_Pos.cpos, vars: term list }
+    -> HClause.hthm
   val reconstruct_sup:
     Proof.context
     -> { left_premise: HClause.hthm
        , literal: JLit.lpos * JClause.cpos
-       , right_premise: thm
+       , right_premise: HClause.hthm
        , subterm: JClause.full_pos }
     -> HClause.hthm
   val reconstruct_efact:
@@ -226,42 +228,25 @@ fun hclause_of_axiom ctxt axiom =
   end
 
 val excluded_middle =  @{lemma "P \<Longrightarrow> \<not> P \<Longrightarrow> False" by (rule notE)}
-  
-fun resolve_against_arg_cong_contrapositive_n_times debug_ctxt number_of_vars (premise_proved, cpos) =
+
+fun reconstruct_arg_cong_one_var ctxt var premise =
   let
-    val () = Jeha_Common.trace_msg debug_ctxt (fn () => "RS_ARG_CONG premise_proved: " ^ Thm.string_of_thm debug_ctxt premise_proved)
+    val (s, s', true) = HClause.dest_lit_at 0 premise
+    val T = Thm.ctyp_of_cterm var
+    val rT = s |> Thm.ctyp_of_cterm |> Thm.dest_ctyp1 
+    val lemma = \<^instantiate>\<open>s and s' and x=var and 'a=T and 'b=rT in
+      lemma \<open>(s :: 'a \<Rightarrow> 'b) x \<noteq> s' x \<Longrightarrow> s \<noteq> s'\<close> by auto\<close>
   in
-    if number_of_vars < 0 then
-      error "can't do something a negative number of times"
-    else
-      funpow number_of_vars (fn th =>
-        let
-          val () = Jeha_Common.trace_msg debug_ctxt (fn () => "RS_ARG_CONG current (cpos=" ^ @{make_string} cpos ^"): " ^ Thm.string_of_thm debug_ctxt th)
-        in
-          (* FIXME: Test in the presence of schematic vars (should work because only
-          arg_cong_contrapositive should get renamed by RSN but who knows) *)
-          @{thm arg_cong_contrapositive} RSN (cpos + 1, th)
-        end
-      ) premise_proved
+    HClause.comp_no_flatten_no_incr (lemma, 1) 1 premise
   end
 
-fun reconstruct_arg_cong ctxt number_of_vars (premise, cpos) goal =
+fun reconstruct_arg_cong ctxt { premise, literal, vars } =
   let
-    val goal_proved_but_with_schematic_vars =
-      resolve_against_arg_cong_contrapositive_n_times ctxt number_of_vars (premise, cpos)
+    val premise = HClause.move_from_to literal 0 premise
   in
-      goal
-      |> Goal.init
-      |> ((* print_tac ctxt "A"
-        THEN *) resolve_tac ctxt [goal_proved_but_with_schematic_vars] 1
-        (* THEN print_tac ctxt "B" *)
-        (* assume_tac is needed one or two times (in the examples I've seen so far) *)
-        THEN ALLGOALS (assume_tac ctxt)
-        (* THEN print_tac ctxt "D" *))
-      |> Seq.hd
-      |> Goal.finish ctxt
+    fold (reconstruct_arg_cong_one_var ctxt) (map (Thm.cterm_of ctxt) vars) premise
+    |> HClause.move_from_to 0 literal
   end
-
 
 (* \<not> is to be viewed as a metafunction, i.e. \<not>D' is not a proper term but a list of assumptions:
 
@@ -792,7 +777,7 @@ fun get_lemmas _ _ _ (Jeha_Log.EqHoist _) _ maxidx = [Thm.incr_indexes (maxidx +
       [resolve_against_arg_cong_contrapositive_n_times
         (number_of_vars - 1)
         @{thm arg_cong_contrapositive}] *)
-  | get_lemmas
+  (* | get_lemmas
       ctxt
       _
       reconstructed_clause_db
@@ -806,7 +791,7 @@ fun get_lemmas _ _ _ (Jeha_Log.EqHoist _) _ maxidx = [Thm.incr_indexes (maxidx +
       in
         (* This is not really a lemma but rather the full goal. *)
         [reconstruct_arg_cong ctxt number_of_vars (premise, literal) conclusion]
-      end
+      end *)
   | get_lemmas _ _ _ (Jeha_Log.Sup _) _ _ = []
   | get_lemmas _ _ _ _ _ maxidx = [Thm.incr_indexes (maxidx + 1) excluded_middle]
 
@@ -872,8 +857,8 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
           { left_literal = left_literal
           , right_literal = right_literal
           , premise = get_and_instantiate substitution NONE premise }
-    | Jeha_Log.ArgCong { premise, literal, number_of_vars } =>
-       error "manual proof reconstruction for ArgCong unimplemented" 
+    | Jeha_Log.ArgCong { premise, substitution, literal, vars } =>
+       reconstruct_arg_cong ctxt { premise = get_and_instantiate substitution NONE premise, literal = literal, vars = vars }
     | Jeha_Log.BoolHoist { premise, subterm, substitution } =>
         reconstruct_bool_hoist
           ctxt

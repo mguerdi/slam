@@ -742,7 +742,10 @@ fun infer_arg_cong ctxt c cpos =
           |> JClause.refresh_id ()
           |> JClause.set_origin
               (Jeha_Log.ArgCong 
-                { premise = JClause.id c, literal = cpos, number_of_vars = length fresh_variables })
+                { premise = JClause.id c
+                , substitution = unifier
+                , literal = cpos
+                , vars = map (JTerm.norm_beta_eta_qeta_env unifier) fresh_variables })
       in
         if not (JClause.is_eligible_cpos new_clause cpos) then NONE else
         SOME new_clause

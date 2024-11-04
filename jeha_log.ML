@@ -10,7 +10,7 @@ sig
   | FluidSup
   | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
   | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | ArgCong of { premise: 'a, literal: JClause_Pos.cpos, number_of_vars: int }
+  | ArgCong of { premise: 'a, substitution: Envir.env, literal: JClause_Pos.cpos, vars: term list }
   (* Booleans *)
   | BoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -70,7 +70,7 @@ datatype 'a inference =
   | FluidSup
   | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
   | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | ArgCong of { premise: 'a, literal: JClause_Pos.cpos, number_of_vars: int }
+  | ArgCong of { premise: 'a, substitution: Envir.env, literal: JClause_Pos.cpos, vars: term list }
   (** Booleans **)
   | BoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
