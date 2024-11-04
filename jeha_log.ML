@@ -33,10 +33,8 @@ sig
   | DeleteResolvedLits of { premise: 'a, cposs: JClause_Pos.cpos list }
   | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  (* FIXME: add substitution *)
   | PositiveSimplifyReflect of { unit: 'a, unit_shift: int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, disagreement: JClause_Pos.full_pos }
-  (* FIXME: add substitution *)
-  | NegativeSimplifyReflect of { unit: 'a, substitution: Envir.env, unit_shift : int, right_premise: 'a, literal: JClause_Pos.cpos }
+  | NegativeSimplifyReflect of { unit: 'a, unit_shift : int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, literal: JClause_Pos.cpos }
   (* | PosOuterClaus of { premise: 'a, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   | NegOuterClaus of { premise: 'a, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env } *)
   | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos, conclusion_index: int }
@@ -92,7 +90,7 @@ datatype 'a inference =
   | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | PositiveSimplifyReflect of { unit: 'a, unit_shift: int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, disagreement: JClause_Pos.full_pos }
-  | NegativeSimplifyReflect of { unit: 'a, substitution: Envir.env, unit_shift : int, right_premise: 'a, literal: JClause_Pos.cpos }
+  | NegativeSimplifyReflect of { unit: 'a, unit_shift : int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, literal: JClause_Pos.cpos }
   | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos, conclusion_index: int }
   | SimpBoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | SimpFalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -170,8 +168,8 @@ fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_p
       = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (FluidLoobHoist { premise, substitution, ... })
       = [{ id = premise, shift = 0, substitution = substitution }]
-  | premises_shift_substitution (NegativeSimplifyReflect { unit, substitution, unit_shift, right_premise, ... })
-      = [{ id = unit, shift = unit_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = Envir.init }]
+  | premises_shift_substitution (NegativeSimplifyReflect { unit, matcher, unit_shift, right_premise, ... })
+      = [{ id = unit, shift = unit_shift, substitution = matcher }, { id = right_premise, shift = 0, substitution = Envir.init }]
   | premises_shift_substitution other =
       let
         val premises = premises other

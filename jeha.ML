@@ -313,8 +313,9 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
             { literal = target_cp
             , right_premise = JClause.id target_clause
             , unit = JClause.id unit_clause
-            , substitution = #1 (the matcher)
-            , unit_shift = unit_shift }
+            , matcher = #1 (the matcher)
+            , unit_shift = unit_shift
+            , unit_orientation = unit_lp }
            )
         |> SOME 
       end

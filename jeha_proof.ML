@@ -96,6 +96,13 @@ sig
        , right_premise: HClause.hthm
        , disagreement: JClause.full_pos }
     -> HClause.hthm
+  val reconstruct_negative_simplify_reflect:
+    Proof.context 
+    -> { unit: HClause.hthm
+       , unit_orientation: JLit.lpos
+       , right_premise: HClause.hthm
+       , literal: JClause.cpos }
+    -> HClause.hthm
   val reconstruct_simp_outer_claus:
     Proof.context
     -> { premise: HClause.hthm
@@ -651,6 +658,25 @@ fun reconstruct_positive_simplify_reflect
      , cposs = [#3 disagreement] }
   end
 
+fun reconstruct_negative_simplify_reflect
+  ctxt
+  { unit, unit_orientation, right_premise, literal }
+=
+  let
+    (* We're using right_premise to rewrite unit, to obtain right_premise with a resolved literal. *)
+    val with_resolved_literal =
+      reconstruct_sup
+        ctxt
+        { left_premise = right_premise
+        , literal = (JLit.Left, literal)
+        , right_premise = unit
+        , subterm = ([], unit_orientation, 0) }
+  in
+    reconstruct_delete_resolved_lits
+      { premise = with_resolved_literal
+      , cposs = [Thm.nprems_of with_resolved_literal - 1] }
+  end
+
 (* NOTE: Needs to match Jeha.outer_clausify *)
 fun reconstruct_simp_outer_claus ctxt { premise, literal } =
   let
@@ -980,11 +1006,13 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
           , unit_orientation = unit_orientation
           , right_premise = get_thm right_premise
           , disagreement = disagreement }
-        
-          (*
-    | Jeha_Log.NegativeSimplifyReflect { unit, substitution, unit_shift, right_premise, literal } =>
-        Jeha_Log.NegativeSimplifyReflect { unit = f unit, substitution = substitution, unit_shift = unit_shift , right_premise = f right_premise, literal = literal }
-        *)
+    | Jeha_Log.NegativeSimplifyReflect { unit, matcher, unit_shift, unit_orientation, right_premise, literal } =>
+        reconstruct_negative_simplify_reflect
+          ctxt
+          { unit = get_and_instantiate matcher (SOME unit_shift) unit
+          , unit_orientation = unit_orientation
+          , right_premise = get_thm right_premise
+          , literal = literal }
     | Jeha_Log.SimpPosNegOuterClaus { premise, literal, conclusion_index }  =>
         nth
           (reconstruct_simp_outer_claus ctxt { premise = get_thm premise, literal = literal })
@@ -1013,7 +1041,6 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
           ctxt
           { premise = get_thm premise }
     (*
-        Jeha_Log.SimpNormalizePredLits { premise = f premise }
     | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
         Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
     | Jeha_Log.SyntacticTautologyDeletion2 { premise, left_literal, right_literal, substitution } =>
