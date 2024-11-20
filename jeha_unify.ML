@@ -1,8 +1,6 @@
 (* Wrapper around Isabelles unfication functions, needed because of the following remark in unify.ML:
 "The outermost functions assume the terms to be unified already have the same type." *)
 
-(* FIXME: Can schematic variables only have schematic types? What issues does this cause? *)
-
 signature JEHA_UNIFY =
 sig
   (* from unify.ML *)
@@ -11,7 +9,8 @@ sig
   val matchers: Context.generic -> int -> (term * term) list -> Envir.env Seq.seq
   (* unification and matching of (symmetric!) equality literals *)
   val literal_smash_unifiers : Context.generic -> (JLit.T * JLit.T) -> Envir.env -> Envir.env Seq.seq
-  val literal_matchers : Context.generic -> int -> (JLit.T * JLit.T) -> Envir.env Seq.seq
+  val literal_matchers :
+    Context.generic -> int -> (JLit.T * JLit.T) -> (JLit.lpos * Envir.env) Seq.seq
 end
 
 structure Jeha_Unify : JEHA_UNIFY =
@@ -108,9 +107,12 @@ fun literal_smash_unifiers ctxt ((s, t, b), (s', t', b')) env =
 
 fun literal_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
   if not (b = b') then Seq.empty else
-  Seq.interleave
-    ( matchers ctxt maxidx [(s, s'), (t, t')]
-    , matchers ctxt maxidx [(s, t'), (t, s')] )
+    ( [(s, s'), (t, t')]
+    , [(s, t'), (t, s')] )
+    |> apply2 (matchers ctxt maxidx)
+    |> (fn (left_matchers, right_matchers) =>
+      (Seq.map (pair JLit.Left) left_matchers, Seq.map (pair JLit.Right) right_matchers))
+    |> Seq.interleave
 
 end
 

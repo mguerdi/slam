@@ -26,7 +26,7 @@ fun literal_subsumes ctxt maxidx ll' =
   case Seq.pull (Jeha_Unify.literal_matchers ctxt maxidx ll') of
     NONE => (* (writeln "=> no"; *) NONE (* ) *)
     (* throw away the others *)
-  | SOME (env, _) => (* (writeln "=> yes"; *) SOME env (* ) *)
+  | SOME ((_, env), _) => (* (writeln "=> yes"; *) SOME env (* ) *)
   (* ) *)
 
 (* all ways in which l can subsume a literal of d *)
