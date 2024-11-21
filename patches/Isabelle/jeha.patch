@@ -1,0 +1,12 @@
+diff --git a/src/HOL/Transfer.thy b/src/HOL/Transfer.thy
+--- a/src/HOL/Transfer.thy
++++ b/src/HOL/Transfer.thy
+@@ -6,7 +6,7 @@
+ section \<open>Generic theorem transfer using relations\<close>
+ 
+ theory Transfer
+-imports Basic_BNF_LFPs Hilbert_Choice Metis
++imports Basic_BNF_LFPs Hilbert_Choice Metis jeha
+ begin
+ 
+ subsection \<open>Relator for function space\<close>
