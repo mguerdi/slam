@@ -1,5 +1,5 @@
 theory jeha_base
-  imports ATP (* Argo *)
+  imports ATP Argo
 begin
 
 declare [[ML_exception_trace]]
