@@ -10,7 +10,7 @@ struct
 (* FIXME: why do we need this? Doesn't the prover run in a single thread? If not, how can we get one
 id generator per prover instance? *)
 local
-  val lock = Mutex.mutex ();
+  val lock = Thread.Mutex.mutex ();
 in
   fun critical e () = Multithreading.synchronized "jeha" lock e
 end;

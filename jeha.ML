@@ -353,7 +353,7 @@ fun literal_can_match_single_disagreement
   let
     val unit_shift = target_maxidx + 1
     val unit_lit =
-      unit_lit |> JLit.map (Logic.incr_indexes ([], [], unit_shift))
+      unit_lit |> JLit.map (Logic.incr_indexes ([], unit_shift))
     val maxidx = unit_maxidx + target_maxidx + 1
     val (lhs, rhs, true) = unit_lit (* Schulz: s, t *)
     val (target_lhs, target_rhs, _) = target_lit (* Schulz: u[], u[]*)

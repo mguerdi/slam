@@ -208,7 +208,7 @@ fun norm_beta_eta_qeta clause = norm_beta_eta_qeta_env (Envir.empty (maxidx clau
 
 fun incr_indexes increment clause =
   clause
-  |> map_literals (map (JLit.map (Logic.incr_indexes ([], [], increment))))
+  |> map_literals (map (JLit.map (Logic.incr_indexes ([], increment))))
   |> map_maxidx (K (increment + maxidx clause))
 
 val kbo = Jeha_Order.mk_multiset_order_of_strict JLit.kbo o apply2 literals
