@@ -4,8 +4,6 @@ imports jeha_base Hilbert_Choice
 
 begin
 
-declare [[show_types]]
-
 ML \<open>
   (* Goal: Only instantiate the term variables. Instantiate type variables as required by the term
   instantiation.

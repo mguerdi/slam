@@ -1,9 +1,6 @@
 theory jeha_base
-  imports ATP Argo
+  imports ATP Argo Metis
 begin
-
-declare [[ML_exception_trace]]
-declare [[ML_exception_debugger]]
 
 ML_file \<open>Tools/Jeha/jeha_common.ML\<close>
 ML_file \<open>Tools/Jeha/clause_id.ML\<close>

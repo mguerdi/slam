@@ -1,11 +1,10 @@
 diff --git a/src/HOL/Main.thy b/src/HOL/Main.thy
 --- a/src/HOL/Main.thy
 +++ b/src/HOL/Main.thy
-@@ -18,6 +18,8 @@
-     Binomial
+@@ -19,6 +19,7 @@
      GCD
      Divides
-+    jeha
+     jeha
 +    jeha_sledgehammer
  begin
  

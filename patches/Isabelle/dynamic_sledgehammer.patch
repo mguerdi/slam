@@ -1,0 +1,243 @@
+changeset:   80736:327afccea434
+parent:      78659:b5f3d1051b13
+user:        Massin Guerdi <massin.guerdi@ifi.lmu.de>
+date:        Wed Nov 06 13:53:37 2024 +0100
+summary:     WIP implement dynamic registration of proof (reconstruction) methods for Sledgehammer
+
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
+@@ -7,6 +7,33 @@
+ 
+ signature SLEDGEHAMMER_PROOF_METHODS =
+ sig
++  type dynamic_proof_method =
++    {
++      (* Unique identifier *) 
++      name: string,
++      (* How the method ought to be called in the one-line proof text *)
++      string_of: string,
++      (* FIXME (document): something about whether facts are passed via using ... (see indirect_ss below) *)
++      is_proof_method_direct: bool,
++      (* FIXME (document): something about whether "[1]" gets appended (presumably to specify the goal to act on) *)
++      is_proof_method_multi_goal: bool,
++      (* FIXME: since the user gets local and global facts in as arguments to tac,
++      maybe we should put it on them to do the Method.insert_tac's ? *)
++      needs_insert_local_facts: bool,
++      needs_insert_global_facts: bool,
++      tac: { local_facts: thm list, global_facts: thm list } -> Proof.context -> int -> tactic,
++      (* FIXME: (document): see bunches_of_proof_methods *)
++      try0_priority: int,
++      (* FIXME: (temporary) *)
++      no_other_try0_methods: bool
++    }
++
++  val register_dynamic_proof_method : dynamic_proof_method -> unit 
++  
++  val get_dynamic_proof_methods : unit -> string list
++
++  val get_dynamic_proof_method : string -> dynamic_proof_method option
++
+   type stature = ATP_Problem_Generate.stature
+ 
+   datatype SMT_backend =
+@@ -26,7 +53,8 @@
+     Moura_Method |
+     Linarith_Method |
+     Presburger_Method |
+-    Algebra_Method
++    Algebra_Method |
++    Dynamic_Method of string
+ 
+   datatype play_outcome =
+     Played of Time.time |
+@@ -51,6 +79,42 @@
+ open ATP_Problem_Generate
+ open ATP_Proof_Reconstruct
+ 
++type dynamic_proof_method =
++  {
++    name: string,
++    string_of: string,
++    is_proof_method_direct: bool,
++    is_proof_method_multi_goal: bool,
++    needs_insert_local_facts: bool,
++    needs_insert_global_facts: bool,
++    tac: { local_facts: thm list, global_facts: thm list } -> Proof.context -> int -> tactic,
++    try0_priority: int,
++    no_other_try0_methods: bool
++  }
++
++local
++  val dynamic_proof_methods = Synchronized.var "Sledgehammer.dynamic_proof_methods"
++    (Symtab.empty : dynamic_proof_method Symtab.table);
++in
++
++fun register_dynamic_proof_method dynamic_proof_method =
++  let
++    val name = #name dynamic_proof_method
++  in
++    (if name = "" then error "Registering unnamed Sledgehammer dynamic proof method" else ();
++     Synchronized.change dynamic_proof_methods (Symtab.map_default (name, dynamic_proof_method)
++       (fn f => (warning ("Redefining Sledgehammer dynamic proof method: " ^ quote name); f))))
++  end
++
++fun get_dynamic_proof_method name = Symtab.lookup (Synchronized.value dynamic_proof_methods) name
++
++fun get_dynamic_proof_methods () = Symtab.keys (Synchronized.value dynamic_proof_methods)
++
++end
++
++(* FIXME: don't use `the` *)
++fun get_dynamic_proof_method_tac name = #tac (the (get_dynamic_proof_method name))
++
+ datatype SMT_backend =
+   SMT_Z3 |
+   SMT_Verit of string
+@@ -68,7 +132,8 @@
+   Moura_Method |
+   Linarith_Method |
+   Presburger_Method |
+-  Algebra_Method
++  Algebra_Method |
++  Dynamic_Method of string
+ 
+ datatype play_outcome =
+   Played of Time.time |
+@@ -82,9 +147,13 @@
+   | is_proof_method_direct Meson_Method = true
+   | is_proof_method_direct (SMT_Method _) = true
+   | is_proof_method_direct Simp_Method = true
++  | is_proof_method_direct (Dynamic_Method name) =
++      get_dynamic_proof_method name |> the |> #is_proof_method_direct
+   | is_proof_method_direct _ = false
+ 
+ fun is_proof_method_multi_goal Auto_Method = true
++  | is_proof_method_multi_goal (Dynamic_Method name) =
++      get_dynamic_proof_method name |> the |> #is_proof_method_multi_goal
+   | is_proof_method_multi_goal _ = false
+ 
+ fun maybe_paren s = s |> not (Symbol_Pos.is_identifier s) ? enclose "(" ")"
+@@ -109,13 +178,28 @@
+       | Moura_Method => "moura"
+       | Linarith_Method => "linarith"
+       | Presburger_Method => "presburger"
+-      | Algebra_Method => "algebra")
++      | Algebra_Method => "algebra"
++      | Dynamic_Method name => get_dynamic_proof_method name |> the |> #string_of)
+   in
+     maybe_paren (space_implode " " (meth_s :: ss))
+   end
+ 
+ fun tac_of_proof_method ctxt (local_facts, global_facts) meth =
+   let
++    fun needs_insert_local_facts meth = case meth of
++      Metis_Method _ => false
++    | SMT_Method _ => false
++    | Dynamic_Method name => get_dynamic_proof_method name |> the |> #needs_insert_local_facts
++    | _ => true
++    
++    fun needs_insert_global_facts meth = case meth of
++      Metis_Method _ => false
++    | SMT_Method _ => false
++    | Meson_Method => false
++    | Simp_Method => false
++    | Dynamic_Method name => get_dynamic_proof_method name |> the |> #needs_insert_global_facts
++    | _ => true
++
+     fun tac_of_metis (type_enc_opt, lam_trans_opt) =
+       let
+         val ctxt = ctxt
+@@ -129,26 +213,27 @@
+     fun tac_of_smt SMT_Z3 = SMT_Solver.smt_tac
+       | tac_of_smt (SMT_Verit strategy) = Verit_Strategies.verit_tac_stgy strategy
+   in
++    (if needs_insert_local_facts meth then Method.insert_tac ctxt local_facts else K all_tac) THEN'
++    (if needs_insert_global_facts meth then Method.insert_tac ctxt global_facts else K all_tac) THEN'
+     (case meth of
+       Metis_Method options => tac_of_metis options
+     | SMT_Method backend => tac_of_smt backend ctxt (local_facts @ global_facts)
+-    | _ =>
+-      Method.insert_tac ctxt local_facts THEN'
+-      (case meth of
+-        Meson_Method => Meson_Tactic.meson_general_tac ctxt global_facts
+-      | Simp_Method => Simplifier.asm_full_simp_tac (ctxt addsimps global_facts)
+-      | _ =>
+-        Method.insert_tac ctxt global_facts THEN'
+-        (case meth of
+-          SATx_Method => SAT.satx_tac ctxt
+-        | Blast_Method => blast_tac ctxt
+-        | Auto_Method => SELECT_GOAL (Clasimp.auto_tac ctxt)
+-        | Fastforce_Method => Clasimp.fast_force_tac ctxt
+-        | Force_Method => Clasimp.force_tac ctxt
+-        | Moura_Method => moura_tac ctxt
+-        | Linarith_Method => Lin_Arith.tac ctxt
+-        | Presburger_Method => Cooper.tac true [] [] ctxt
+-        | Algebra_Method => Groebner.algebra_tac [] [] ctxt)))
++    | Meson_Method => Meson_Tactic.meson_general_tac ctxt global_facts
++    | Simp_Method => Simplifier.asm_full_simp_tac (ctxt addsimps global_facts)
++    | SATx_Method => SAT.satx_tac ctxt
++    | Blast_Method => blast_tac ctxt
++    | Auto_Method => SELECT_GOAL (Clasimp.auto_tac ctxt)
++    | Fastforce_Method => Clasimp.fast_force_tac ctxt
++    | Force_Method => Clasimp.force_tac ctxt
++    | Moura_Method => moura_tac ctxt
++    | Linarith_Method => Lin_Arith.tac ctxt
++    | Presburger_Method => Cooper.tac true [] [] ctxt
++    | Algebra_Method => Groebner.algebra_tac [] [] ctxt
++    | Dynamic_Method name =>
++        get_dynamic_proof_method_tac
++          name
++          { local_facts = local_facts, global_facts = global_facts }
++          ctxt)
+   end
+ 
+ fun string_of_play_outcome (Played time) = string_of_ext_time (false, time)
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
+@@ -234,8 +234,29 @@
+          [SMT_Method SMT_Z3]]
+       else
+         []
++
++    val dynamic_methodss = [map Dynamic_Method (get_dynamic_proof_methods ())]
++    
++    val only_dynamic = case dynamic_methodss of
++      [[Dynamic_Method name]] => get_dynamic_proof_method name |> the |> #no_other_try0_methods
++    | _ => false
++
++    (*
++    val dynamic_methodss_by_priority =
++      (get_dynamic_proof_methods ())
++      |> map (`(#try0_priority) o the o get_dynamic_proof_method)
++      |> (fn l => fold (Inttab.insert_list (K false)) l Inttab.empty)
++    
++    val by_priority = [
++        misc_methodss,
++        
++      ]
++    *)
++ 
+   in
+-    misc_methodss @ metis_methodss @ smt_methodss
++    if only_dynamic
++      then dynamic_methodss
++      else dynamic_methodss @ misc_methodss @ metis_methodss @ smt_methodss
+   end
+ 
+ fun facts_of_filter fact_filter factss =
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
+@@ -294,6 +294,9 @@
+               ()
+ 
+           val needs_full_types = is_typed_helper_used_in_atp_proof atp_proof
++          (* FIXME: Hack to always prefer dynamically registere method *)
++          (* FIXME: Maybe Metis is only used if there is no preplay *)
++          (* val preferred = case (get_dynamic_proof_methods ()) of [] => Metis_Method (NONE, NONE) | head::_ => Dynamic_Method head *)
+           val preferred = Metis_Method (NONE, NONE)
+           val preferred_methss =
+             (preferred,
+
