@@ -15,10 +15,14 @@ RUN rsync -av src/HOL/Tools/Jeha/patches/Isabelle/ .
 # Patch jeha dependency into Main
 RUN patch -p1 < src/HOL/Tools/Jeha/patches/Isabelle/jeha_main.patch
 # From the changeset introducing dynamic registration of methods for sledgehammer
-# RUN patch -p1 < src/HOL/Tools/Jeha/patches/Isabelle/dynamic_sledgehammer.patch
+RUN patch -p1 < src/HOL/Tools/Jeha/patches/Isabelle/dynamic_sledgehammer.patch
 # Patch theory that registers jeha with sledgehammer into Main
-# RUN patch -p1 < src/HOL/Tools/Jeha/patches/Isabelle/jeha_sledgehammer_main.patch
+RUN patch -p1 < src/HOL/Tools/Jeha/patches/Isabelle/jeha_sledgehammer_main.patch
 # Changes for isabelle 2024
 # RUN patch -p1 < src/HOL/Tools/Jeha/patches/Isabelle/jeha_isabelle_2024.patch
 
 WORKDIR /home/isabelle
+
+RUN Isabelle/bin/isabelle build -j12 Main
+
+RUN mkdir mirabelle_output
