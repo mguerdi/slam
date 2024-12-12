@@ -33,11 +33,11 @@ fun silence_context ctxt =
     ctxt
     |> Context.the_proof
     |> Context_Position.set_visible false
-    |> (fn ctxt => Config.put Unify.trace_bound (Config.get ctxt Unify.search_bound) ctxt)
+    |> (fn ctxt => Config.put Unify.unify_trace_bound (Config.get ctxt Unify.search_bound) ctxt)
     |> Proof_Context.background_theory
         (fn thy => thy
           |> Context_Position.set_visible_global false
-          |> Config.put_global Unify.trace_bound (Config.get_global thy Unify.search_bound))
+          |> Config.put_global Unify.unify_trace_bound (Config.get_global thy Unify.search_bound))
     |> Context.Proof
 
 fun smash_unifiers ctxt tus env =

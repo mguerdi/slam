@@ -1589,10 +1589,9 @@ exception JEHA_EXCEPTION of exn * prover_state
 fun given_clause_loop dump state =
   case (if dump
         then
-          given_clause_step state
-            handle e => raise (JEHA_EXCEPTION
-              (e, state)
-            )
+          (case Exn.capture given_clause_step state of
+            Exn.Exn e => raise (JEHA_EXCEPTION (e, state))
+          | Exn.Res res => res)
         else given_clause_step state) of
     (Unsat, state) => (Unsat, state)
   | (Next, state) => given_clause_loop dump state
