@@ -1,10 +1,11 @@
 diff --git a/src/HOL/Main.thy b/src/HOL/Main.thy
 --- a/src/HOL/Main.thy
 +++ b/src/HOL/Main.thy
-@@ -19,6 +19,7 @@
+@@ -17,6 +17,8 @@
+     Conditionally_Complete_Lattices
+     Binomial
      GCD
-     Divides
-     jeha
++    jeha
 +    jeha_sledgehammer
  begin
  

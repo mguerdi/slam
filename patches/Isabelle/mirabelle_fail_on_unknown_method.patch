@@ -1,0 +1,12 @@
+diff --git a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML
+--- a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML
++++ b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML
+@@ -419,7 +419,7 @@
+         else if meth = "fail" then
+           K no_tac
+         else
+-          (warning ("Unknown method " ^ quote meth); K no_tac)
++          (error ("Unknown method " ^ quote meth); K no_tac)
+       end
+     fun apply_method named_thms =
+       Mirabelle.can_apply timeout (do_method named_thms) st

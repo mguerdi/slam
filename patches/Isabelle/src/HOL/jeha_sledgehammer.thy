@@ -16,8 +16,11 @@ ML \<open>
     needs_insert_local_facts = false,
     needs_insert_global_facts = false,
     tac = jeha_tac,
+    priority = 4
+    (*
     try0_priority = 10,
     no_other_try0_methods = true
+    *)
   }
 
   val r = Sledgehammer_Proof_Methods.register_dynamic_proof_method jeha_method

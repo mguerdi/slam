@@ -1,0 +1,15 @@
+Run sledgehammer, collect all successful metis reconstructions in a database,
+extend mirabelle with a "replay" mechanism where the ATPs don't need to be
+called again.
+
+Quick and dirty: Have mirabelle write out a version of the .thy where the proof
+method calls have been inserted. (Like old-school mirabelle?)
+
+Evaluation:
+
+We use the replay feature as follows: If metis succeeds, try the same with
+jeha. If metis fails, try with jeha.
+
+This gives us a comparison of jeah performance against baseline metis and a the
+cases in which jeha is better than metis.
+
