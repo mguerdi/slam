@@ -32,6 +32,13 @@ WORKDIR /home/isabelle
 
 RUN Isabelle/Admin/init -u -L -n
 
-RUN Isabelle/bin/isabelle build -j12 Main
+# Main is the theory, HOL is the session
+# TODO: use -a to build everything (How to exclude afp?)
+# TODO: -o "threads=8" -j5 (server)
+RUN Isabelle/bin/isabelle build -o "threads=8" -j2 -b HOL
 
+# create mountpoint for mirabelle-log volume
 RUN mkdir mirabelle_output
+
+# create mountpoint for sledgehammer-cache volume
+RUN mkdir sledgehammer_cache

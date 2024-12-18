@@ -18,15 +18,13 @@ USER isabelle
 WORKDIR /home/isabelle
 
 RUN hg clone "https://isabelle-dev.sketis.net/source/isabelle/" Isabelle
-# This is the revision (from 2024-12-12) that the dynamic sledgehammer proof
-# methods patch is based on.
-# "81588:68dc8ffc94c246e13bb76a651b4e6ad73bc52981"
-RUN Isabelle/Admin/init -u -L -n -r 68dc8ffc94c246e13bb76a651b4e6ad73bc52981
+# 91a7e5719b2b (2024-12-18)
+RUN Isabelle/Admin/init -u -L -n -r 91a7e5719b2b
 
 RUN hg clone "https://foss.heptapod.net/isa-afp/afp-devel"
-# Checkout compatible revision of afp (2024-12-12)
+# 796f8b7efe85 (2024-12-18)
 RUN cd afp-devel && \
-  hg update "8e4f2b00b851"
+  hg update "796f8b7efe85"
 
 RUN Isabelle/bin/isabelle components -u "~/afp-devel/thys"
 
