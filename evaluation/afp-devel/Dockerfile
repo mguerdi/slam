@@ -18,13 +18,13 @@ USER isabelle
 WORKDIR /home/isabelle
 
 RUN hg clone "https://isabelle-dev.sketis.net/source/isabelle/" Isabelle
-# 91a7e5719b2b (2024-12-18)
-RUN Isabelle/Admin/init -u -L -n -r 91a7e5719b2b
+# 31b1c203357a (2025-01-08)
+RUN Isabelle/Admin/init -u -L -n -r 31b1c203357a
 
 RUN hg clone "https://foss.heptapod.net/isa-afp/afp-devel"
-# 796f8b7efe85 (2024-12-18)
+# 01a5617ddb1f (2025-01-08)
 RUN cd afp-devel && \
-  hg update "796f8b7efe85"
+  hg update "01a5617ddb1f"
 
 RUN Isabelle/bin/isabelle components -u "~/afp-devel/thys"
 

@@ -273,7 +273,7 @@ end
 
 (* much from cookboock *)
 fun verbose_of ctxt = config_put_many_bool ctxt
-  [show_types, show_brackets, show_markup, show_sorts, show_structs]
+  [show_types, show_markup, show_sorts, show_structs]
 and config_put_many_bool ctxt options =
   List.foldr (fn (option, ctxt) => Config.put option true ctxt) ctxt options
 
