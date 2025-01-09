@@ -72,7 +72,7 @@ fun jeha_tac options ctxt ths i st0 =
               case Jeha_Common.get_proof_reconstruction_mode context of
                 (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
                 (* we provide #False *)
-                Jeha_Common.None => ALLGOALS (Skip_Proof.cheat_tac context) st
+                Jeha_Common.Cheat => ALLGOALS (Skip_Proof.cheat_tac context) st
               | _ => reconstruct_proof final_state st
             end
         | ((Jeha.MaybeSat, final_state), _) => Seq.empty

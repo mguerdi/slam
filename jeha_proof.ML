@@ -1191,7 +1191,7 @@ fun impl_reconstruct_with_automation
           final_goal_fixed
         end
       | Jeha_Common.Manual => error "Manual proof should happen at an earlier point"
-      | Jeha_Common.None => error "We're in proof reconstruction even though it has beeen disabled."
+      | Jeha_Common.Cheat => error "We're in proof reconstruction even though cheat has been enabled."
 
     val proved_conclusion_fixed = Goal.finish ctxt final_goal_fixed
 
