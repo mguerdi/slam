@@ -4,6 +4,7 @@ sig
   (* left or right side of an equational literal *)
   datatype lpos = Left | Right
   val is_positive : T -> bool
+  val is_negative : T -> bool
   val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
@@ -39,6 +40,8 @@ type T = term * term * bool
 datatype lpos = Left | Right
 
 fun is_positive (_, _, b) = b
+
+val is_negative = not o is_positive
 
 fun map f (s, t, b) = (f s, f t, b)
 

@@ -11,32 +11,32 @@ sig
   val id : T -> int
   val maxidx : T -> int
   val maxidx_of2 : T * T -> int
-  val map_maxidx : (int -> int) -> T -> T
+  val set_maxidx : int -> T -> T
   val set_origin : int Jeha_Log.inference -> T -> T
   val origin : T -> int Jeha_Log.inference
   val lit_at : cpos -> T -> JLit.T
   val dummy : JLit.T list -> T
   val refresh_id : unit -> T -> T
-  val add_literal : JLit.T -> T -> T
-  val combine : T -> T -> T
-  val delete_lit_at : cpos -> T -> T
-  val delete_lits_at : cpos list -> T -> T
-  val filter_out_lits : (JLit.T -> bool) -> T -> T
+  val add_literal : Proof.context -> JLit.T -> T -> T
+  val combine : Proof.context -> T -> T -> T
+  val delete_lit_at : Proof.context -> cpos -> T -> T
+  val delete_lits_at : Proof.context -> cpos list -> T -> T
+  val filter_out_lits : Proof.context -> (JLit.T -> bool) -> T -> T
   val length : T -> int
-  val of_literals : JLit.T list * int -> T
-  val of_term : term * int -> T
+  val of_literals : Proof.context -> JLit.T list * int -> T
+  val of_term : Proof.context -> term * int -> T
   val term_of : T -> term
   val pretty_clause : Proof.context -> T -> string
   val pretty_clauses : Proof.context -> T list -> string
   val cposs_of : T -> cpos list
   val green_full_poss_of : T -> full_pos list
-  val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T
-  val map_at_full_pos : full_pos -> (term -> term) -> T -> T
-  val map_literals : (JLit.T list -> JLit.T list) -> T -> T
+  val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
+  val map_at_full_pos : full_pos -> (term -> term) -> T -> T (* NOTE: invalidates maxidx, selected *)
+  val map_literals : (JLit.T list -> JLit.T list) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val subterm_at_full_pos : T -> full_pos -> term
   val occurs_deeply : term -> T -> bool
-  val norm_beta_eta_qeta_env : Envir.env -> T -> T
-  val norm_beta_eta_qeta : T -> T
+  val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
+  val norm_beta_eta_qeta : Proof.context -> T -> T
   val incr_indexes : int -> T -> T
   val kbo : T * T -> Jeha_Order.partial_order
   val is_eligible_cpos : T -> cpos -> bool
@@ -44,6 +44,12 @@ sig
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
   val is_false : T -> bool
   val maxidx_of_literal_list : JLit.T list -> int
+  (* literal selection *)
+  val selected : T -> int list
+  type literal_selection_function = JLit.T list -> int list
+  val select_none : literal_selection_function
+  val select_all_neg_lit : literal_selection_function
+  val select_first_maximal_neg_lit : literal_selection_function
   (* Debuggging *)
   val is_eligible_tpos : term -> JTerm.tpos -> bool
 end;
@@ -60,6 +66,7 @@ type T =
   , id : int
   , maxidx : int
   , origin: int Jeha_Log.inference
+  , selected: cpos list
   }
 
 type cpos = int
@@ -73,70 +80,121 @@ val maxidx = #maxidx
 
 val maxidx_of2 = Int.max o apply2 maxidx
 
-val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid }
+val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid, selected = [] }
 
-(* NOTE: invalidates maxidx and origin *)
-fun map_literals f { literals, id, maxidx, origin } =
-  { literals = f literals, id = id, maxidx = ~1, origin = origin }
+(* NOTE: invalidates maxidx and selection *)
+fun map_literals f { literals, id, maxidx, origin, selected } =
+  { literals = f literals, id = id, maxidx = ~1, origin = origin, selected = [~1] }
 
 fun lit_at cp clause = nth (literals clause) cp
 
 fun dummy literals =
   map_literals (K literals) empty
 
-fun map_id f { literals, id, maxidx, origin } = { literals = literals, id = f id, maxidx = maxidx, origin = origin }
+fun map_id f { literals, id, maxidx, origin, selected } =
+  { literals = literals, id = f id, maxidx = maxidx, origin = origin, selected = selected }
 
 fun refresh_id _ = map_id (K (Clause_Id.new ()))
 
 fun maxidx_of_literal_list ls =
   fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
 
-fun map_maxidx f { literals, id, maxidx, origin } = { literals = literals, id = id, maxidx = f maxidx, origin = origin }
+fun map_maxidx f { literals, id, maxidx, origin, selected } =
+  { literals = literals, id = id, maxidx = f maxidx, origin = origin, selected = selected }
 
-fun set_origin origin { literals, id, maxidx, ... } = { literals = literals, id = id, maxidx = maxidx, origin = origin }
+fun set_maxidx maxidx = map_maxidx (K maxidx)
+
+fun set_origin origin { literals, id, maxidx, selected, ... } =
+  { literals = literals, id = id, maxidx = maxidx, selected = selected, origin = origin }
 
 fun origin { origin, ... } = origin
 
 (* FIXME: use this for testing *)
 fun recalculate_maxidx clause =
-  map_maxidx ((K o maxidx_of_literal_list o literals) clause) clause
+  set_maxidx (maxidx_of_literal_list (literals clause)) clause
 
-fun add_literal l clause =
+(* literal selection functions *)
+
+fun map_selected f { literals, id, maxidx, origin, selected } =
+  { literals = literals, id = id, maxidx = maxidx, origin = origin, selected = f selected }
+
+fun set_selected selected = map_selected (K selected)
+
+fun selected { selected, ... } = case selected of
+  [~1] => error "selected has been invalidated"
+  | _ => selected
+
+type literal_selection_function = JLit.T list -> int list
+
+fun select_none _ = []
+
+fun select_all_neg_lit lits =
+  lits
+  |> map_index I
+  |> map_filter (fn (cpos, lit) => if JLit.is_negative lit then SOME cpos else NONE)
+
+fun select_first_maximal_neg_lit lits = error "select_first_maximal_neg_lit unimplemented"
+
+val literal_selection_functions =
+  ["select_none", "select_all_neg_lit", "select_first_maximal_neg_lit"]
+
+fun literal_selection_function_from_name name = case name of
+  "select_none" => select_none
+  | "select_all_neg_lit" => select_all_neg_lit
+  | "select_first_maximal_neg_lit" => select_first_maximal_neg_lit
+  | _ => error ("literal_selection_function_from_name: unknown selection function \"" ^ name ^ "\"")
+
+fun get_literal_selection_function ctxt =
+  Config.get ctxt Jeha_Common.literal_selection_function
+  |> literal_selection_function_from_name
+
+fun recompute_selected ctxt clause =
+  set_selected
+    (get_literal_selection_function ctxt (literals clause))
+    clause
+
+(* *)
+
+fun add_literal ctxt l clause =
   clause
   |> map_literals (fn lits => lits @ [l])
   |> refresh_id ()
-  |> map_maxidx (K (Int.max (maxidx clause, JLit.maxidx_of l)))
+  |> set_maxidx (Int.max (maxidx clause, JLit.maxidx_of l))
+  |> recompute_selected ctxt
 
-fun combine c d =
+fun combine ctxt c d =
   map_literals (curry (op @) (literals c)) d
   |> refresh_id ()
-  |> map_maxidx (K (maxidx_of2 (c, d)))
+  |> set_maxidx (maxidx_of2 (c, d))
+  |> recompute_selected ctxt
 
-fun delete_lit_at cp clause =
+fun delete_lit_at ctxt cp clause =
   clause
   |> map_literals (nth_drop cp)
   |> refresh_id ()
-  |> map_maxidx (K (maxidx clause))
+  |> set_maxidx (maxidx clause)
+  |> recompute_selected ctxt
 
-fun delete_lits_at cps clause =
+fun delete_lits_at ctxt cps clause =
   let
     val sorted = sort (rev_order o int_ord) cps
   in
-    fold delete_lit_at sorted clause
+    fold (delete_lit_at ctxt) sorted clause
   end
 
-fun filter_out_lits f clause =
+fun filter_out_lits ctxt f clause =
   clause
   |> map_literals (filter_out f)
-  |> map_maxidx (K (maxidx clause))
+  |> set_maxidx (maxidx clause)
+  |> recompute_selected ctxt
 
 val length = List.length o literals
 
-fun of_literals (ls, id) =
-  empty |> map_id (K id) |> map_literals (K ls) |> recalculate_maxidx
+fun of_literals ctxt (ls, id) =
+  empty |> map_id (K id) |> map_literals (K ls) |> recalculate_maxidx |> recompute_selected ctxt
 
 (* converts boolean terms to lists of literals *)
-fun of_term (t, id) =
+fun of_term ctxt (t, id) =
   if not (fastype_of t = @{typ bool})
     then raise (NOBOOL ("can only turn boolean terms into clauses", t, (fastype_of t)))
     else
@@ -144,6 +202,7 @@ fun of_term (t, id) =
       |> map_id (K id)
       |> map_literals (K (HOLogic.disjuncts t |> map JLit.of_term))
       |> recalculate_maxidx
+      |> recompute_selected ctxt
 
 fun term_of { literals = [], ... } = @{term False}
   | term_of { literals = (c as (_ :: _)), ... } =
@@ -186,30 +245,33 @@ fun green_full_poss_of c =
   |> maps (fn cp => [JLit.Left, JLit.Right] |> map (fn lp => (subterm_at_full_pos c ([], lp, cp), lp, cp)))
   |> maps (fn (t, lp, cp) => map (fn tp => (tp, lp, cp)) (JTerm.green_tposs_of t))
 
-(* NOTE: invalidates maxidx *)
-val map_at_cpos = map_literals oo nth_map
+(* NOTE: invalidates maxidx and selection *)
+fun map_at_cpos i f clause =
+  clause
+  |> map_literals (nth_map i f)
 
-(* NOTE: invalidates maxidx *)
+(* NOTE: invalidates maxidx and selection *)
 fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (JLit.map_at_lpos lp (JTerm.map_at tp f)) c
 
 fun occurs_deeply (x as (Var _)) { literals, ... } = exists (JLit.occurs_deeply_in x) literals
   | occurs_deeply _ _ = error "only Vars can occur deeply"
 
-fun norm_beta_eta_qeta_env env clause =
+fun norm_beta_eta_qeta_env ctxt env clause =
   (* if Envir.maxidx_of env < maxidx clause
     (* this indicates something went wrong *)
     then error "maxidx of env should be greater or equal to maxidx of clause"
     else *)
       clause
       |> map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env env)))
-      |> map_maxidx (K (Int.max (Envir.maxidx_of env, maxidx clause)))
+      |> set_maxidx (Int.max (Envir.maxidx_of env, maxidx clause))
+      |> recompute_selected ctxt
 
-fun norm_beta_eta_qeta clause = norm_beta_eta_qeta_env (Envir.empty (maxidx clause)) clause
+fun norm_beta_eta_qeta ctxt clause = norm_beta_eta_qeta_env ctxt (Envir.empty (maxidx clause)) clause
 
 fun incr_indexes increment clause =
   clause
   |> map_literals (map (JLit.map (Logic.incr_indexes ([], increment))))
-  |> map_maxidx (K (increment + maxidx clause))
+  |> set_maxidx (increment + maxidx clause)
 
 val kbo = Jeha_Order.mk_multiset_order_of_strict JLit.kbo o apply2 literals
 

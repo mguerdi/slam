@@ -17,17 +17,17 @@ sig
   val equality_subsumes : Proof.context -> JClause.T * JClause.T -> bool
   val bool_rw_non_var_rules : bool -> (term * term) list
   (* outer clausification *)
-  val outer_clausify : bool -> term -> JClause.T -> JClause.T list
+  val outer_clausify : Proof.context -> bool -> term -> JClause.T -> JClause.T list
   val is_trivial : JClause.T -> bool
   val is_redundant : Proof.context -> JClause.T list -> JClause.T -> bool
-  val simp_bool_outer_claus : JClause.T * JClause.cpos -> JClause.T list
+  val simp_bool_outer_claus : Proof.context -> JClause.T * JClause.cpos -> JClause.T list
   val simp_rewrite_positive_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val simp_rewrite_negative_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list 
   val simp_normalize_pred_lits : JClause.T -> JClause.T option
-  val infer_eq_neq_outer_claus : JClause.T -> JClause.cpos -> JClause.T list
+  val infer_eq_neq_outer_claus : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
   val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
@@ -85,7 +85,7 @@ fun simp_normalize_pred_lits c =
       then (
         c
         |> JClause.map_literals (map JLit.normalize_if_negative_pred)
-        |> JClause.map_maxidx (K (JClause.maxidx c))
+        |> JClause.set_maxidx (JClause.maxidx c)
         |> JClause.refresh_id ()
         |> JClause.set_origin (Jeha_Log.SimpNormalizePredLits { premise = JClause.id c })
         |> SOME
@@ -98,30 +98,30 @@ logically:
   outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
 Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix
 of negations above and below) *)
-fun outer_clausify b (@{term Not} $ s) c = outer_clausify (not b) s c
-  | outer_clausify b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
+fun outer_clausify ctxt b (@{term Not} $ s) c = outer_clausify ctxt (not b) s c
+  | outer_clausify ctxt b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
-      then [fold JClause.add_literal [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
+      then [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
       else
-        [ JClause.add_literal (JLit.of_term_signed b s) c
-        , JClause.add_literal (JLit.of_term_signed b t) c
+        [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
+        , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
-  | outer_clausify b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
+  | outer_clausify ctxt b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
       then
-        [ JClause.add_literal (JLit.of_term_signed b s) c
-        , JClause.add_literal (JLit.of_term_signed b t) c
+        [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
+        , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
-      else [fold JClause.add_literal [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
-  | outer_clausify b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
+      else [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
+  | outer_clausify ctxt b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
-      outer_clausify b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
+      outer_clausify ctxt b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
   (* FIXME: Making HO Sup work p.7 says: never simplify \<longleftrightarrow>. What does this mean
   concretely? (Isabelle represents \<longleftrightarrow> as HOL.eq) *)
-  | outer_clausify b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
-      [JClause.add_literal (s, t, b) c]
+  | outer_clausify ctxt b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
+      [JClause.add_literal ctxt (s, t, b) c]
   (* FIXME: add forall, exists (make fresh var, increment maxidx) *)
-  | outer_clausify b s c = []
+  | outer_clausify ctxt b s c = []
 
 (*** Rules ***)
 
@@ -157,7 +157,7 @@ fun simp_delete_duplicated_lits ctxt c =
         literals
         []
     (* FIXME: use JClause.delete_lits_at *)
-    val c' = fold JClause.delete_lit_at (map #duplicate cposs_of_dups) c
+    val c' = fold (JClause.delete_lit_at ctxt) (map #duplicate cposs_of_dups) c
   in
     if JClause.length c' = JClause.length c
       then NONE
@@ -185,7 +185,7 @@ fun simp_delete_resolved_lits ctxt c =
       |> map_index (fn x => x)
       |> filter (is_false_disequation o snd)
       |> map fst
-    val c' = JClause.delete_lits_at cposs c
+    val c' = JClause.delete_lits_at ctxt cposs c
   in
     if JClause.length c' = JClause.length c
       then NONE
@@ -241,9 +241,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
         let
           val rewritten_clause =
             target_clause
-            |> JClause.map_at_full_pos j (K to)
-            |> JClause.norm_beta_eta_qeta
-            |> JClause.map_maxidx (K (Envir.maxidx_of matcher))
+            |> JClause.map_at_full_pos j (K to) (* FIXME: recompute selected *)
+            |> JClause.norm_beta_eta_qeta ctxt
+            |> JClause.set_maxidx (Envir.maxidx_of matcher)
           val rewriting_clause = JClause.dummy [(from, to, true)]
           val rewriting_smaller_than_rewritten = (fn () =>
             SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
@@ -251,7 +251,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
           (Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg);
           (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
-          (JClause.norm_beta_eta_qeta rewritten_clause)
+          (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
           |> JClause.refresh_id ()
           |> JClause.set_origin (
               (if positive then Jeha_Log.RewritePositiveLits else Jeha_Log.RewriteNegativeLits)
@@ -307,7 +307,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
     if is_some matcher
       then let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
-        |> JClause.delete_lit_at target_cp
+        |> JClause.delete_lit_at ctxt target_cp
         |> JClause.refresh_id ()
         |> JClause.set_origin (Jeha_Log.NegativeSimplifyReflect
             { literal = target_cp
@@ -415,7 +415,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
       SOME (unit_shift, (disagreement, (unit_orientation, matcher))) =>
         let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
-        |> JClause.delete_lit_at target_cp
+        |> JClause.delete_lit_at ctxt target_cp
         |> JClause.refresh_id ()
         |> JClause.set_origin (
             Jeha_Log.PositiveSimplifyReflect
@@ -489,14 +489,14 @@ fun hol_bool_of true = @{term "True"}
   | hol_bool_of _ = error "term is not true of false"
 
 (* PosOuterClaus and NegOuterClaus simplficiations *)
-fun simp_bool_outer_claus (c, i) =
+fun simp_bool_outer_claus ctxt (c, i) =
   let val lit = JClause.lit_at i c in
   if not (JLit.is_pred lit) then [] else
   let
     val (s, b) = lit |> JLit.dest_pred ||> ml_bool_of
-    val c' = JClause.delete_lit_at i c
+    val c' = JClause.delete_lit_at ctxt i c
     (* Meaning: "if b then PosOuterClaus else NegOuterClaus" *)
-    val clausified = outer_clausify b s c'
+    val clausified = outer_clausify ctxt b s c'
   in
     if null clausified then [] else (* in particular if head of s is not a logical symbol *)
     clausified
@@ -515,7 +515,7 @@ fun simp_bool_outer_claus (c, i) =
   end
 
 (* EqOuterClaus and NeqOuterClaus inferences *)
-fun infer_eq_neq_outer_claus c i =
+fun infer_eq_neq_outer_claus ctxt c i =
   let
     val (s, t, b) = JClause.lit_at i c
   in
@@ -526,12 +526,12 @@ fun infer_eq_neq_outer_claus c i =
     (* FIXME: set origin *)
     else if b
       then (* EqOuterClaus *)
-        [ fold JClause.add_literal [JLit.mk_pred s false, JLit.mk_pred t true] c
-        , fold JClause.add_literal [JLit.mk_pred s true, JLit.mk_pred t false] c
+        [ fold (JClause.add_literal ctxt) [JLit.mk_pred s false, JLit.mk_pred t true] c
+        , fold (JClause.add_literal ctxt) [JLit.mk_pred s true, JLit.mk_pred t false] c
         ]
       else (* NeqOuterClaus *)
-        [ fold JClause.add_literal [JLit.mk_pred s false, JLit.mk_pred t false] c
-        , fold JClause.add_literal [JLit.mk_pred s true, JLit.mk_pred t true] c
+        [ fold (JClause.add_literal ctxt) [JLit.mk_pred s false, JLit.mk_pred t false] c
+        , fold (JClause.add_literal ctxt) [JLit.mk_pred s true, JLit.mk_pred t true] c
         ]
   end
 
@@ -578,7 +578,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
       val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
       fun build_conclusion unifier =
         let
-          val (c, d) = (c, d) |> apply2 (JClause.norm_beta_eta_qeta_env unifier)
+          val (c, d) = (c, d) |> apply2 (JClause.norm_beta_eta_qeta_env ctxt unifier)
           val u_eligible = JClause.is_eligible_full_pos c u_pos
           (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: u eligible=" ^ @{make_string} u_eligible) *)
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
@@ -589,11 +589,11 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           implementation *)
           val c_comp_d = JClause.kbo (c, d)
           (* val _ = writeln ("c_comp_d " ^ @{make_string} c_comp_d) *)
-          val d' = JClause.delete_lit_at cp d
+          val d' = JClause.delete_lit_at ctxt cp d
           (* this relies on normalization not destroying green / top level positions, i.e.
           (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
           val (t, t', _) = JLit.orient lp (JClause.lit_at cp d)
-          val ct' = JClause.map_at_full_pos u_pos (K t') c
+          val ct' = JClause.map_at_full_pos u_pos (K t') c (* FIXME: recompute selected *)
           val t_comp_t' = Jeha_Order.kbo (t, t')
           (* val _ = writeln ("t_comp_t' " ^ @{make_string} t_comp_t') *)
         in
@@ -603,7 +603,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           if SOME LESS = c_comp_d orelse SOME EQUAL = c_comp_d then NONE else (* 7. *)
           if not tt'_eligible then NONE else (* 8. *)
           (* FXIME 9. 10. *)
-          JClause.combine d' ct'
+          JClause.combine ctxt d' ct'
           |> JClause.refresh_id ()
           |> JClause.set_origin
               (Jeha_Log.Sup
@@ -629,11 +629,11 @@ fun infer_eres (ctxt : Proof.context) c cp =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
       in
         if not (JClause.is_eligible_cpos c cp) then NONE else
         c
-        |> JClause.delete_lit_at cp
+        |> JClause.delete_lit_at ctxt cp
         |> JClause.refresh_id ()
         |> JClause.set_origin
           (Jeha_Log.ERes { premise = JClause.id c, literal = cp, substitution = unifier })
@@ -655,7 +655,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val (u', v', _) = JLit.orient lp' (JClause.lit_at cp' c)
         val uv_literal = JClause.lit_at cp c
         val (u, v, _) = JLit.orient lp uv_literal
@@ -666,10 +666,10 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         if not uv_maximal then NONE else
         (* FIXME: nothing is selected in C condition *)
         c
-        |> JClause.delete_lit_at (Int.max (cp, cp'))
-        |> JClause.delete_lit_at (Int.min (cp, cp'))
-        |> JClause.add_literal (v, v', false)
-        |> JClause.add_literal (u, v', true)
+        |> JClause.delete_lit_at ctxt (Int.max (cp, cp'))
+        |> JClause.delete_lit_at ctxt (Int.min (cp, cp'))
+        |> JClause.add_literal ctxt (v, v', false)
+        |> JClause.add_literal ctxt (u, v', true)
         |> JClause.refresh_id ()
         |> JClause.set_origin
             (Jeha_Log.EFact
@@ -737,9 +737,9 @@ fun infer_arg_cong ctxt c cpos =
 
         val new_clause =
           c
-          |> JClause.map_at_cpos cpos (K new_literal)
-          |> JClause.norm_beta_eta_qeta_env unifier
-          |> JClause.map_maxidx (K new_maxidx)
+          |> JClause.map_at_cpos cpos (K new_literal) (* FIXME: recompute selected *)
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.set_maxidx new_maxidx
           |> JClause.refresh_id ()
           |> JClause.set_origin
               (Jeha_Log.ArgCong 
@@ -783,9 +783,9 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
           []
         else
           c
-          |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"})
-          |> JClause.add_literal u_eq_true
-          |> JClause.norm_beta_eta_qeta_env unifier
+          |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"}) (* FIXME: recompute selected *)
+          |> JClause.add_literal ctxt u_eq_true
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
           |> JClause.refresh_id ()
           |> JClause.set_origin
             (Jeha_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
@@ -815,7 +815,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val origin =
           if as_simplification
             then
@@ -827,7 +827,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
       in
         if not as_simplification andalso not (JClause.is_eligible_cpos c cp) then NONE else (* 2. *)
         c
-        |> JClause.delete_lit_at cp
+        |> JClause.delete_lit_at ctxt cp
         |> JClause.refresh_id ()
         |> JClause.set_origin origin
         |> SOME
@@ -920,7 +920,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val new_literal =
           Jeha_Common.map_some
             (JLit.map (JTerm.norm_beta_eta_qeta_env unifier))
@@ -950,10 +950,10 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         if not u_variable_headed_condition then NONE else
 
         c
-        |> JClause.map_at_full_pos u_pos (K insert_for_u)
-        |> JClause.map_maxidx (K maxidx)
+        |> JClause.map_at_full_pos u_pos (K insert_for_u) (* FIXME: recompute selected *)
+        |> JClause.set_maxidx maxidx
         (* add the new literal if it exists, otherwise apply identity function *)
-        |> the_default I (Jeha_Common.map_some JClause.add_literal new_literal)
+        |> the_default I (Jeha_Common.map_some (JClause.add_literal ctxt) new_literal)
         |> JClause.refresh_id ()
         |> pair unifier
         |> SOME
@@ -999,7 +999,7 @@ fun impl_simp_bool_rw
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_beta_eta_qeta_env unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val new_literal =
           Jeha_Common.map_some
             (JLit.map (JTerm.norm_beta_eta_qeta_env unifier))
@@ -1029,10 +1029,10 @@ fun impl_simp_bool_rw
         if not u_variable_headed_condition then NONE else
 
         c
-        |> JClause.map_at_full_pos u_pos (K insert_for_u)
-        |> JClause.map_maxidx (K maxidx)
+        |> JClause.map_at_full_pos u_pos (K insert_for_u) (* FIXME: recompute selected *)
+        |> JClause.set_maxidx maxidx
         (* add the new literal if it exists, otherwise apply identity function *)
-        |> the_default I (Jeha_Common.map_some JClause.add_literal new_literal)
+        |> the_default I (Jeha_Common.map_some (JClause.add_literal ctxt) new_literal)
         |> JClause.refresh_id ()
         |> pair unifier
         |> SOME
@@ -1263,7 +1263,7 @@ fun forward_simplify ctxt cheap active given_clause =
         val oc_rewrites : Jeha_Simplify.simp_fun = fn _ => fn c =>
           if_cfg Jeha_Common.rule_simp_outer_claus (
           (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
-          |> Seq.map simp_bool_outer_claus
+          |> Seq.map (simp_bool_outer_claus ctxt)
           |> Seq.map_filter (fn cs => case cs of [] => NONE | _ => SOME cs)
           )
           |> Seq.pull
@@ -1606,7 +1606,7 @@ fun try_saturate context prems =
       prem
       |> Thm.prop_of
       |> Object_Logic.drop_judgment context (* remove Trueprop *)
-      |> (fn t => JClause.of_term (t, Clause_Id.new ()))
+      |> (fn t => JClause.of_term context (t, Clause_Id.new ()))
       |> JClause.set_origin (Jeha_Log.Axiom { thm = prem })
     val clauses = map clause_of_prem prems
     val _ = Jeha_Common.trace_msg context (fn () =>
