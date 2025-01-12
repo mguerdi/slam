@@ -8,7 +8,7 @@ sig
   val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
-  val map : (term -> term) -> T -> T
+  val map : (term -> term) -> T -> T (* FIXME breaks predicate lit *)
   val aconv : T * T -> bool
   val aconv_as : T * T -> lpos option
   val swap : T -> T
@@ -18,10 +18,11 @@ sig
   val is_pred : T -> bool
   val dest_pred : T -> term * term
   val normalize_if_negative_pred : T -> T
+  val norm_pred_beta_eta_qeta_env : Envir.env -> T -> T
   val term_of : T -> term
   val term_at_lpos : T -> lpos -> term
   val orient : lpos -> T -> term * term * bool
-  val map_at_lpos : lpos -> (term -> term) -> T -> T
+  val map_at_lpos : lpos -> (term -> term) -> T -> T (* FIXME breaks predicate lit *)
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
   val kbo : T * T -> Jeha_Order.partial_order
@@ -47,11 +48,15 @@ fun map f (s, t, b) = (f s, f t, b)
 
 fun lposs_of _ = [Left, Right]
 
+(* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
+(* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
+(see similar comment in dest_pred) *)
+fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
+  | mk_pred t b = (t, if b then @{term True} else @{term False}, true)
+
 fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
-  | of_term_signed b (@{term Not} $ t) = of_term_signed (not b) t
-  (* FIXME: Should we prefer equation to disequations when injecting booleans? *)
-  (* FIXME: us mk_pred_lit here? *)
-  | of_term_signed b t = (t, if b then @{term True} else @{term False}, true)
+  | of_term_signed b (Const (@{const_name HOL.Not}, _) $ t) = of_term_signed (not b) t
+  | of_term_signed b t = mk_pred t b
 
 (* turn a boolean term into an equational literal *)
 fun of_term t =
@@ -71,12 +76,6 @@ fun swap (s, t, b) = (t, s, b)
 
 fun swap_lpos Left = Right
   | swap_lpos Right = Left
-
-(* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
-(* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
-(see similar comment in dest_eq_bool_lit) *)
-fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
-  | mk_pred t b = (t, if b then @{term True} else @{term False}, true)
 
 fun is_truth_value t = t = @{term True} orelse t = @{term False}
 
@@ -101,6 +100,10 @@ fun normalize_if_negative_pred (l as (_, _, true)) = l
       else if is_truth_value t
         then (s, JTerm.negate_hol_bool t, true)
       else l 
+
+fun norm_pred_beta_eta_qeta_env env =
+  map (JTerm.norm_beta_eta_qeta_env env)
+  #> normalize_if_negative_pred
 
 fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 

@@ -108,14 +108,23 @@ sig
     -> { premise: HClause.hthm
        , literal: JClause.cpos }
     -> HClause.hthm list
-  val reconstruct_simp_normalize_pred_lits:
-    Proof.context
-    -> { premise: HClause.hthm }
-    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
 struct
+
+fun normalize_pred_lits ctxt premise =
+  let
+    val tac =
+      [ @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
+      , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
+      , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}
+      , @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto} ]
+      |> map (fn lemma => (resolve_tac ctxt [lemma]))
+      |> FIRST'
+  in
+    Seq.hd (ALLGOALS (TRY o tac) premise)
+  end
 
 (* FIXME: see also Pure/ML/ml_instantiate.ML *)
 fun instantiate_norm ctxt (tyenv, tenv) thm =
@@ -138,6 +147,7 @@ fun instantiate_norm ctxt (tyenv, tenv) thm =
     val insts = Vartab.fold (cons o mk) tenv []
   in
     Thm.instantiate_beta (TVars.make instsT, Vars.make insts) thm
+    |> normalize_pred_lits ctxt
   end
 
 fun instantiate_norm_with_env ctxt env = instantiate_norm ctxt (Envir.type_env env, Envir.term_env env)
@@ -757,19 +767,6 @@ fun reconstruct_simp_outer_claus ctxt { premise, literal } =
     |> map move_new_literals_to_last
   end
 
-fun reconstruct_simp_normalize_pred_lits ctxt { premise } =
-  let
-    val tac =
-      [ @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
-      , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
-      , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}
-      , @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto} ]
-      |> map (fn lemma => (resolve_tac ctxt [lemma]))
-      |> FIRST'
-  in
-    Seq.hd (ALLGOALS (TRY o tac) premise)
-  end
-
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
 (* some inference rules require additional lemmas *)
@@ -864,7 +861,10 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
       |> instantiate_norm_with_env ctxt substitution
   in                      
     case origin of
-      Jeha_Log.Axiom { thm } => hclause_of_axiom ctxt thm
+      Jeha_Log.Axiom { thm } =>
+        thm
+        |> hclause_of_axiom ctxt
+        |> instantiate_norm_with_env ctxt Envir.init
     | Jeha_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
         reconstruct_sup
           ctxt
@@ -1036,10 +1036,10 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
         reconstruct_false_elim
           ctxt
           { premise = get_and_instantiate substitution NONE premise, literal = literal }
-    | Jeha_Log.SimpNormalizePredLits { premise } =>
-        reconstruct_simp_normalize_pred_lits
+    | Jeha_Log.SimpNormalizePredLits { premise } => error "SimpNormalizePredLits has been deprecated"
+        (* reconstruct_simp_normalize_pred_lits
           ctxt
-          { premise = get_thm premise }
+          { premise = get_thm premise } *)
     (*
     | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
         Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }

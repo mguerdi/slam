@@ -35,8 +35,8 @@ sig
   val map_literals : (JLit.T list -> JLit.T list) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val subterm_at_full_pos : T -> full_pos -> term
   val occurs_deeply : term -> T -> bool
-  val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
-  val norm_beta_eta_qeta : Proof.context -> T -> T
+  val norm_pred_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
+  val norm_pred_beta_eta_qeta : Proof.context -> T -> T
   val incr_indexes : int -> T -> T
   val kbo : T * T -> Jeha_Order.partial_order
   val is_eligible_cpos : T -> cpos -> bool
@@ -67,6 +67,7 @@ type T =
   , maxidx : int
   , origin: int Jeha_Log.inference
   , selected: cpos list
+  (* , normalized: bool *)
   }
 
 type cpos = int
@@ -160,20 +161,20 @@ fun add_literal ctxt l clause =
   |> map_literals (fn lits => lits @ [l])
   |> refresh_id ()
   |> set_maxidx (Int.max (maxidx clause, JLit.maxidx_of l))
-  |> recompute_selected ctxt
+  (* |> recompute_selected ctxt *)
 
 fun combine ctxt c d =
   map_literals (curry (op @) (literals c)) d
   |> refresh_id ()
   |> set_maxidx (maxidx_of2 (c, d))
-  |> recompute_selected ctxt
+  (* |> recompute_selected ctxt *)
 
 fun delete_lit_at ctxt cp clause =
   clause
   |> map_literals (nth_drop cp)
   |> refresh_id ()
   |> set_maxidx (maxidx clause)
-  |> recompute_selected ctxt
+  (* |> recompute_selected ctxt *)
 
 fun delete_lits_at ctxt cps clause =
   let
@@ -186,23 +187,12 @@ fun filter_out_lits ctxt f clause =
   clause
   |> map_literals (filter_out f)
   |> set_maxidx (maxidx clause)
-  |> recompute_selected ctxt
+  (* |> recompute_selected ctxt *)
 
 val length = List.length o literals
 
 fun of_literals ctxt (ls, id) =
-  empty |> map_id (K id) |> map_literals (K ls) |> recalculate_maxidx |> recompute_selected ctxt
-
-(* converts boolean terms to lists of literals *)
-fun of_term ctxt (t, id) =
-  if not (fastype_of t = @{typ bool})
-    then raise (NOBOOL ("can only turn boolean terms into clauses", t, (fastype_of t)))
-    else
-      empty
-      |> map_id (K id)
-      |> map_literals (K (HOLogic.disjuncts t |> map JLit.of_term))
-      |> recalculate_maxidx
-      |> recompute_selected ctxt
+  empty |> map_id (K id) |> map_literals (K ls) |> recalculate_maxidx (* |> recompute_selected ctxt *)
 
 fun term_of { literals = [], ... } = @{term False}
   | term_of { literals = (c as (_ :: _)), ... } =
@@ -256,17 +246,29 @@ fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (JLit.map_at_lpos lp (JTer
 fun occurs_deeply (x as (Var _)) { literals, ... } = exists (JLit.occurs_deeply_in x) literals
   | occurs_deeply _ _ = error "only Vars can occur deeply"
 
-fun norm_beta_eta_qeta_env ctxt env clause =
+fun norm_pred_beta_eta_qeta_env ctxt env clause =
   (* if Envir.maxidx_of env < maxidx clause
     (* this indicates something went wrong *)
     then error "maxidx of env should be greater or equal to maxidx of clause"
     else *)
       clause
-      |> map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env env)))
+      |> map_literals (map (JLit.norm_pred_beta_eta_qeta_env env))
       |> set_maxidx (Int.max (Envir.maxidx_of env, maxidx clause))
-      |> recompute_selected ctxt
+      (* |> recompute_selected ctxt *)
 
-fun norm_beta_eta_qeta ctxt clause = norm_beta_eta_qeta_env ctxt (Envir.empty (maxidx clause)) clause
+fun norm_pred_beta_eta_qeta ctxt clause =
+  norm_pred_beta_eta_qeta_env ctxt (Envir.empty (maxidx clause)) clause
+
+(* converts boolean terms to lists of literals *)
+fun of_term ctxt (t, id) =
+  if not (fastype_of t = @{typ bool})
+    then raise (NOBOOL ("can only turn boolean terms into clauses", t, (fastype_of t)))
+    else
+      empty
+      |> map_id (K id)
+      |> map_literals (K (HOLogic.disjuncts t |> map JLit.of_term))
+      |> recalculate_maxidx
+      |> norm_pred_beta_eta_qeta ctxt
 
 fun incr_indexes increment clause =
   clause
@@ -325,8 +327,11 @@ fun is_eligible_cpos c cpos =
     val literals = literals c
     val literal = nth literals cpos
     val strict = JLit.is_positive literal
+    val selected = selected c
   in
-    Jeha_Order.is_maximal JLit.kbo strict literal literals
+    if selected = []
+      then Jeha_Order.is_maximal JLit.kbo strict literal literals
+      else member (op =) selected cpos
   end
 
 fun is_eligible_full_pos c (tpos, lpos, cpos) =
