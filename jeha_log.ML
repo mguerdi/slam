@@ -41,7 +41,6 @@ sig
   (* *)
   | SimpBoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | SimpFalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | SimpNormalizePredLits of { premise: 'a }
   (* redundancy FIXME: different type? these don't make sense in logs in clauses *)
   | SyntacticTautologyDeletion1 of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
   | SyntacticTautologyDeletion2 of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
@@ -94,7 +93,6 @@ datatype 'a inference =
   | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos, conclusion_index: int }
   | SimpBoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | SimpFalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
-  | SimpNormalizePredLits of { premise: 'a }
   (* redundancy FIXME: different type? these don't make sense in logs in clauses *)
   | SyntacticTautologyDeletion1 of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
   | SyntacticTautologyDeletion2 of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env }
@@ -131,7 +129,6 @@ fun premises (Axiom { thm: thm }) = []
   | premises (SimpPosNegOuterClaus { premise, ... }) = [premise]
   | premises (SimpBoolRw { premise, ...}) = [premise]
   | premises (SimpFalseElim { premise, ... }) = [premise]
-  | premises (SimpNormalizePredLits { premise }) = [premise]
   | premises Invalid = error "\"Invalid\" inference encountered"
 
 fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_premise, substitution, ... })
@@ -267,7 +264,6 @@ fun name_of (Axiom _) = "Axiom"
   | name_of (EqualitySubsumption _) = "EqualitySubsumption" 
   | name_of (SimpBoolRw _) = "SimpBoolRw"
   | name_of (SimpFalseElim _) = "SimpFalseElim" 
-  | name_of (SimpNormalizePredLits _) = "SimpNormalizePredLits"
   | name_of Invalid = "Invalid" 
 
 fun pretty ctxt inference = case inference of

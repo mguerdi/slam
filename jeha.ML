@@ -26,7 +26,6 @@ sig
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list 
-  (* val simp_normalize_pred_lits : JClause.T -> JClause.T option *)
   val infer_eq_neq_outer_claus : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
   val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
@@ -74,26 +73,6 @@ structure Jeha : JEHA =
 struct
 
 val UNIFIER_CUTOFF = 2
-
-(*
-(* Turns t \<noteq> b into t = \<not>b *)
-(* FIXME: only update id, origin if work was done *)
-fun simp_normalize_pred_lits c =
-  let
-    val literals = JClause.literals c
-  in
-    if exists (fn (s, t, b) => not b andalso JLit.is_pred (s, t, true)) literals
-      then (
-        c
-        |> JClause.map_literals (map JLit.normalize_if_negative_pred)
-        |> JClause.set_maxidx (JClause.maxidx c)
-        |> JClause.refresh_id ()
-        |> JClause.set_origin (Jeha_Log.SimpNormalizePredLits { premise = JClause.id c })
-        |> SOME
-      )
-      else NONE
-  end
-*)
 
 (* oc function from the PhD thesis
 logically:
@@ -1284,8 +1263,6 @@ fun forward_simplify ctxt cheap active given_clause =
     (* FIXME: remove active_units hack *)
     val simp_funs =
       let
-        (* val simp_normalize_pred_lits_rewrites: JClause.T -> JClause.T Seq.seq = fn c =>
-          the_default Seq.empty (simp_normalize_pred_lits c |> Jeha_Common.map_some Seq.single) *)
         val simp_bool_rewrites: JClause.T -> JClause.T Seq.seq = fn c =>
           if_cfg Jeha_Common.rule_simp_bool_rw (
             let
@@ -1355,7 +1332,6 @@ fun forward_simplify ctxt cheap active given_clause =
                 (Seq.single (simp_delete_resolved_lits ctxt))))
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
-        (* [simp_fun_of_seq simp_normalize_pred_lits_rewrites] *)
         [simp_fun_of_seq simp_bool_rewrites]
         @ [simp_fun_of_seq simp_false_elim_rewrites]
         @ [oc_rewrites]

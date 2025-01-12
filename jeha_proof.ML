@@ -113,7 +113,7 @@ end;
 structure Jeha_Proof : JEHA_PROOF =
 struct
 
-fun normalize_pred_lits ctxt premise =
+fun norm_negative_predicate_literals ctxt premise =
   let
     val tac =
       [ @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
@@ -147,7 +147,7 @@ fun instantiate_norm ctxt (tyenv, tenv) thm =
     val insts = Vartab.fold (cons o mk) tenv []
   in
     Thm.instantiate_beta (TVars.make instsT, Vars.make insts) thm
-    |> normalize_pred_lits ctxt
+    |> norm_negative_predicate_literals ctxt
   end
 
 fun instantiate_norm_with_env ctxt env = instantiate_norm ctxt (Envir.type_env env, Envir.term_env env)
@@ -1036,10 +1036,6 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
         reconstruct_false_elim
           ctxt
           { premise = get_and_instantiate substitution NONE premise, literal = literal }
-    | Jeha_Log.SimpNormalizePredLits { premise } => error "SimpNormalizePredLits has been deprecated"
-        (* reconstruct_simp_normalize_pred_lits
-          ctxt
-          { premise = get_thm premise } *)
     (*
     | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
         Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
