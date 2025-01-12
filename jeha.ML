@@ -167,7 +167,9 @@ fun simp_delete_duplicated_lits ctxt c =
         (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
           "deleted duplicated literals in " ^ JClause.pretty_clause ctxt c);
         SOME (
-          JClause.refresh_id () c'
+          c'
+          |> JClause.recompute_selected ctxt 
+          |> JClause.refresh_id ()
           |> JClause.set_origin
             (Jeha_Log.DeleteDuplicatedLits
               { premise = JClause.id c, duplicate_cposs = cposs_of_dups })
@@ -195,7 +197,9 @@ fun simp_delete_resolved_lits ctxt c =
         (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
           "deleted resolved literals in " ^ JClause.pretty_clause ctxt c);
         SOME (
-          JClause.refresh_id () c'
+          c'
+          |> JClause.recompute_selected ctxt
+          |> JClause.refresh_id ()
           |> JClause.set_origin
             (Jeha_Log.DeleteResolvedLits { premise = JClause.id c, cposs = cposs })
         ))
@@ -206,6 +210,9 @@ fun is_pos_unit { literals = [(_, _, true)], ... } = true
   | is_pos_unit _ = false
 
 (* Rewriting of positive (RP) or negative literals (RN) simplification (Schulz) *)
+(* FIXME: Implement side conditions following
+  https://github.com/leanprover-community/duper/blob/aab52219c72cb52951832c8e985e1dc3e9497af9/Duper/Rules/Demodulation.lean#L51
+*)
 fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as (_, _, target_cp)) =
   (* (writeln (if positive then "RP" else "RN"); *)
   (* check unit_clause *)
@@ -243,8 +250,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
         let
           val rewritten_clause =
             target_clause
-            |> JClause.map_at_full_pos j (K to) (* FIXME: recompute selected *)
-            |> JClause.norm_pred_beta_eta_qeta ctxt
+            |> JClause.map_at_full_pos j (K to)
+            |> JClause.norm_beta_eta_qeta ctxt
             |> JClause.set_maxidx (Envir.maxidx_of matcher)
           val rewriting_clause = JClause.dummy [(from, to, true)]
           val rewriting_smaller_than_rewritten = (fn () =>
@@ -253,7 +260,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
           (Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg);
           (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
-          (JClause.norm_pred_beta_eta_qeta ctxt rewritten_clause)
+          (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
+          |> JClause.norm_negative_predicate_literals
+          |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
           |> JClause.set_origin (
               (if positive then Jeha_Log.RewritePositiveLits else Jeha_Log.RewriteNegativeLits)
@@ -310,6 +319,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
       then let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
+        |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin (Jeha_Log.NegativeSimplifyReflect
             { literal = target_cp
@@ -418,6 +428,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
         let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
+        |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin (
             Jeha_Log.PositiveSimplifyReflect
@@ -503,7 +514,15 @@ fun simp_bool_outer_claus ctxt (c, i) =
     if null clausified then [] else (* in particular if head of s is not a logical symbol *)
     clausified
     |> map_index
-      (fn (index, clause) => clause |> (JClause.set_origin (Jeha_Log.SimpPosNegOuterClaus { premise = JClause.id c, literal = i, conclusion_index = index })))
+      (fn (index, clause) =>
+        clause
+        |> JClause.norm_negative_predicate_literals
+        |> JClause.recompute_selected ctxt
+        |> JClause.set_origin (
+          Jeha_Log.SimpPosNegOuterClaus
+            { premise = JClause.id c, literal = i, conclusion_index = index }
+        )
+      )
     (* FIXME: map might be sufficient, i.e. no need for a fold *)
     |> (fn clauses =>
         fold
@@ -580,7 +599,10 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
       val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
       fun build_conclusion unifier =
         let
-          val (c, d) = (c, d) |> apply2 (JClause.norm_pred_beta_eta_qeta_env ctxt unifier)
+          val (c, d) =
+            (c, d)
+            |> apply2 (JClause.norm_beta_eta_qeta_env ctxt unifier)
+            |> apply2 (JClause.recompute_selected ctxt)
           val u_eligible = JClause.is_eligible_full_pos c u_pos
           (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: u eligible=" ^ @{make_string} u_eligible) *)
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
@@ -606,6 +628,8 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           if not tt'_eligible then NONE else (* 8. *)
           (* FXIME 9. 10. *)
           JClause.combine ctxt d' ct'
+          |> JClause.norm_negative_predicate_literals
+          |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
           |> JClause.set_origin
               (Jeha_Log.Sup
@@ -631,11 +655,13 @@ fun infer_eres (ctxt : Proof.context) c cp =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_pred_beta_eta_qeta_env ctxt unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
       in
         if not (JClause.is_eligible_cpos c cp) then NONE else
         c
         |> JClause.delete_lit_at ctxt cp
+        |> JClause.norm_negative_predicate_literals
+        |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin
           (Jeha_Log.ERes { premise = JClause.id c, literal = cp, substitution = unifier })
@@ -655,9 +681,10 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
     val unifiers =
       Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
+    val nothing_selected_in_c = JClause.selected c = []
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_pred_beta_eta_qeta_env ctxt unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val (u', v', _) = JLit.orient lp' (JClause.lit_at cp' c)
         val uv_literal = JClause.lit_at cp c
         val (u, v, _) = JLit.orient lp uv_literal
@@ -666,12 +693,14 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
       in
         if SOME EQUAL = u_v_comp orelse SOME LESS = u_v_comp then NONE else
         if not uv_maximal then NONE else
-        (* FIXME: nothing is selected in C condition *)
+        if not nothing_selected_in_c then NONE else
         c
         |> JClause.delete_lit_at ctxt (Int.max (cp, cp'))
         |> JClause.delete_lit_at ctxt (Int.min (cp, cp'))
         |> JClause.add_literal ctxt (v, v', false)
         |> JClause.add_literal ctxt (u, v', true)
+        |> JClause.norm_negative_predicate_literals
+        |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin
             (Jeha_Log.EFact
@@ -740,7 +769,8 @@ fun infer_arg_cong ctxt c cpos =
         val new_clause =
           c
           |> JClause.map_at_cpos cpos (K new_literal) (* FIXME: recompute selected *)
-          |> JClause.norm_pred_beta_eta_qeta_env ctxt unifier
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.recompute_selected ctxt
           |> JClause.set_maxidx new_maxidx
           |> JClause.refresh_id ()
           |> JClause.set_origin
@@ -787,7 +817,9 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
           c
           |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"}) (* FIXME: recompute selected *)
           |> JClause.add_literal ctxt u_eq_true
-          |> JClause.norm_pred_beta_eta_qeta_env ctxt unifier
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.norm_negative_predicate_literals
+          |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
           |> JClause.set_origin
             (Jeha_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
@@ -817,7 +849,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_pred_beta_eta_qeta_env ctxt unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val origin =
           if as_simplification
             then
@@ -830,6 +862,8 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
         if not as_simplification andalso not (JClause.is_eligible_cpos c cp) then NONE else (* 2. *)
         c
         |> JClause.delete_lit_at ctxt cp
+        |> JClause.norm_negative_predicate_literals
+        |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin origin
         |> SOME
@@ -922,10 +956,13 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_pred_beta_eta_qeta_env ctxt unifier
+        val c =
+          c
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.recompute_selected ctxt
         val new_literal =
           Jeha_Common.map_some
-            (JLit.norm_pred_beta_eta_qeta_env unifier)
+            (JLit.norm_beta_eta_qeta_env unifier)
             disjunct_with
         val insert_for_u = JTerm.norm_beta_eta_qeta_env unifier insert_for_u
 
@@ -956,6 +993,8 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         |> JClause.set_maxidx maxidx
         (* add the new literal if it exists, otherwise apply identity function *)
         |> the_default I (Jeha_Common.map_some (JClause.add_literal ctxt) new_literal)
+        |> JClause.norm_negative_predicate_literals
+        |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> pair unifier
         |> SOME
@@ -1001,10 +1040,13 @@ fun impl_simp_bool_rw
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_pred_beta_eta_qeta_env ctxt unifier
+        val c =
+          c
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.recompute_selected ctxt
         val new_literal =
           Jeha_Common.map_some
-            (JLit.norm_pred_beta_eta_qeta_env unifier)
+            (JLit.norm_beta_eta_qeta_env unifier)
             disjunct_with
         val insert_for_u = JTerm.norm_beta_eta_qeta_env unifier insert_for_u
 
@@ -1035,6 +1077,8 @@ fun impl_simp_bool_rw
         |> JClause.set_maxidx maxidx
         (* add the new literal if it exists, otherwise apply identity function *)
         |> the_default I (Jeha_Common.map_some (JClause.add_literal ctxt) new_literal)
+        |> JClause.norm_negative_predicate_literals
+        |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> pair unifier
         |> SOME

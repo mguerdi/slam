@@ -8,7 +8,7 @@ sig
   val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
-  val map : (term -> term) -> T -> T (* FIXME breaks predicate lit *)
+  val map : (term -> term) -> T -> T
   val aconv : T * T -> bool
   val aconv_as : T * T -> lpos option
   val swap : T -> T
@@ -17,12 +17,12 @@ sig
   val mk_pred : term -> bool -> T
   val is_pred : T -> bool
   val dest_pred : T -> term * term
-  val normalize_if_negative_pred : T -> T
-  val norm_pred_beta_eta_qeta_env : Envir.env -> T -> T
+  val norm_negative_pred : T -> T
+  val norm_beta_eta_qeta_env : Envir.env -> T -> T
   val term_of : T -> term
   val term_at_lpos : T -> lpos -> term
   val orient : lpos -> T -> term * term * bool
-  val map_at_lpos : lpos -> (term -> term) -> T -> T (* FIXME breaks predicate lit *)
+  val map_at_lpos : lpos -> (term -> term) -> T -> T
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
   val kbo : T * T -> Jeha_Order.partial_order
@@ -93,17 +93,15 @@ fun dest_pred (s, t, true) =
   | dest_pred _ = error "disequation"
 
 (* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
-fun normalize_if_negative_pred (l as (_, _, true)) = l
-  | normalize_if_negative_pred (l as (s, t, false)) =
+fun norm_negative_pred (l as (_, _, true)) = l
+  | norm_negative_pred (l as (s, t, false)) =
       if is_truth_value s
         then (JTerm.negate_hol_bool s, t, true)
       else if is_truth_value t
         then (s, JTerm.negate_hol_bool t, true)
       else l 
 
-fun norm_pred_beta_eta_qeta_env env =
-  map (JTerm.norm_beta_eta_qeta_env env)
-  #> normalize_if_negative_pred
+fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 
 fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 

@@ -1,3 +1,13 @@
+(* Functions in this module can
+  1. silently break invariants (typically `origin`)
+  2. break invariants by invalidating them (e.g. replacing maxidx by ~1, see NOTE: ...)
+  3. don't break any invariants
+It might be worth it to clearly separate them. Alternatively use option 2 everywhere in favour of 1.
+But there needs to be some set of low level primitives which use option 1 because otherwise we can
+never fix one invariant without breaking another. We could keep these low level primitives private
+and only expose functions of the second and third kind to users?
+*)
+
 signature JCLAUSE =
 sig
   (*
@@ -23,7 +33,6 @@ sig
   val delete_lits_at : Proof.context -> cpos list -> T -> T
   val filter_out_lits : Proof.context -> (JLit.T -> bool) -> T -> T
   val length : T -> int
-  val of_literals : Proof.context -> JLit.T list * int -> T
   val of_term : Proof.context -> term * int -> T
   val term_of : T -> term
   val pretty_clause : Proof.context -> T -> string
@@ -35,8 +44,9 @@ sig
   val map_literals : (JLit.T list -> JLit.T list) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val subterm_at_full_pos : T -> full_pos -> term
   val occurs_deeply : term -> T -> bool
-  val norm_pred_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
-  val norm_pred_beta_eta_qeta : Proof.context -> T -> T
+  val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
+  val norm_beta_eta_qeta : Proof.context -> T -> T
+  val norm_negative_predicate_literals : T -> T
   val incr_indexes : int -> T -> T
   val kbo : T * T -> Jeha_Order.partial_order
   val is_eligible_cpos : T -> cpos -> bool
@@ -50,6 +60,7 @@ sig
   val select_none : literal_selection_function
   val select_all_neg_lit : literal_selection_function
   val select_first_maximal_neg_lit : literal_selection_function
+  val recompute_selected : Proof.context -> T -> T
   (* Debuggging *)
   val is_eligible_tpos : term -> JTerm.tpos -> bool
 end;
@@ -149,32 +160,29 @@ fun get_literal_selection_function ctxt =
   Config.get ctxt Jeha_Common.literal_selection_function
   |> literal_selection_function_from_name
 
+(* NOTE: This needs to be done every time before checking eligibility and also after normalizing
+negative predicate literals (s \<noteq> \<top> \<mapsto> s = \<bottom>) before the clause is "finalized". *)
 fun recompute_selected ctxt clause =
   set_selected
     (get_literal_selection_function ctxt (literals clause))
     clause
-
-(* *)
 
 fun add_literal ctxt l clause =
   clause
   |> map_literals (fn lits => lits @ [l])
   |> refresh_id ()
   |> set_maxidx (Int.max (maxidx clause, JLit.maxidx_of l))
-  (* |> recompute_selected ctxt *)
 
 fun combine ctxt c d =
   map_literals (curry (op @) (literals c)) d
   |> refresh_id ()
   |> set_maxidx (maxidx_of2 (c, d))
-  (* |> recompute_selected ctxt *)
 
 fun delete_lit_at ctxt cp clause =
   clause
   |> map_literals (nth_drop cp)
   |> refresh_id ()
   |> set_maxidx (maxidx clause)
-  (* |> recompute_selected ctxt *)
 
 fun delete_lits_at ctxt cps clause =
   let
@@ -187,12 +195,8 @@ fun filter_out_lits ctxt f clause =
   clause
   |> map_literals (filter_out f)
   |> set_maxidx (maxidx clause)
-  (* |> recompute_selected ctxt *)
 
 val length = List.length o literals
-
-fun of_literals ctxt (ls, id) =
-  empty |> map_id (K id) |> map_literals (K ls) |> recalculate_maxidx (* |> recompute_selected ctxt *)
 
 fun term_of { literals = [], ... } = @{term False}
   | term_of { literals = (c as (_ :: _)), ... } =
@@ -246,18 +250,28 @@ fun map_at_full_pos (tp, lp, cp) f c = map_at_cpos cp (JLit.map_at_lpos lp (JTer
 fun occurs_deeply (x as (Var _)) { literals, ... } = exists (JLit.occurs_deeply_in x) literals
   | occurs_deeply _ _ = error "only Vars can occur deeply"
 
-fun norm_pred_beta_eta_qeta_env ctxt env clause =
+fun norm_beta_eta_qeta_env ctxt env clause =
   (* if Envir.maxidx_of env < maxidx clause
     (* this indicates something went wrong *)
     then error "maxidx of env should be greater or equal to maxidx of clause"
     else *)
       clause
-      |> map_literals (map (JLit.norm_pred_beta_eta_qeta_env env))
+      |> map_literals (map (JLit.map (JTerm.norm_beta_eta_qeta_env env)))
       |> set_maxidx (Int.max (Envir.maxidx_of env, maxidx clause))
-      (* |> recompute_selected ctxt *)
 
-fun norm_pred_beta_eta_qeta ctxt clause =
-  norm_pred_beta_eta_qeta_env ctxt (Envir.empty (maxidx clause)) clause
+fun norm_beta_eta_qeta ctxt clause =
+  norm_beta_eta_qeta_env ctxt (Envir.empty (maxidx clause)) clause
+
+fun norm_negative_predicate_literals clause =
+  let
+    val maxidx = maxidx clause
+    val selected = #selected clause
+  in
+    clause
+    |> map_literals (map JLit.norm_negative_pred) 
+    |> set_maxidx maxidx
+    |> set_selected selected
+  end
 
 (* converts boolean terms to lists of literals *)
 fun of_term ctxt (t, id) =
@@ -268,7 +282,9 @@ fun of_term ctxt (t, id) =
       |> map_id (K id)
       |> map_literals (K (HOLogic.disjuncts t |> map JLit.of_term))
       |> recalculate_maxidx
-      |> norm_pred_beta_eta_qeta ctxt
+      |> norm_beta_eta_qeta ctxt
+      |> norm_negative_predicate_literals
+      |> recompute_selected ctxt
 
 fun incr_indexes increment clause =
   clause
