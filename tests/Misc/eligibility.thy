@@ -6,7 +6,7 @@ begin
 
 (* old KBO bug *)
 ML_val \<open>
-  val c = JClause.of_term (@{term_pat "(\<forall>x. ?x x = (p x \<and> q x)) = False \<or> True = False"}, 0);
+  val c = JClause.of_term @{context} (@{term_pat "(\<forall>x. ?x x = (p x \<and> q x)) = False \<or> True = False"}, 0);
 
   val left_eligible = JClause.is_eligible_cpos c 0;
   \<^assert> (left_eligible);
@@ -35,7 +35,7 @@ ML_val \<open>
 
 (* assumes alphabetical ordering of free variables *)
 ML \<open>
-  val c = JClause.of_term (@{term "x \<noteq> z"}, ~1);
+  val c = JClause.of_term @{context} (@{term "x \<noteq> z"}, ~1);
   val x_eligible = JClause.is_eligible_full_pos c ([], JLit.Left, 0);
   val z_eligible = JClause.is_eligible_full_pos c ([], JLit.Right, 0);
   (* x < z alphabetically *)
@@ -77,6 +77,20 @@ ML_val \<open>
 ML_val \<open>
   val t = @{term "x \<noteq> y"};
   \<^assert> (JClause.is_eligible_tpos t [1]);
+\<close>
+
+ML_val \<open>
+  val C = JClause.of_term @{context} (@{term "(a :: 'a) \<noteq> b \<or> (c :: 'a) = d"}, 0)
+  val () = \<^assert> (JClause.is_eligible_cpos C 1)
+  val () = \<^assert> (not (JClause.is_eligible_cpos C 0))
+\<close>
+
+declare [[jeha_literal_selection_function="select_all_neg_lit"]]
+
+ML_val \<open>
+  val C = JClause.of_term @{context} (@{term "(a :: 'a) \<noteq> b \<or> (c :: 'a) = d"}, 0)
+  val () = \<^assert> (JClause.is_eligible_cpos C 0)
+  val () = \<^assert> (not (JClause.is_eligible_cpos C 1))
 \<close>
 
 end

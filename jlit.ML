@@ -56,6 +56,7 @@ fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
 
 fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
   | of_term_signed b (Const (@{const_name HOL.Not}, _) $ t) = of_term_signed (not b) t
+  (* FIXME: might need to revert this because mk_pred removes negations from t. *)
   | of_term_signed b t = mk_pred t b
 
 (* turn a boolean term into an equational literal *)

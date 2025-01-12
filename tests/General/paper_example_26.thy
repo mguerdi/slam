@@ -33,10 +33,16 @@ declare [[jeha_rule_simp_false_elim]]
 (* works but takes very long (> 1 min): *)
 (* doesn't work in Isabelle2023 FIXME: figure out why (maybe not) *)
 
-lemma paper_example_26:
+lemma paper_example_26_select_none:
   shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x))"
   (* sledgehammer
   by metis *)
-  using by jeha (* 29500 ms *)
+  using [[jeha_literal_selection_function="select_none"]] by jeha (* 29500 ms *)
+
+lemma paper_example_26_select_all_neg_lit:
+  shows "(\<exists> y. \<forall> x . y x = (p x \<and> q x))"
+  (* sledgehammer
+  by metis *)
+  using [[jeha_literal_selection_function="select_all_neg_lit"]] by jeha (* 29500 ms *)
 
 end

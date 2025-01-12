@@ -634,7 +634,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier |> JClause.recompute_selected ctxt
       in
         if not (JClause.is_eligible_cpos c cp) then NONE else
         c
@@ -828,7 +828,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
-        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier |> JClause.recompute_selected ctxt
         val origin =
           if as_simplification
             then
@@ -1046,13 +1046,17 @@ fun impl_simp_bool_rw
             ( Int.max (JClause.maxidx c, maxidx_of_term insert_for_u)
             , the_default ~1 (Jeha_Common.map_some JLit.maxidx_of new_literal) )
       in
+        (* FIXME: Is this condition needed? It looks like neither zip nor duper implement it
+          https://github.com/leanprover-community/duper/blob/aab52219c72cb52951832c8e985e1dc3e9497af9/Duper/Rules/BoolSimp.lean#L1260
+          https://github.com/sneeuwballen/zipperposition/blob/050072e01d8539f9126993482b595e09f921f66a/src/prover_calculi/booleans.ml#L1344
         (* 3. the position of u is eligible in C w.r.t. \<sigma> *)
-        (* if not (JClause.is_eligible_full_pos c u_pos) then NONE else *)
+        if not (JClause.is_eligible_full_pos c u_pos) then NONE else *)
+
         (* 4. if the head of u is a variable ... *)
         if not u_variable_headed_condition then NONE else
 
         c
-        |> JClause.map_at_full_pos u_pos (K insert_for_u) (* FIXME: recompute selected *)
+        |> JClause.map_at_full_pos u_pos (K insert_for_u)
         |> JClause.set_maxidx maxidx
         (* add the new literal if it exists, otherwise apply identity function *)
         |> the_default I (Jeha_Common.map_some (JClause.add_literal ctxt) new_literal)

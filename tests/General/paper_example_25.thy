@@ -1,10 +1,13 @@
 theory paper_example_25
 
-imports "JEHA.jeha"
+imports JEHA_TEST_BASE.test_base
 
 begin
 
 declare [[jeha_trace]]
+
+(* FIXME: doesn't work with select_all_neg_lit *)
+(* declare [[jeha_literal_selection_function="select_all_neg_lit"]] *)
 
 lemma paper_example_25_all_rules:
   shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
@@ -30,6 +33,14 @@ declare [[jeha_rule_clause_subsumption]]
 
 declare [[jeha_rule_simp_bool_rw]]
 declare [[jeha_rule_simp_false_elim]]
+
+(*
+ML \<open>
+  val leibniz = Skip_Proof.make_thm @{theory} (HOLogic.mk_Trueprop @{term_schem "?z (a :: 'a) = False \<or> ?z b = True"})
+  val negated_conjecture = Skip_Proof.make_thm @{theory} @{prop "(a :: 'a) \<noteq> b"}
+  val f = Jeha.try_saturate @{context} [leibniz, negated_conjecture]
+\<close>
+*)
 
 lemma paper_example_25:
   shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
