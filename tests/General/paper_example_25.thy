@@ -6,7 +6,8 @@ begin
 
 declare [[jeha_trace]]
 
-(* FIXME: doesn't work with select_all_neg_lit *)
+(* FIXME: Doesn't work with select_all_neg_lit even with jeha_max_number_of_steps set to 1000.
+Increasing to 2000 eventually leads to Interrupt_Breakdown. *)
 (* declare [[jeha_literal_selection_function="select_all_neg_lit"]] *)
 
 lemma paper_example_25_all_rules:

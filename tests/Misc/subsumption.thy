@@ -12,7 +12,7 @@ setup \<open>Jeha_Common.type_pat_setup\<close>
 (* no unification *)
 ML_val \<open>
   val subset = JClause.of_term @{context} (@{term_pat "x = y"}, 0);
-  val superset = JClause.of_term (@{term_pat "x = y \<or> v = w"}, 1);
+  val superset = JClause.of_term @{context} (@{term_pat "x = y \<or> v = w"}, 1);
   \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (subset, superset))
 \<close>
 
