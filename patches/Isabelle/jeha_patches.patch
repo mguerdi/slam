@@ -526,6 +526,37 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer.ML b/src/HOL/Tools/Sledgeha
          result
        end
      | SOME s =>
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_commands.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_commands.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_commands.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_commands.ML
+@@ -75,7 +75,8 @@
+    ("minimize", "true"),
+    ("slices", string_of_int (12 * Multithreading.max_threads ())),
+    ("preplay_timeout", "1"),
+-   ("cache_dir", "")]
++   ("cache_dir", ""),
++   ("proof_methods", "")]
+ 
+ val alias_params =
+   [("prover", ("provers", [])), (* undocumented *)
+@@ -275,6 +276,7 @@
+     val expect = lookup_string "expect"
+     val cache_dir = Option.mapPartial
+       (fn str => if str = "" then NONE else SOME (Path.explode str)) (lookup "cache_dir")
++    val proof_methods = lookup_string "proof_methods" |> space_explode " "
+   in
+     {debug = debug, verbose = verbose, overlord = overlord, spy = spy, provers = provers,
+      abduce = abduce, falsify = falsify, type_enc = type_enc, strict = strict,
+@@ -284,7 +286,8 @@
+      max_new_mono_instances = max_new_mono_instances, max_proofs = max_proofs,
+      isar_proofs = isar_proofs, compress = compress, try0 = try0, smt_proofs = smt_proofs,
+      instantiate = instantiate, minimize = minimize, slices = slices, timeout = timeout,
+-     preplay_timeout = preplay_timeout, expect = expect, cache_dir = cache_dir}
++     preplay_timeout = preplay_timeout, expect = expect, cache_dir = cache_dir,
++     proof_methods = proof_methods}
+   end
+ 
+ fun get_params mode = extract_params mode o default_raw_params
 diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
 --- a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
 +++ b/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
@@ -578,7 +609,13 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
  
    datatype play_outcome =
      Played of Time.time |
-@@ -45,6 +78,13 @@
+@@ -40,11 +73,19 @@
+ 
+   val is_proof_method_direct : proof_method -> bool
+   val pretty_proof_method : string -> string -> Pretty.T list -> proof_method -> Pretty.T
++  val short_name_of_proof_method : proof_method -> string
+   val string_of_proof_method : string list -> proof_method -> string
+   val tac_of_proof_method : Proof.context -> thm list * thm list -> proof_method -> int -> tactic
    val string_of_play_outcome : play_outcome -> string
    val play_outcome_ord : play_outcome ord
    val one_line_proof_text : Proof.context -> int -> one_line_params -> string
@@ -592,7 +629,7 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
  end;
  
  structure Sledgehammer_Proof_Methods : SLEDGEHAMMER_PROOF_METHODS =
-@@ -55,6 +95,45 @@
+@@ -55,6 +96,45 @@
  open ATP_Proof_Reconstruct
  open Sledgehammer_Util
  
@@ -638,7 +675,7 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
  datatype SMT_backend =
    SMT_Z3 |
    SMT_Verit of string
-@@ -74,7 +153,8 @@
+@@ -74,7 +154,8 @@
    Linarith_Method |
    Presburger_Method |
    Algebra_Method |
@@ -648,7 +685,7 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
  
  datatype play_outcome =
    Played of Time.time |
-@@ -88,9 +168,13 @@
+@@ -88,9 +169,13 @@
    | is_proof_method_direct Meson_Method = true
    | is_proof_method_direct (SMT_Method _) = true
    | is_proof_method_direct Simp_Method = true
@@ -662,7 +699,7 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
    | is_proof_method_multi_goal _ = false
  
  fun pretty_paren prefix suffix = Pretty.enclose (prefix ^ "(") (")" ^ suffix)
-@@ -127,6 +211,100 @@
+@@ -127,6 +212,119 @@
      merge (map (`split) facts)
    end
  
@@ -760,10 +797,29 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
 +val serialize_proof_method = Sledgehammer_S_Expr.string_of_sexpr o sexpr_proof_method
 +val deserialize_proof_method = proof_method_of_sexpr o Sledgehammer_S_Expr.parse_sexpr
 +
++fun short_name_of_proof_method meth =
++  case meth of
++    Metis_Method _ => "metis" 
++  | Meson_Method => "meson"
++  | SMT_Method _ => "smt"
++  | SATx_Method => "satx"
++  | Argo_Method => "argo"
++  | Blast_Method => "blast"
++  | Simp_Method => "simp"
++  | Auto_Method => "auto"
++  | Fastforce_Method => "fastforce"
++  | Force_Method => "force"
++  | Moura_Method => "moura"
++  | Linarith_Method => "linarith"
++  | Presburger_Method => "presburger"
++  | Algebra_Method => "algebra"
++  | Order_Method => "order"
++  | Dynamic_Method name => get_dynamic_proof_method name |> the |> #string_of
++
  fun pretty_proof_method prefix suffix facts meth =
    let
      val meth_s =
-@@ -152,7 +330,8 @@
+@@ -152,7 +350,8 @@
        | Linarith_Method => "linarith"
        | Presburger_Method => "presburger"
        | Algebra_Method => "algebra"
@@ -773,7 +829,7 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
    in
      pretty_maybe_paren prefix suffix
        (Pretty.str meth_s :: merge_indexed_facts facts |> Pretty.breaks)
-@@ -164,6 +343,20 @@
+@@ -164,6 +363,20 @@
  
  fun tac_of_proof_method ctxt (local_facts, global_facts) meth =
    let
@@ -794,7 +850,7 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
      fun tac_of_metis (type_enc_opt, lam_trans_opt, additional_fact_names) =
        let
          val additional_facts = maps (thms_of_name ctxt) additional_fact_names
-@@ -178,28 +371,29 @@
+@@ -178,28 +391,29 @@
      fun tac_of_smt SMT_Z3 = SMT_Solver.smt_tac
        | tac_of_smt (SMT_Verit strategy) = Verit_Strategies.verit_tac_stgy strategy
    in
@@ -846,7 +902,27 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/
 diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
 --- a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
 +++ b/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
-@@ -255,6 +255,9 @@
+@@ -53,7 +53,8 @@
+      timeout : Time.time,
+      preplay_timeout : Time.time,
+      expect : string,
+-     cache_dir : Path.T option}
++     cache_dir : Path.T option,
++     proof_methods: string list}
+ 
+   val string_of_params : params -> string
+   val slice_timeout : int -> int -> Time.time -> Time.time
+@@ -168,7 +169,8 @@
+    timeout : Time.time,
+    preplay_timeout : Time.time,
+    expect : string,
+-   cache_dir : Path.T option}
++   cache_dir : Path.T option,
++   proof_methods : string list}
+ 
+ fun string_of_params (params : params) =
+   Pretty.pure_string_of (Pretty.from_ML (ML_system_pretty (params, 100)))
+@@ -255,6 +257,9 @@
    [map (SMT_Method o SMT_Verit) (Verit_Strategies.all_veriT_stgies (Context.Proof ctxt)),
     [SMT_Method SMT_Z3]]
  
@@ -856,7 +932,7 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML b/src/HOL/Tools/S
  fun bunches_of_proof_methods ctxt smt_proofs needs_full_types needs_lam_defs =
    let
      val misc_methodss =
-@@ -270,8 +273,25 @@
+@@ -270,8 +275,25 @@
          bunches_of_smt_methods ctxt
        else
          []
@@ -886,15 +962,46 @@ diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML b/src/HOL/Tools/S
 diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
 --- a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
 +++ b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
-@@ -328,6 +328,8 @@
+@@ -101,7 +101,7 @@
+ fun run_atp mode name
+     ({debug, verbose, overlord, abduce = abduce_max_candidates, strict, max_mono_iters,
+       max_new_mono_instances, isar_proofs, compress, try0, smt_proofs, minimize, slices, timeout,
+-      preplay_timeout, spy, ...} : params)
++      preplay_timeout, spy, proof_methods, ...} : params)
+     ({comment, state, goal, subgoal, subgoal_count, factss, has_already_found_something,
+       found_something, memoize_fun_call} : prover_problem)
+     slice =
+@@ -328,10 +328,16 @@
            val preferred = Metis_Method (NONE, NONE, [])
            val preferred_methss =
              (preferred,
+-             if try0 then
 +             (* FIXME: dynamically registered methods are only run if try0 is set. That's not the
 +             * idea. Also need to check sledgehammer_prover_smt.ML *)
-              if try0 then
++             (if try0 then
                 bunches_of_proof_methods ctxt smt_proofs needs_full_types needs_lam_defs
               else
+                bunches_of_metis_methods ctxt needs_full_types needs_lam_defs)
++            |> map (filter (fn meth =>
++                null proof_methods 
++                orelse member (op=) proof_methods (short_name_of_proof_method meth)))
++            )
+         in
+           (NONE, used_facts, preferred_methss,
+            fn preplay =>
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_minimize.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_minimize.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_minimize.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_minimize.ML
+@@ -99,7 +99,8 @@
+        max_new_mono_instances = max_new_mono_instances, max_proofs = 1,
+        isar_proofs = isar_proofs, compress = compress, try0 = try0, smt_proofs = smt_proofs,
+        instantiate = instantiate, minimize = minimize, slices = 1, timeout = timeout,
+-       preplay_timeout = preplay_timeout, expect = "", cache_dir = cache_dir}
++       preplay_timeout = preplay_timeout, expect = "", cache_dir = cache_dir,
++       proof_methods = [] (* FIXME? *)}
+     val problem =
+       {comment = "", state = state, goal = goal, subgoal = i, subgoal_count = n,
+        factss = [("", facts)], has_already_found_something = K false, found_something = K (),
 diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_sexpr.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_sexpr.ML
 new file mode 100644
 --- /dev/null
