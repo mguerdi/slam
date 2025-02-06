@@ -27,10 +27,7 @@ WORKDIR /home/isabelle
 
 RUN Isabelle/Admin/init -u -L -n
 
-# Main is the theory, HOL is the session
-# TODO: use -a to build everything (How to exclude afp?)
-# TODO: -o "threads=8" -j5 (server)
-RUN Isabelle/bin/isabelle build -o "threads=8" -j2 -b HOL
+RUN Isabelle/bin/isabelle build -o "threads=8" -j6 -b HOL Karatsuba KnuthMorrisPratt ResiduatedTransitionSystem2 Algebraic_Numbers Hybrid_Multi_Lane_Spatial_Logic Abortable_Linearizable_Modules WorkerWrapper Subset_Boolean_Algebras Green LTL
 
 # create mountpoint for mirabelle-log volume
 RUN mkdir mirabelle_output
