@@ -91,3 +91,10 @@ session "JEHA_TEST_RECONSTRUCTION" in Reconstruction = JEHA_TEST_BASE +
     positive_simplify_reflect
     simp_outer_claus
     sup
+
+session "JEHA_CASE_STUDIES" in Casestudy = JEHA_TEST_BASE +
+  description "
+    case studies
+  "
+  theories
+    duper_metis_example
