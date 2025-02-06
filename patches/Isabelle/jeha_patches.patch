@@ -1,0 +1,1018 @@
+diff --git a/src/HOL/Main.thy b/src/HOL/Main.thy
+--- a/src/HOL/Main.thy
++++ b/src/HOL/Main.thy
+@@ -17,6 +17,8 @@
+     Conditionally_Complete_Lattices
+     Binomial
+     GCD
++    jeha
++    jeha_sledgehammer
+ begin
+ 
+ subsection \<open>Namespace cleanup\<close>
+diff --git a/src/HOL/Mirabelle.thy b/src/HOL/Mirabelle.thy
+--- a/src/HOL/Mirabelle.thy
++++ b/src/HOL/Mirabelle.thy
+@@ -26,5 +26,7 @@
+ ML_file \<open>Tools/Mirabelle/mirabelle_sledgehammer_filter.ML\<close>
+ ML_file \<open>Tools/Mirabelle/mirabelle_sledgehammer.ML\<close>
+ ML_file \<open>Tools/Mirabelle/mirabelle_try0.ML\<close>
++ML_file \<open>Tools/Mirabelle/mirabelle_sledgehammer_replay.ML\<close>
++
+ 
+ end
+diff --git a/src/HOL/Sledgehammer.thy b/src/HOL/Sledgehammer.thy
+--- a/src/HOL/Sledgehammer.thy
++++ b/src/HOL/Sledgehammer.thy
+@@ -16,6 +16,7 @@
+ ML_file \<open>Tools/ATP/system_on_tptp.ML\<close>
+ ML_file \<open>Tools/Sledgehammer/async_manager_legacy.ML\<close>
+ ML_file \<open>Tools/Sledgehammer/sledgehammer_util.ML\<close>
++ML_file \<open>Tools/Sledgehammer/sledgehammer_sexpr.ML\<close>
+ ML_file \<open>Tools/Sledgehammer/sledgehammer_fact.ML\<close>
+ ML_file \<open>Tools/Sledgehammer/sledgehammer_proof_methods.ML\<close>
+ ML_file \<open>Tools/Sledgehammer/sledgehammer_instantiations.ML\<close>
+diff --git a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML
+--- a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML
++++ b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer.ML
+@@ -21,12 +21,14 @@
+ 
+ val check_trivialK = "check_trivial" (*=BOOL: check if goals are "trivial"*)
+ val exhaustive_preplayK = "exhaustive_preplay" (*=BOOL: show exhaustive preplay data*)
++val mini_preplay_inputsK = "mini_preplay_inputs" (*=BOOL: Hack: save data needed for mirabelle_sledgehammer_replay action *)
+ val keep_probsK = "keep_probs" (*=BOOL: keep temporary problem files created by sledgehammer*)
+ val keep_proofsK = "keep_proofs" (*=BOOL: keep temporary proof files created by ATPs*)
+ 
+ (*defaults used in this Mirabelle action*)
+ val check_trivial_default = false
+ val exhaustive_preplay_default = false
++val mini_preplay_inputs_default = false
+ val keep_probs_default = false
+ val keep_proofs_default = false
+ 
+@@ -152,13 +154,13 @@
+       (sledgehammer_outcome, msg, cpu_time)
+     end
+     catch ERROR msg => (Sledgehammer.SH_Unknown, " error: " ^ msg, 0)
+-      | _ => (Sledgehammer.SH_Unknown, " error: unexpected error", 0)
++      | e => (Sledgehammer.SH_Unknown, " error: unexpected error" ^ @{make_string} e, 0)
+   \<close>
+ 
+ in
+ 
+ fun run_sledgehammer (params as {provers, ...}) output_dir keep_probs keep_proofs
+-    exhaustive_preplay thy_index trivial pos st =
++    exhaustive_preplay mini_preplay_inputs thy_index trivial pos st =
+   let
+     val triv_str = if trivial then "[T] " else ""
+     val keep =
+@@ -177,11 +179,20 @@
+       else
+         NONE
+     val prover_name = hd provers
++    (* *)
+     val (sledgehamer_outcome, msg, cpu_time) = run_sh params keep pos st
+-    val (time_prover, change_data, exhaustive_preplay_msg) =
++    val (time_prover, change_data, exhaustive_preplay_msg, mini_preplay_input) =
+       (case sledgehamer_outcome of
+-        Sledgehammer.SH_Some ({used_facts, run_time, ...}, preplay_results) =>
++        Sledgehammer.SH_Some (prover_result, preplay_results) =>
+         let
++          val {used_facts, run_time, preferred_methss, ...} = prover_result
++          (* FIXME: Do we want the used_facts from the prover_result or from the preplay_results? *)
++          (* val mini_preplay_input_list : Sledgehammer.mini_preplay_input list =
++            map
++              (fn (meth, used_facts) => { used_facts = used_facts, preferred_meth = meth })
++              preplay_results *)
++          val mini_preplay_input =
++            { used_facts = used_facts, preferred_methss = preferred_methss }
+           val num_used_facts = length used_facts
+           val time_prover = Time.toMilliseconds run_time
+           val change_data =
+@@ -203,16 +214,17 @@
+             else
+               ""
+         in
+-          (SOME time_prover, change_data, exhaustive_preplay_msg)
++          (SOME time_prover, change_data, exhaustive_preplay_msg, SOME mini_preplay_input)
+         end
+-      | _ => (NONE, I, ""))
++      | _ => (NONE, I, "", NONE))
+     val outcome_msg =
+       "(SH " ^ string_of_int cpu_time ^ "ms" ^
+       (case time_prover of NONE => "" | SOME ms => ", ATP " ^ string_of_int ms ^ "ms") ^
+       ") [" ^ prover_name ^ "]: "
+   in
+     (sledgehamer_outcome, triv_str ^ outcome_msg ^ Protocol_Message.clean_output msg ^
+-       (if exhaustive_preplay_msg = "" then "" else ("\n" ^ exhaustive_preplay_msg)),
++       (if exhaustive_preplay_msg = "" then "" else ("\n" ^ exhaustive_preplay_msg)) ^
++       (if mini_preplay_inputs then "\n" ^ "mini_preplay_input " ^ Sledgehammer.serialize_mini_preplay_input_option mini_preplay_input else "") ,
+      change_data #> inc_sh_time_isa cpu_time)
+   end
+ 
+@@ -229,6 +241,8 @@
+     val keep_proofs = Mirabelle.get_bool_argument arguments (keep_proofsK, keep_proofs_default)
+     val exhaustive_preplay =
+       Mirabelle.get_bool_argument arguments (exhaustive_preplayK, exhaustive_preplay_default)
++    val mini_preplay_inputs =
++      Mirabelle.get_bool_argument arguments (mini_preplay_inputsK, mini_preplay_inputs_default)
+ 
+     val params = Sledgehammer_Commands.default_params \<^theory> arguments
+ 
+@@ -245,7 +259,7 @@
+             val trivial = check_trivial andalso try0 pre handle Timeout.TIMEOUT _ => false
+             val (outcome, log, change_data) =
+               run_sledgehammer params output_dir keep_probs keep_proofs exhaustive_preplay
+-                theory_index trivial pos pre
++                mini_preplay_inputs theory_index trivial pos pre
+             val () = Synchronized.change data
+               (change_data #> inc_sh_calls #> not trivial ? inc_sh_nontriv_calls)
+           in
+diff --git a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML
+new file mode 100644
+--- /dev/null
++++ b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML
+@@ -0,0 +1,218 @@
++(* Uses results from Mirabelle's sledgehammer action to rerun the preplay only (without calling the
++external provers). *)
++(* Only works with ATPs *)
++structure Mirabelle_Sledgehammer_Replay: MIRABELLE_ACTION =
++struct
++
++fun mini_preplay_input_to_mock_prover_result
++  ({used_facts, preferred_methss} : Sledgehammer.mini_preplay_input)
++  message
++  : Sledgehammer.prover_result
++=
++  (* sledgehammer.ML preplay_prover_result
++  if outcome = ... 
++  else
++    ...
++  *)
++  { outcome = NONE
++  , used_facts = used_facts
++  , used_from = []
++  (* FIXME: Figure out how preplay_prover_results behaves the bunches_of_proof_methods is empty. The
++  alternative is preferred_methss = (..., [[preferred_meth]) *)
++  , preferred_methss = preferred_methss
++  , run_time = Time.fromSeconds 0
++  , message = message
++  }
++
++fun read_mirabelle_log_lines output_dir =
++  let
++    val file = Path.dir output_dir + (Path.basic "mirabelle.log")
++  in
++    if File.is_file file then
++      File.read_lines file
++    else
++      error ("find_mini_preplay_input: didn't find " ^ @{make_string} file)
++  end
++
++fun get_mini_preplay_inputs pos pre (lines : string list) =
++  let
++    val search_string_action = "0.sledgehammer"
++    (* compare Export.export *)
++    val search_string_thy = Context.theory_long_name (Proof.theory_of pre)
++    val search_string_pos =
++      (@{make_string} (the (Position.line_of pos)))
++      ^ ":"
++      ^ (@{make_string} (the (Position.offset_of pos)))
++    val search_string_mini_preplay_input = "some mini_preplay_input ("
++
++    fun line_matches line =
++      String.isSubstring search_string_action line
++      andalso String.isSubstring search_string_thy line
++      andalso String.isSubstring search_string_pos line
++      andalso String.isSubstring search_string_mini_preplay_input line
++
++    val matches = filter line_matches lines
++
++    fun get_sexpr line =
++      let
++        val s = Substring.full line
++        val (_, tail) = Substring.splitl (fn c => c <> #"(") s
++        val (sexpr, _) = Substring.splitr (fn c => c <> #")") tail
++      in
++        Substring.string sexpr
++      end
++
++    val mini_preplay_inputs =
++      map (Sledgehammer.deserialize_mini_preplay_input_option o get_sexpr) matches
++  in
++    mini_preplay_inputs
++  end
++
++(* run_atp : mode \<rightarrow> string \<rightarrow> params \<rightarrow> prover_problem \<rightarrow> prover_slice \<rightarrow> prover_result *)
++(* sledgehammer_prover_atp.ML#L335 *)
++fun atp_proof_text
++  name
++  ({smt_proofs, isar_proofs, ...} : Sledgehammer.params)
++  (* prover_problem *)
++  state
++  goal
++  subgoal
++  subgoal_count
++  (* suspended preplay *)
++  preplay
++=
++  let
++    (* FIXME: wild guess *)
++    val mode = Sledgehammer_Prover.Normal
++    val ctxt = Proof.context_of state
++    val debug = false
++    (* val () = \<^assert> (not smt_proofs) *)
++    val () = if smt_proofs then error "smt_proofs is on" else ()
++    (* FIXME: Why is it a bool option? *)
++    (* val () = \<^assert> (not (is_some isar_proofs)) *)
++    val () = if is_some isar_proofs then error "isar_proofs is SOME" else ()
++
++    fun isar_params () = error "isar_params unavailable"
++  
++    val one_line_params = (preplay (), Sledgehammer_Prover.proof_banner mode name, subgoal, subgoal_count)
++    val num_chained = length (#facts (Proof.goal state))
++  in
++    Sledgehammer_Isar.proof_text ctxt debug isar_proofs smt_proofs isar_params num_chained
++      one_line_params
++  end
++
++fun make_action ({arguments, timeout, output_dir, ...} : Mirabelle.action_context) =
++  let
++    (* mirabelle_sledgehammer.ML *)
++    val params = Sledgehammer_Commands.default_params \<^theory> arguments
++    val init_msg = "Params for sledgehammer: " ^ Sledgehammer_Prover.string_of_params params
++    
++    fun run ({theory_index, pos, pre, ...} : Mirabelle.command) =
++      let
++        (* Read cached prover_result's that were written by the sledgehammer action.
++        Keys: theory name, line, offset *)
++
++        val mini_preplay_inputs =
++          get_mini_preplay_inputs pos pre (read_mirabelle_log_lines output_dir)
++
++        val mini_preplay_input_option =
++          if mini_preplay_inputs <> []
++            then nth mini_preplay_inputs (length mini_preplay_inputs - 1)
++            else
++              let
++                val search_string_pos =
++                  (@{make_string} (the (Position.line_of pos)))
++                  ^ ":"
++                  ^ (@{make_string} (the (Position.offset_of pos)))
++              in
++                error ("No mini preplay input for " ^ search_string_pos)
++              end
++        val mini_preplay_input =
++          case mini_preplay_input_option of
++            SOME mini_preplay_input => mini_preplay_input
++          | NONE => error ("mini preplay input for " ^ @{make_string} (theory_index, pos) ^ "is NONE")
++
++        (* Call Sledgehammer.preplay_prover_result. *)
++        (* This emulates what happens in the following sequence of function calls:
++          * Mirabelle_Sledgehammer.make_action -> run
++          * Mirabelle_Sledgehammer.run_sledgehammer
++          * Mirabelle_Sledgehamme.rrun_sh
++          * Sledgehammer.run_sledgehammer
++          * launch_provers
++          * launch
++          * launch_prover_and_preplay
++          * go
++          * really_go
++          * preplay_prover_result 
++        *)
++
++        (* NOTE: falsify, flip_problem won't work *)
++        val state = pre
++        val _ = Proof.assert_backward state (* sledgehammer.ML *)
++        (* NOTE: falsify, flip_problem won't work *)
++        (* This shortens
++        * sledgehammer.ML
++            val (_, hyp_ts, concl_t) = strip_subgoal goal i ctxt
++        * sledgehammer.ML goal -> problem
++            val problem =
++              {comment = "", state = state, goal = goal, subgoal = i, subgoal_count = n,
++               factss = factss, has_already_found_something = has_already_found_something,
++               found_something = found_something "a proof", memoize_fun_call = memoize_fun_call}
++        * sledgehammer.ML problem -> possibly flip -> goal
++            val problem as {goal, ...} = problem |> falsify ? flip_problem
++        *)
++        val {goal, ...} = Proof.goal pre
++        (* subgoal -> problem -> subgoal as above with goal *)
++        val subgoal = 1 (* mirabelle_sledgehammer.ML#L149 *)
++        (* sledgehammer.ML
++          (case subgoal_count state of ...
++        *)
++        val subgoal_count = Sledgehammer_Util.subgoal_count state
++        (* val () = \<^assert> (subgoal_count > 0) *)
++        val () = if not (subgoal_count > 0) then error ("subgoal count = " ^ @{make_string} subgoal_count) else ()
++
++        (* FIXME: consider replacing by K "MOCK MESSAGE" *)
++        val message = atp_proof_text "MOCKNAME" params state goal subgoal subgoal_count
++
++        val mocked_prover_result = mini_preplay_input_to_mock_prover_result mini_preplay_input message
++        val (outcome, message) =
++          Sledgehammer.preplay_prover_result
++            params
++            state
++            goal 
++            subgoal 
++            mocked_prover_result
++        val message = message ()
++
++        (* Log *)
++        val preplay_results =
++          (case outcome of
++            Sledgehammer.SH_Some (_, preplay_results) => preplay_results
++          | _ => error "outcome: ATP_Proof.atp_failure option is hardcoded to be NONE so this shouldn't happen!")
++        val exhaustive_preplay_msg =
++            preplay_results
++            |> map
++              (fn (meth, (play_outcome, used_facts)) =>
++                  "Preplay: " ^ Sledgehammer_Proof_Methods.string_of_proof_method
++                    (map (ATP_Util.content_of_pretty o fst) used_facts) meth ^
++                  " (" ^ Sledgehammer_Proof_Methods.string_of_play_outcome play_outcome ^ ")")
++            |> cat_lines
++              
++        val log = exhaustive_preplay_msg 
++      in
++        log
++        |> Symbol.trim_blanks
++        |> prefix_lines (Sledgehammer.short_string_of_sledgehammer_outcome outcome ^ " ")
++      end
++
++    fun finalize () = "mirabelle sledgehammer replay done"
++  in
++    (
++    (* error "make_action unimplemented"; *)
++    (init_msg, {run = run, finalize = finalize})
++    )
++  end
++
++val () = Mirabelle.register_action "sledgehammer_replay" make_action
++
++end
+\ No newline at end of file
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer.ML b/src/HOL/Tools/Sledgehammer/sledgehammer.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer.ML
+@@ -32,6 +32,30 @@
+   val string_of_factss : (string * fact list) list -> string
+   val run_sledgehammer : params -> mode -> (string -> unit) option -> int -> fact_override ->
+     Proof.state -> bool * (sledgehammer_outcome * string)
++    
++  (* Heavily simplified prover_result
++  Idea: This is the information contained in a prover_result, that is required for preplay. *)
++  type mini_preplay_input = {
++     (* outcome : atp_failure option, *)
++     used_facts : (string * stature) list,
++     (* used_from : fact list, *) (* mock: empty list *)
++     preferred_methss : proof_method * proof_method list list
++     (* run_time : Time.time, *)
++     (* message : (unit -> (Pretty.T * stature) list * (proof_method * play_outcome)) -> string *)
++  }
++
++  val serialize_mini_preplay_input_option : mini_preplay_input option -> string
++  (* val serialize_mini_preplay_inputs : mini_preplay_input list -> string *)
++  val deserialize_mini_preplay_input_option : string -> mini_preplay_input option
++  (* val deserialize_mini_preplay_inputs : string -> mini_preplay_input_list *)
++
++  val preplay_prover_result :
++      params
++      -> Proof.state
++      -> thm
++      -> int
++      -> prover_result (* ! *)
++      -> sledgehammer_outcome * (unit -> string)
+ end;
+ 
+ structure Sledgehammer : SLEDGEHAMMER =
+@@ -53,6 +77,125 @@
+ open Sledgehammer_Prover_ATP
+ open Sledgehammer_Prover_Minimize
+ open Sledgehammer_MaSh
++open Sledgehammer_S_Expr
++
++(* Simplified prover_result
++Idea: This is all the information contained in a prover_result, that is required for preplay. *)
++type mini_preplay_input = {
++   (* outcome : atp_failure option, *)
++   used_facts : (string * stature) list,
++   (* used_from : fact list, *) (* mock: empty list *)
++   preferred_methss : proof_method * proof_method list list
++   (* run_time : Time.time, *)
++   (* message : (unit -> (Pretty.T * stature) list * (proof_method * play_outcome)) -> string *)
++}
++
++(*
++  datatype scope = Global | Local | Assum | Chained
++  datatype status = General | Induction | Intro | Inductive | Elim | Simp | Non_Rec_Def | Rec_Def
++
++  type stature = scope * status
++*)
++
++fun sexpr_scope scope =
++  case scope of
++    Global => Atom "Global"
++  | Local => Atom "Local"
++  | Assum => Atom "Assum"
++  | Chained => Atom "Chained"
++
++fun scope_of_sexpr s =
++  case s of
++    Atom "Global" => Global
++  | Atom "Local" => Local
++  | Atom "Assum" => Assum
++  | Atom "Chained" => Chained
++  | _ => error ("scope_of_sexpr: " ^ @{make_string} s)
++
++fun sexpr_status status =
++  case status of
++    General     => Atom "General"
++  | Induction   => Atom "Induction"
++  | Intro       => Atom "Intro"
++  | Inductive   => Atom "Inductive"
++  | Elim        => Atom "Elim"
++  | Simp        => Atom "Simp"
++  | Non_Rec_Def => Atom "Non_Rec_Def"
++  | Rec_Def     => Atom "Rec_Def"
++
++fun status_of_sexpr s =
++  case s of
++    Atom "General" =>  General 
++  | Atom "Induction" =>  Induction
++  | Atom "Intro" =>  Intro
++  | Atom "Inductive" =>  Inductive
++  | Atom "Elim" =>  Elim
++  | Atom "Simp" =>  Simp
++  | Atom "Non_Rec_Def" =>  Non_Rec_Def
++  | Atom "Rec_Def" =>  Rec_Def
++  | _ => error ("status_of_sexpr: " ^ @{make_string} s)
++
++fun sexpr_stature ((scope, status) : stature) : sexpr =
++  Expr [sexpr_scope scope, sexpr_status status]
++
++fun stature_of_sexpr s =
++  case s of
++    Expr [scope, status] => (scope_of_sexpr scope, status_of_sexpr status)
++  | _ => error ("stature_of_sexpr" ^ @{make_string} s)
++
++fun sexpr_used_fact ((name, stature) : (string * stature)) : sexpr =
++  Expr [Atom name, sexpr_stature stature]
++
++fun used_fact_of_sexpr s =
++  case s of
++    Expr [name, stature] => (unatom name, stature_of_sexpr stature)
++  | _ => error ("used_fact_of_sexpr: " ^ @{make_string} s)
++
++fun sexpr_used_facts (used_facts : (string * stature) list) : sexpr =
++  sexpr_list sexpr_used_fact used_facts
++
++fun used_facts_of_sexpr s = list_of_sexpr used_fact_of_sexpr s
++
++fun sexpr_preferred_methss (meth, methss) =
++  Expr [sexpr_proof_method meth, sexpr_list (sexpr_list sexpr_proof_method) methss]
++
++fun preferred_methss_of_sexpr s =
++  case s of
++    Expr [meth, methss] =>
++      ( proof_method_of_sexpr meth
++      , list_of_sexpr (list_of_sexpr proof_method_of_sexpr) methss
++      )
++  | _ => error ("preferred_methss_of_sexpr: " ^ @{make_string} s)
++
++fun sexpr_mini_preplay_input (preplay_input : mini_preplay_input) : sexpr =
++  Expr
++    [ Expr [Atom "USED_FACTS", sexpr_used_facts (#used_facts preplay_input)]
++    , Expr [Atom "PREFERRED_METHSS", sexpr_preferred_methss (#preferred_methss preplay_input)]
++    ]
++
++fun mini_preplay_input_of_sexpr s =
++  case s of
++    Expr [Expr [Atom "USED_FACTS", used_facts], Expr [Atom "PREFERRED_METHSS", preferred_methss]] =>
++      { used_facts = used_facts_of_sexpr used_facts
++      , preferred_methss = preferred_methss_of_sexpr preferred_methss
++      }
++  | _ => error ("mini_preplay_input_of_sexpr: " ^ @{make_string} s)
++
++(* fun serialize_mini_preplay_input (preplay_input : mini_preplay_input) : string = *)
++
++val serialize_mini_preplay_input_option = string_of_sexpr o sexpr_option sexpr_mini_preplay_input
++
++val deserialize_mini_preplay_input_option = option_of_sexpr mini_preplay_input_of_sexpr o parse_sexpr
++
++(*
++val sexpr_mini_preplay_inputs = sexpr_list sexpr_mini_preplay_input
++
++val mini_preplay_inputs_of_sexpr = list_of_sexpr mini_preplay_input_of_sexpr
++
++val serialize_mini_preplay_inputs = string_of_sexpr o sexpr_mini_preplay_inputs
++
++val deserialize_mini_preplay_inputs = mini_preplay_inputs_of_sexpr o parse_sexpr
++*)
+ 
+ type preplay_result = proof_method * (play_outcome * (Pretty.T * stature) list)
+ 
+@@ -493,11 +636,13 @@
+   let
+     val hash = SHA1.rep (SHA1.digest arg)
+     val file = cache_dir + Path.explode hash
++    val arg_file = cache_dir + Path.explode (hash ^ ".arg")
+   in
+     (case try File.read file of
+       NONE =>
+       let val result = f arg in
+         File.write file result;
++        File.write arg_file arg;
+         result
+       end
+     | SOME s =>
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_proof_methods.ML
+@@ -7,6 +7,37 @@
+ 
+ signature SLEDGEHAMMER_PROOF_METHODS =
+ sig
++  type dynamic_proof_method =
++    {
++      (* Unique identifier *)
++      name: string,
++      (* How the method ought to be called in the one-line proof text *)
++      string_of: string,
++      (* FIXME (document): something about whether facts are passed via using ... (see indirect_ss below) *)
++      is_proof_method_direct: bool,
++      (* FIXME (document): something about whether "[1]" gets appended (presumably to specify the goal to act on) *)
++      is_proof_method_multi_goal: bool,
++      (* FIXME: since the user gets local and global facts in as arguments to tac,
++      maybe we should put it on them to do the Method.insert_tac's ? *)
++      needs_insert_local_facts: bool,
++      needs_insert_global_facts: bool,
++      tac: { local_facts: thm list, global_facts: thm list } -> Proof.context -> int -> tactic,
++      (* 4 (highest) to 1 (lowest)
++      Meaning:
++        4:   before the try0 methods
++        3:   after try0, before metis
++        2:   after metis, before smt
++        1:   after smt
++      *)
++      priority: int
++    }
++
++  val register_dynamic_proof_method : dynamic_proof_method -> unit
++
++  val get_dynamic_proof_methods : unit -> string list
++
++  val get_dynamic_proof_method : string -> dynamic_proof_method option
++
+   type stature = ATP_Problem_Generate.stature
+ 
+   datatype SMT_backend =
+@@ -28,7 +59,9 @@
+     Linarith_Method |
+     Presburger_Method |
+     Algebra_Method |
+-    Order_Method
++    Order_Method |
++    Dynamic_Method of string
++
+ 
+   datatype play_outcome =
+     Played of Time.time |
+@@ -45,6 +78,13 @@
+   val string_of_play_outcome : play_outcome -> string
+   val play_outcome_ord : play_outcome ord
+   val one_line_proof_text : Proof.context -> int -> one_line_params -> string
++  
++  
++  val serialize_proof_method : proof_method -> string
++  val deserialize_proof_method : string -> proof_method
++  
++  val proof_method_of_sexpr : Sledgehammer_S_Expr.sexpr -> proof_method
++  val sexpr_proof_method : proof_method -> Sledgehammer_S_Expr.sexpr
+ end;
+ 
+ structure Sledgehammer_Proof_Methods : SLEDGEHAMMER_PROOF_METHODS =
+@@ -55,6 +95,45 @@
+ open ATP_Proof_Reconstruct
+ open Sledgehammer_Util
+ 
++type dynamic_proof_method =
++  {
++    name: string,
++    string_of: string,
++    is_proof_method_direct: bool,
++    is_proof_method_multi_goal: bool,
++    needs_insert_local_facts: bool,
++    needs_insert_global_facts: bool,
++    tac: { local_facts: thm list, global_facts: thm list } -> Proof.context -> int -> tactic,
++    priority: int
++  }
++
++local
++  val dynamic_proof_methods = Synchronized.var "Sledgehammer.dynamic_proof_methods"
++    (Symtab.empty : dynamic_proof_method Symtab.table);
++in
++
++fun register_dynamic_proof_method dynamic_proof_method =
++  let
++    val name = #name dynamic_proof_method
++    val priority = #priority dynamic_proof_method
++    val () = if priority < 1 orelse priority > 4 then error
++        ("Failed to register dynamic proof method with invalid priority " ^ @{make_string} priority)
++      else ()
++  in
++    (if name = "" then error "Registering unnamed Sledgehammer dynamic proof method" else ();
++     Synchronized.change dynamic_proof_methods (Symtab.map_default (name, dynamic_proof_method)
++       (fn f => (warning ("Redefining Sledgehammer dynamic proof method: " ^ quote name); f))))
++  end
++
++fun get_dynamic_proof_method name = Symtab.lookup (Synchronized.value dynamic_proof_methods) name
++
++fun get_dynamic_proof_methods () = Symtab.keys (Synchronized.value dynamic_proof_methods)
++
++end
++
++(* FIXME: don't use `the` *)
++fun get_dynamic_proof_method_tac name = #tac (the (get_dynamic_proof_method name))
++
+ datatype SMT_backend =
+   SMT_Z3 |
+   SMT_Verit of string
+@@ -74,7 +153,8 @@
+   Linarith_Method |
+   Presburger_Method |
+   Algebra_Method |
+-  Order_Method
++  Order_Method |
++  Dynamic_Method of string
+ 
+ datatype play_outcome =
+   Played of Time.time |
+@@ -88,9 +168,13 @@
+   | is_proof_method_direct Meson_Method = true
+   | is_proof_method_direct (SMT_Method _) = true
+   | is_proof_method_direct Simp_Method = true
++  | is_proof_method_direct (Dynamic_Method name) =
++      get_dynamic_proof_method name |> the |> #is_proof_method_direct
+   | is_proof_method_direct _ = false
+ 
+ fun is_proof_method_multi_goal Auto_Method = true
++  | is_proof_method_multi_goal (Dynamic_Method name) =
++      get_dynamic_proof_method name |> the |> #is_proof_method_multi_goal
+   | is_proof_method_multi_goal _ = false
+ 
+ fun pretty_paren prefix suffix = Pretty.enclose (prefix ^ "(") (")" ^ suffix)
+@@ -127,6 +211,100 @@
+     merge (map (`split) facts)
+   end
+ 
++fun serialize_option (serialize_inner : 'a -> string) (maybe_x : 'a option) =
++  case maybe_x of
++    SOME x => "(SOME " ^ serialize_inner x ^ ")"
++  | NONE => "(NONE)"
++
++fun serialize_list (serialize_inner : 'a -> string) (xs : 'a list) =
++  "(LIST " ^ space_implode " " (map serialize_inner xs) ^ ")"
++
++(*
++fun serialize_proof_method meth =
++  case meth of
++    Metis_Method (type_enc_opt, lam_trans_opt, additional_fact_names) =>
++      implode_space 
++        [ "(Metis_Method "
++        , serialize_option I type_enc_opt
++        , serialize_option I lam_trans_opt
++        , serialize_list I additional_fact_names
++        ,")" ]
++  | _ => error "serialize_proof_method only implemented for Metis_Method"
++*)
++
++fun sexpr_smt_backend backend =
++  case backend of
++    SMT_Z3 => Sledgehammer_S_Expr.Atom "SMT_Z3"
++  | SMT_Verit name =>
++      Sledgehammer_S_Expr.Expr [Sledgehammer_S_Expr.Atom "SMT_Verit", Sledgehammer_S_Expr.Atom name]
++
++fun smt_backend_of_sexpr s =
++  case s of
++    Sledgehammer_S_Expr.Atom "SMT_Z3" => SMT_Z3
++  | Sledgehammer_S_Expr.Expr [Sledgehammer_S_Expr.Atom "SMT_Verit", Sledgehammer_S_Expr.Atom name] =>
++      SMT_Verit name
++  | _ => error ("smt_backend_of_sexpr: " ^ @{make_string} s)
++
++fun sexpr_proof_method meth =
++  case meth of
++    Metis_Method (type_enc_opt, lam_trans_opt, additional_fact_names) =>
++      Sledgehammer_S_Expr.Expr
++        [ Sledgehammer_S_Expr.Atom "Metis_Method"
++        , Sledgehammer_S_Expr.sexpr_option Sledgehammer_S_Expr.Atom type_enc_opt
++        , Sledgehammer_S_Expr.sexpr_option Sledgehammer_S_Expr.Atom lam_trans_opt
++        , Sledgehammer_S_Expr.sexpr_list Sledgehammer_S_Expr.Atom additional_fact_names
++        ]
++  | Meson_Method => Sledgehammer_S_Expr.Atom "Meson_Method"
++  | SMT_Method backend =>
++      Sledgehammer_S_Expr.Expr [Sledgehammer_S_Expr.Atom "SMT_Method", sexpr_smt_backend backend]
++  | SATx_Method => Sledgehammer_S_Expr.Atom "SATx_Method"
++  | Argo_Method => Sledgehammer_S_Expr.Atom "Argo_Method"
++  | Blast_Method => Sledgehammer_S_Expr.Atom "Blast_Method"
++  | Simp_Method => Sledgehammer_S_Expr.Atom "Simp_Method"
++  | Auto_Method => Sledgehammer_S_Expr.Atom "Auto_Method"
++  | Fastforce_Method => Sledgehammer_S_Expr.Atom "Fastforce_Method"
++  | Force_Method => Sledgehammer_S_Expr.Atom "Force_Method"
++  | Moura_Method => Sledgehammer_S_Expr.Atom "Moura_Method"
++  | Linarith_Method => Sledgehammer_S_Expr.Atom "Linarith_Method"
++  | Presburger_Method => Sledgehammer_S_Expr.Atom "Presburger_Method"
++  | Algebra_Method => Sledgehammer_S_Expr.Atom "Algebra_Method"
++  | Order_Method => Sledgehammer_S_Expr.Atom "Order_Method"
++  | Dynamic_Method name =>
++      Sledgehammer_S_Expr.Expr
++        [Sledgehammer_S_Expr.Atom "Dynamic_Method", Sledgehammer_S_Expr.Atom name]
++
++fun proof_method_of_sexpr s =
++  case s of
++    Sledgehammer_S_Expr.Expr
++      [Sledgehammer_S_Expr.Atom "Metis_Method", type_enc_opt, lam_trans_opt, additional_fact_names] =>
++        Metis_Method
++          ( Sledgehammer_S_Expr.option_of_sexpr Sledgehammer_S_Expr.unatom type_enc_opt
++          , Sledgehammer_S_Expr.option_of_sexpr Sledgehammer_S_Expr.unatom lam_trans_opt
++          , Sledgehammer_S_Expr.list_of_sexpr Sledgehammer_S_Expr.unatom additional_fact_names )
++  | Sledgehammer_S_Expr.Atom "Meson_Method" => Meson_Method
++  | Sledgehammer_S_Expr.Expr [Sledgehammer_S_Expr.Atom "SMT_Method", backend] =>
++      SMT_Method (smt_backend_of_sexpr backend)
++  | Sledgehammer_S_Expr.Atom "SATx_Method" => SATx_Method
++  | Sledgehammer_S_Expr.Atom "Argo_Method" => Argo_Method
++  | Sledgehammer_S_Expr.Atom "Blast_Method" => Blast_Method
++  | Sledgehammer_S_Expr.Atom "Simp_Method" => Simp_Method
++  | Sledgehammer_S_Expr.Atom "Auto_Method" => Auto_Method
++  | Sledgehammer_S_Expr.Atom "Fastforce_Method" => Fastforce_Method
++  | Sledgehammer_S_Expr.Atom "Force_Method" => Force_Method
++  | Sledgehammer_S_Expr.Atom "Moura_Method" => Moura_Method
++  | Sledgehammer_S_Expr.Atom "Linarith_Method" => Linarith_Method
++  | Sledgehammer_S_Expr.Atom "Presburger_Method" => Presburger_Method
++  | Sledgehammer_S_Expr.Atom "Algebra_Method" => Algebra_Method
++  | Sledgehammer_S_Expr.Atom "Order_Method" => Order_Method
++  | Sledgehammer_S_Expr.Expr
++      [Sledgehammer_S_Expr.Atom "Dynamic_Method", Sledgehammer_S_Expr.Atom name]
++    =>
++      Dynamic_Method name
++  | _ => error ("proof_method: " ^ @{make_string} s)
++
++val serialize_proof_method = Sledgehammer_S_Expr.string_of_sexpr o sexpr_proof_method
++val deserialize_proof_method = proof_method_of_sexpr o Sledgehammer_S_Expr.parse_sexpr
++
+ fun pretty_proof_method prefix suffix facts meth =
+   let
+     val meth_s =
+@@ -152,7 +330,8 @@
+       | Linarith_Method => "linarith"
+       | Presburger_Method => "presburger"
+       | Algebra_Method => "algebra"
+-      | Order_Method => "order")
++      | Order_Method => "order"
++      | Dynamic_Method name => get_dynamic_proof_method name |> the |> #string_of)
+   in
+     pretty_maybe_paren prefix suffix
+       (Pretty.str meth_s :: merge_indexed_facts facts |> Pretty.breaks)
+@@ -164,6 +343,20 @@
+ 
+ fun tac_of_proof_method ctxt (local_facts, global_facts) meth =
+   let
++    fun needs_insert_local_facts meth = case meth of
++      Metis_Method _ => false
++    | SMT_Method _ => false
++    | Dynamic_Method name => get_dynamic_proof_method name |> the |> #needs_insert_local_facts
++    | _ => true
++
++    fun needs_insert_global_facts meth = case meth of
++      Metis_Method _ => false
++    | SMT_Method _ => false
++    | Meson_Method => false
++    | Simp_Method => false
++    | Dynamic_Method name => get_dynamic_proof_method name |> the |> #needs_insert_global_facts
++    | _ => true
++
+     fun tac_of_metis (type_enc_opt, lam_trans_opt, additional_fact_names) =
+       let
+         val additional_facts = maps (thms_of_name ctxt) additional_fact_names
+@@ -178,28 +371,29 @@
+     fun tac_of_smt SMT_Z3 = SMT_Solver.smt_tac
+       | tac_of_smt (SMT_Verit strategy) = Verit_Strategies.verit_tac_stgy strategy
+   in
++    (if needs_insert_local_facts meth then Method.insert_tac ctxt local_facts else K all_tac) THEN'
++    (if needs_insert_global_facts meth then Method.insert_tac ctxt global_facts else K all_tac) THEN'
+     (case meth of
+       Metis_Method options => tac_of_metis options
+     | SMT_Method backend => tac_of_smt backend ctxt (local_facts @ global_facts)
+-    | _ =>
+-      Method.insert_tac ctxt local_facts THEN'
+-      (case meth of
+-        Meson_Method => Meson_Tactic.meson_general_tac ctxt global_facts
+-      | Simp_Method => Simplifier.asm_full_simp_tac (ctxt addsimps global_facts)
+-      | _ =>
+-        Method.insert_tac ctxt global_facts THEN'
+-        (case meth of
+-          SATx_Method => SAT.satx_tac ctxt
+-        | Argo_Method => Argo_Tactic.argo_tac ctxt []
+-        | Blast_Method => blast_tac ctxt
+-        | Auto_Method => SELECT_GOAL (Clasimp.auto_tac ctxt)
+-        | Fastforce_Method => Clasimp.fast_force_tac ctxt
+-        | Force_Method => Clasimp.force_tac ctxt
+-        | Moura_Method => moura_tac ctxt
+-        | Linarith_Method => Lin_Arith.tac ctxt
+-        | Presburger_Method => Cooper.tac true [] [] ctxt
+-        | Algebra_Method => Groebner.algebra_tac [] [] ctxt
+-        | Order_Method => HOL_Order_Tac.tac [] ctxt)))
++    | Meson_Method => Meson_Tactic.meson_general_tac ctxt global_facts
++    | Simp_Method => Simplifier.asm_full_simp_tac (ctxt addsimps global_facts)
++    | SATx_Method => SAT.satx_tac ctxt
++    | Argo_Method => Argo_Tactic.argo_tac ctxt []
++    | Blast_Method => blast_tac ctxt
++    | Auto_Method => SELECT_GOAL (Clasimp.auto_tac ctxt)
++    | Fastforce_Method => Clasimp.fast_force_tac ctxt
++    | Force_Method => Clasimp.force_tac ctxt
++    | Moura_Method => moura_tac ctxt
++    | Linarith_Method => Lin_Arith.tac ctxt
++    | Presburger_Method => Cooper.tac true [] [] ctxt
++    | Algebra_Method => Groebner.algebra_tac [] [] ctxt
++    | Order_Method => HOL_Order_Tac.tac [] ctxt
++    | Dynamic_Method name =>
++        get_dynamic_proof_method_tac
++          name
++          { local_facts = local_facts, global_facts = global_facts }
++          ctxt)
+   end
+ 
+ fun string_of_play_outcome (Played time) = string_of_ext_time (false, time)
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_prover.ML
+@@ -255,6 +255,9 @@
+   [map (SMT_Method o SMT_Verit) (Verit_Strategies.all_veriT_stgies (Context.Proof ctxt)),
+    [SMT_Method SMT_Z3]]
+ 
++(* List of lists of proof methods. During preplay the bunches (inner lists) are run sequentially and
++from the first successful bunch, the proof method with the lowest runtime is chosen.
++Effectively a lexicographic order on bunch index (in the outer list) and runtime. *)
+ fun bunches_of_proof_methods ctxt smt_proofs needs_full_types needs_lam_defs =
+   let
+     val misc_methodss =
+@@ -270,8 +273,25 @@
+         bunches_of_smt_methods ctxt
+       else
+         []
++
++    val dynamic_methods_by_priority =
++      (get_dynamic_proof_methods ())
++      |> map (`(#priority o the o get_dynamic_proof_method))
++      |> (fn l => fold (Inttab.insert_list (K false)) l Inttab.empty)
++      |> Inttab.lookup
++      #> the_default []
++      #> map Dynamic_Method
++
++    val proof_methods_by_priority =
++      [dynamic_methods_by_priority 4]
++      @ misc_methodss
++      @ [dynamic_methods_by_priority 3]
++      @ metis_methodss
++      @ [dynamic_methods_by_priority 2]
++      @ smt_methodss
++      @ [dynamic_methods_by_priority 1]
+   in
+-    misc_methodss @ metis_methodss @ smt_methodss
++    proof_methods_by_priority
+   end
+ 
+ fun facts_of_filter fact_filter factss =
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
+--- a/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_prover_atp.ML
+@@ -328,6 +328,8 @@
+           val preferred = Metis_Method (NONE, NONE, [])
+           val preferred_methss =
+             (preferred,
++             (* FIXME: dynamically registered methods are only run if try0 is set. That's not the
++             * idea. Also need to check sledgehammer_prover_smt.ML *)
+              if try0 then
+                bunches_of_proof_methods ctxt smt_proofs needs_full_types needs_lam_defs
+              else
+diff --git a/src/HOL/Tools/Sledgehammer/sledgehammer_sexpr.ML b/src/HOL/Tools/Sledgehammer/sledgehammer_sexpr.ML
+new file mode 100644
+--- /dev/null
++++ b/src/HOL/Tools/Sledgehammer/sledgehammer_sexpr.ML
+@@ -0,0 +1,115 @@
++signature SLEDGEHAMMER_S_EXPR =
++sig
++
++  datatype sexpr = Atom of string | Expr of sexpr list
++
++  val string_of_sexpr : sexpr -> string 
++
++  val parse_atom : string -> substring -> string * substring
++  val parse_expr : sexpr list -> substring -> sexpr list * substring
++  val parse_sexpr : string -> sexpr
++  
++  val unatom : sexpr -> string
++  
++  val sexpr_option : ('a -> sexpr) -> 'a option -> sexpr
++  val option_of_sexpr : (sexpr -> 'a) -> sexpr -> 'a option
++
++  val sexpr_list : ('a -> sexpr) -> 'a list -> sexpr
++  val list_of_sexpr : (sexpr -> 'a) -> sexpr -> 'a list
++end;
++
++structure Sledgehammer_S_Expr : SLEDGEHAMMER_S_EXPR =
++struct
++
++datatype sexpr = Atom of string | Expr of sexpr list
++(** the type of S-expressions *)
++
++fun unatom (Atom s) = s
++  | unatom _ = error "unatom: not an atom"
++
++fun sexpr_option (sexpr_inner : 'a -> sexpr) (maybe_x : 'a option) =
++  case maybe_x of
++    SOME inner => Expr [Atom "SOME", sexpr_inner inner]
++  | NONE => Expr [Atom "NONE"]
++
++fun option_of_sexpr (inner_of_sexpr : sexpr -> 'a) s =
++  case s of
++    Expr [Atom "SOME", inner] => SOME (inner_of_sexpr inner)
++  | Expr [Atom "NONE"] => NONE
++  | _ => error "option_of_sexpr" 
++
++fun sexpr_list (sexpr_inner : 'a -> sexpr) (xs : 'a list) =
++  Expr (Atom "LIST" :: map sexpr_inner xs)
++
++fun list_of_sexpr (inner_of_sexpr : sexpr -> 'a) s =
++  case s of
++    Expr ss =>
++      if length ss = 0 then error "list_of_sexpr too short" else
++      if nth ss 0 <> Atom "LIST" then error "list_of_sexpr not a list" else
++      map inner_of_sexpr (drop 1 ss)
++  | _ => error "list_of_sexpr atom"
++
++(* Do unescaping, fail on unescaped "(" and  "\", return on unescaped ")" or " ". *)
++(* Only removes the atom from the substring, not the ")" or " ". *)
++(* FIXME: must this make progress? *)
++fun parse_atom (acc : string) (s : substring) : string * substring =
++  case Substring.getc s of
++    NONE => (acc, s)
++  | SOME (c, s') => (case c of
++      #" " => (acc, s)
++    | #"(" => (acc, s)
++    | #")" => (acc, s)
++    | #"\\" => (case Substring.getc s' of
++        NONE => error "parse_atom: trailing backslash"
++      | SOME (c', s'') => (case c' of
++          #" " => parse_atom (acc ^ " ") s''
++        | #"(" => parse_atom (acc ^ "(") s''
++        | #")" => parse_atom (acc ^ ")") s''
++        | #"\\" => parse_atom (acc ^ "\\") s''
++        | _ => error ("parse_atom: unexpected escaped character '" ^ String.str c' ^ "'")))
++    | _ => parse_atom (acc ^ String.str c) s')
++
++(* Enter whenever we see a "(", return when encountering a ")".
++Caller is responsible for handling the enclosing "(" and ")"! *)
++fun parse_expr (acc : sexpr list) (s : substring) : sexpr list * substring =
++  case Substring.first s of
++    NONE => (acc, s)
++  | SOME c => (case c of
++      #" " => parse_expr acc (Substring.triml 1 s)
++    | #"(" =>
++        let
++          val (expr, rest) = parse_expr [] (Substring.triml 1 s)
++          val () = (case Substring.first rest of
++            SOME #")" => ()
++          | SOME c => error ("parse_expr: expected ')', got '" ^ String.str c ^ "'")
++          | NONE => error "parse_expr: exepected ')', got empty string")
++        in
++          parse_expr (acc @ [Expr expr]) (Substring.triml 1 rest)
++        end
++    | #")" => (acc, s)
++    | _ => (* #"\\" or anything else *)
++      (* This has to be the start of an atom. *)
++      let
++        val (atom, rest) = parse_atom "" s
++      in
++        parse_expr (acc @ [Atom atom]) rest
++      end)
++
++fun parse_sexpr (s : string) : sexpr =
++  case parse_expr [] (Substring.full s) of
++    ([e], s') =>
++      if Substring.size s' = 0
++        then e
++        else error ("parse_sexpr: parse stopped with tail " ^ Substring.string s')
++  | (_, s') => if Substring.size s' = 0
++      then error ("parse_expr: missing outer parantheses? (empty tail) " ^ s)
++      else error ("parse_sexpr: missing outer parentheses? and parse stopped with tail " ^ Substring.string s')
++
++fun sexpr_escape s =
++  String.translate
++    (fn #"\\" => "\\\\" | #"(" => "\\(" | #")" => "\\)" | #" " => "\\ " | c => String.str c) s
++
++fun string_of_sexpr (Atom s) = sexpr_escape s
++  | string_of_sexpr (Expr sexprs) = "(" ^ space_implode " " (map string_of_sexpr sexprs) ^ ")"
++
++end;
+\ No newline at end of file
