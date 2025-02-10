@@ -27,6 +27,7 @@ sig
     -> {fresh_x: term, substitution: Envir.env, subterm: JClause.full_pos, uninstantiated_premise: int}
     -> {fresh_x: cterm, predicate: cterm, subterm: JClause.full_pos, uninstantiated_premise: JClause.T}
   val impl_forall_exists_hoist_lemma: bool -> { fresh_x: cterm, predicate: cterm } -> thm
+  val norm_negative_predicate_literals: Proof.context -> HClause.hthm -> HClause.hthm
   (* The records are modelled after those in Jeha_Log, but with int replace by HClause.htm *)
   val reconstruct_arg_cong :
     Proof.context
@@ -116,6 +117,17 @@ struct
 fun norm_negative_predicate_literals ctxt premise =
   let
     val tac =
+      (if Config.get ctxt Jeha_Common.no_norm_neg_pred_if_both_truth_values
+        then
+          (* The first four serve as "overrides" to make sure negative literals where both sides are
+          truth values don't get normalized *)
+          [ @{lemma "True = True \<Longrightarrow> True = True" by auto}
+          , @{lemma "True = False \<Longrightarrow> True = False" by auto}
+          , @{lemma "False = True \<Longrightarrow> False = True" by auto}
+          , @{lemma "False = False \<Longrightarrow> False = False" by auto} ]
+        else
+          [])
+      @
       [ @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
       , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
       , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}

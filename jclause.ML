@@ -46,7 +46,7 @@ sig
   val occurs_deeply : term -> T -> bool
   val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
   val norm_beta_eta_qeta : Proof.context -> T -> T
-  val norm_negative_predicate_literals : T -> T
+  val norm_negative_predicate_literals : Proof.context -> T -> T
   val incr_indexes : int -> T -> T
   val kbo : T * T -> Jeha_Order.partial_order
   val is_eligible_cpos : T -> cpos -> bool
@@ -262,13 +262,13 @@ fun norm_beta_eta_qeta_env ctxt env clause =
 fun norm_beta_eta_qeta ctxt clause =
   norm_beta_eta_qeta_env ctxt (Envir.empty (maxidx clause)) clause
 
-fun norm_negative_predicate_literals clause =
+fun norm_negative_predicate_literals ctxt clause =
   let
     val maxidx = maxidx clause
     val selected = #selected clause
   in
     clause
-    |> map_literals (map JLit.norm_negative_pred) 
+    |> map_literals (map (JLit.norm_negative_pred ctxt))
     |> set_maxidx maxidx
     |> set_selected selected
   end
@@ -283,7 +283,7 @@ fun of_term ctxt (t, id) =
       |> map_literals (K (HOLogic.disjuncts t |> map JLit.of_term))
       |> recalculate_maxidx
       |> norm_beta_eta_qeta ctxt
-      |> norm_negative_predicate_literals
+      |> norm_negative_predicate_literals ctxt
       |> recompute_selected ctxt
 
 fun incr_indexes increment clause =

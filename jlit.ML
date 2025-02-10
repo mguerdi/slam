@@ -17,7 +17,7 @@ sig
   val mk_pred : term -> bool -> T
   val is_pred : T -> bool
   val dest_pred : T -> term * term
-  val norm_negative_pred : T -> T
+  val norm_negative_pred : Proof.context -> T -> T
   val norm_beta_eta_qeta_env : Envir.env -> T -> T
   val term_of : T -> term
   val term_at_lpos : T -> lpos -> term
@@ -94,9 +94,12 @@ fun dest_pred (s, t, true) =
   | dest_pred _ = error "disequation"
 
 (* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
-fun norm_negative_pred (l as (_, _, true)) = l
-  | norm_negative_pred (l as (s, t, false)) =
-      if is_truth_value s
+fun norm_negative_pred ctxt (l as (_, _, true)) = l
+  | norm_negative_pred ctxt (l as (s, t, false)) =
+      if (Config.get ctxt Jeha_Common.no_norm_neg_pred_if_both_truth_values
+          andalso is_truth_value s andalso is_truth_value t)
+        then l
+      else if is_truth_value s
         then (JTerm.negate_hol_bool s, t, true)
       else if is_truth_value t
         then (s, JTerm.negate_hol_bool t, true)

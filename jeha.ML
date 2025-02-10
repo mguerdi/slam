@@ -239,7 +239,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           (Jeha_Common.trace_msg_simp_steps ctxt msg;
           (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
           (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
-          |> JClause.norm_negative_predicate_literals
+          |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
           |> JClause.set_origin (
@@ -494,7 +494,7 @@ fun simp_bool_outer_claus ctxt (c, i) =
     |> map_index
       (fn (index, clause) =>
         clause
-        |> JClause.norm_negative_predicate_literals
+        |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.set_origin (
           Jeha_Log.SimpPosNegOuterClaus
@@ -622,7 +622,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
               NONE) else (* 8. *)
           (* FXIME 9. 10. *)
           JClause.combine ctxt d' ct'
-          |> JClause.norm_negative_predicate_literals
+          |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
           |> JClause.set_origin
@@ -656,7 +656,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
         if not (JClause.is_eligible_cpos c cp) then NONE else
         c
         |> JClause.delete_lit_at ctxt cp
-        |> JClause.norm_negative_predicate_literals
+        |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin
@@ -706,7 +706,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         |> JClause.delete_lit_at ctxt (Int.min (cp, cp'))
         |> JClause.add_literal ctxt (v, v', false)
         |> JClause.add_literal ctxt (u, v', true)
-        |> JClause.norm_negative_predicate_literals
+        |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin
@@ -830,7 +830,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
           |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"}) (* FIXME: recompute selected *)
           |> JClause.add_literal ctxt u_eq_true
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
-          |> JClause.norm_negative_predicate_literals
+          |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
           |> JClause.set_origin
@@ -874,7 +874,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
         if not as_simplification andalso not (JClause.is_eligible_cpos c cp) then NONE else (* 2. *)
         c
         |> JClause.delete_lit_at ctxt cp
-        |> JClause.norm_negative_predicate_literals
+        |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin origin
@@ -1005,7 +1005,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         |> JClause.set_maxidx maxidx
         (* add the new literal if it exists, otherwise apply identity function *)
         |> the_default I (Jeha_Common.map_some (JClause.add_literal ctxt) new_literal)
-        |> JClause.norm_negative_predicate_literals
+        |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> pair unifier
@@ -1093,7 +1093,7 @@ fun impl_simp_bool_rw
         |> JClause.set_maxidx maxidx
         (* add the new literal if it exists, otherwise apply identity function *)
         |> the_default I (Jeha_Common.map_some (JClause.add_literal ctxt) new_literal)
-        |> JClause.norm_negative_predicate_literals
+        |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> pair unifier

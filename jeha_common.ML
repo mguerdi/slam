@@ -102,6 +102,8 @@ sig
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
   
+  val no_norm_neg_pred_if_both_truth_values : bool Config.T
+
   val literal_selection_function : string Config.T
 
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
@@ -222,6 +224,9 @@ val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<o
 val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_syntactic_tautology_deletion2\<close> (K rule_default)
 val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)
 val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_equality_subsumption\<close> (K rule_default)
+
+val no_norm_neg_pred_if_both_truth_values = Attrib.setup_config_bool \<^binding>\<open>jeha_no_norm_neg_pred_if_both_truth_values\<close> (K false)
+
 
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_none")
 
