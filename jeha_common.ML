@@ -19,6 +19,9 @@ sig
   val trace_archive : bool Config.T
   (* output inferred / new clauses *)
   val trace_inferred : bool Config.T
+  (* trace rules *)
+  val trace_sup : bool Config.T
+  val trace_e_fact : bool Config.T
   (* internal *)
   val trace_simp_results : bool Config.T
   
@@ -34,6 +37,8 @@ sig
   val trace_msg_cheap_simp : Proof.context -> (unit -> string) -> unit
   val trace_msg_archive : Proof.context -> (unit -> string) -> unit
   val trace_msg_inferred : Proof.context -> (unit -> string) -> unit
+  val trace_msg_sup : Proof.context -> (unit -> string) -> unit
+  val trace_msg_e_fact : Proof.context -> (unit -> string) -> unit
   (* internal *)
   val trace_msg_simp_results : Proof.context -> (unit -> string) -> unit
 
@@ -127,6 +132,8 @@ val trace_backward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_
 val trace_cheap_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_cheap_simp\<close> (K false)
 val trace_archive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_archive\<close> (K false)
 val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_inferred\<close> (K false)
+val trace_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_sup\<close> (K false)
+val trace_e_fact = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_e_fact\<close> (K false)
 (* internal *)
 val trace_simp_results = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_results\<close> (K false)
 
@@ -142,6 +149,8 @@ fun trace_msg_backward_simp ctxt msg = if Config.get ctxt trace_backward_simp th
 fun trace_msg_cheap_simp ctxt msg = if Config.get ctxt trace_cheap_simp then trace_msg ctxt msg else ();
 fun trace_msg_archive ctxt msg = if Config.get ctxt trace_archive then trace_msg ctxt msg else ();
 fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_msg ctxt msg else ();
+fun trace_msg_sup ctxt msg = if Config.get ctxt trace_sup then trace_msg ctxt msg else ();
+fun trace_msg_e_fact ctxt msg = if Config.get ctxt trace_e_fact then trace_msg ctxt msg else ();
 (* internal *)
 fun trace_msg_simp_results ctxt msg = if Config.get ctxt trace_simp_results then trace_msg ctxt msg else ();
 

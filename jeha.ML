@@ -143,8 +143,7 @@ fun simp_delete_duplicated_lits ctxt c =
     if JClause.length c' = JClause.length c
       then NONE
       else
-        (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
-          "deleted duplicated literals in " ^ JClause.pretty_clause ctxt c);
+        (Jeha_Common.trace_msg_simp_steps ctxt (fn () => "deleted duplicated literals in " ^ JClause.pretty_clause ctxt c);
         SOME (
           c'
           |> JClause.recompute_selected ctxt 
@@ -214,11 +213,11 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
         [(from, target_term)]
     fun build_conclusion matcher =
       let
-        val msg =  "   " ^ (if positive then "(RP)" else "(RN)")
+        val msg = (fn () => "   " ^ (if positive then "(RP)" else "(RN)")
           ^ " rewriting " ^ Jeha_Common.pretty_term ctxt target_term
           ^ " in " ^ JClause.pretty_clause ctxt target_clause
           ^ " with " ^ Jeha_Common.pretty_term ctxt from
-          ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to
+          ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to)
         val (from, to) = apply2 (JTerm.norm_beta_eta_qeta_env matcher) (from, to)
       in
         (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
@@ -237,7 +236,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
             SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
         in
           if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
-          (Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg);
+          (Jeha_Common.trace_msg_simp_steps ctxt msg;
           (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
           (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
           |> JClause.norm_negative_predicate_literals
@@ -289,13 +288,13 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
       |> Jeha_Unify.matchers (Context.Proof ctxt) maxidx
       |> Seq.pull
     (* tracing *)
-    val msg =  "   " ^ "(NS)"
+    val msg = (fn () => "   " ^ "(NS)"
       ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
       ^ " in " ^ JClause.pretty_clause ctxt target_clause
-      ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [unit_lit])
+      ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [unit_lit]))
   in
     if is_some matcher
-      then let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
+      then let val _ = Jeha_Common.trace_msg_simp_steps ctxt msg in
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
@@ -397,14 +396,14 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
       literal_can_match_single_disagreement
         ctxt (JClause.maxidx unit_clause, lit) (JClause.maxidx target_clause, target_lit)
     (* tracing *)
-    val msg =  "   " ^ "(PS)"
+    val msg = (fn () => "   " ^ "(PS)"
       ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
       ^ " in " ^ JClause.pretty_clause ctxt target_clause
-      ^ " with " ^ JClause.pretty_clause ctxt (unit_clause)
+      ^ " with " ^ JClause.pretty_clause ctxt (unit_clause))
   in
     case matcher of
       SOME (unit_shift, (disagreement, (unit_orientation, matcher))) =>
-        let val _ = Jeha_Common.trace_msg_simp_steps ctxt (fn () => msg) in
+        let val _ = Jeha_Common.trace_msg_simp_steps ctxt msg in
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
@@ -560,6 +559,8 @@ fun impl_infer_sup precheck ctxt (d, (lp, cp), (c, u_pos)) =
 (* Sup inference *)
 fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
   let
+    val () = Jeha_Common.trace_msg_sup ctxt (K ("Sup start: "
+      ^ JClause.pretty_clause ctxt d ^ " " ^ JClause.pretty_clause ctxt c))
     val left_premise_shift = JClause.maxidx c + 1
     val d = JClause.incr_indexes left_premise_shift d
     val env = Envir.empty (JClause.maxidx_of2 (c, d))
@@ -567,14 +568,22 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     val (t, t', is_pos_eq) = JLit.orient lp rewriting_literal
     val u = JClause.subterm_at_full_pos c u_pos
   in
-    if not is_pos_eq then [] else
-    if JTerm.might_be_fluid u then [] else (* 1. *)
-    if is_Var u andalso JClause.occurs_deeply u c then [] else (* 2. *)
+    if not is_pos_eq then
+      (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: not positive");
+        []) else
+    if JTerm.might_be_fluid u then
+      (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: might be fluid");
+        []) else (* 1. *)
+    if is_Var u andalso JClause.occurs_deeply u c then
+      (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: deeply occuring var");
+        []) else (* 2. *)
     (* FIXME: 3. variable condition ... *)
     let
-      (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: " ^ JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c ) *)
+      val _ = Jeha_Common.trace_msg_sup ctxt (fn () =>
+        "Sup: " ^ JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c)
       val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
-      (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: " ^ Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u ) *)
+      val _ = Jeha_Common.trace_msg_sup ctxt (fn () =>
+        "Sup: " ^ Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u)
       val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
       fun build_conclusion unifier =
         let
@@ -583,10 +592,8 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
             |> apply2 (JClause.norm_beta_eta_qeta_env ctxt unifier)
             |> apply2 (JClause.recompute_selected ctxt)
           val u_eligible = JClause.is_eligible_full_pos c u_pos
-          (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: u eligible=" ^ @{make_string} u_eligible) *)
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
           val tt'_eligible = JClause.is_eligible_cpos d cp
-          (* val _ = Jeha_Common.trace_msg ctxt (fn () => "Sup: tt' eligible=" ^ @{make_string} tt'_eligible) *)
           (* FIXME: according to the thesis this is skipped for performance
           reasons, would explain the difficulty in understanding zipperpositions
           implementation *)
@@ -601,10 +608,18 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           (* val _ = writeln ("t_comp_t' " ^ @{make_string} t_comp_t') *)
         in
           (* order restrictions *)
-          if SOME LESS = t_comp_t' orelse SOME EQUAL = t_comp_t' then NONE else (* 5. *)
-          if not u_eligible then NONE else (* 6. *)
-          if SOME LESS = c_comp_d orelse SOME EQUAL = c_comp_d then NONE else (* 7. *)
-          if not tt'_eligible then NONE else (* 8. *)
+          if SOME LESS = t_comp_t' orelse SOME EQUAL = t_comp_t' then
+            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: t\<sigma> \<preceq> u\<sigma> ");
+              NONE) else (* 5. *)
+          if not u_eligible then
+            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: u not eligible");
+              NONE) else (* 6. *)
+          if SOME LESS = c_comp_d orelse SOME EQUAL = c_comp_d then
+            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: C\<sigma> \<preceq> D\<sigma>");
+              NONE) else (* 7. *)
+          if not tt'_eligible then
+            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: t \<approx> t' not eligible");
+              NONE) else (* 8. *)
           (* FXIME 9. 10. *)
           JClause.combine ctxt d' ct'
           |> JClause.norm_negative_predicate_literals
@@ -618,6 +633,8 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
                 , literal = (lp, cp)
                 , subterm = u_pos
                 , substitution = unifier })
+          |> tap (fn concl =>
+            (Jeha_Common.trace_msg_sup ctxt (K ("Sup concl: " ^ JClause.pretty_clause ctxt concl))))
           |> SOME
         end
     in
@@ -655,14 +672,19 @@ fun infer_eres (ctxt : Proof.context) c cp =
 (* EFact inference *)
 fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
   let
+    val () = Jeha_Common.trace_msg_e_fact ctxt (fn () =>
+      "EFact start " ^ JClause.pretty_clause ctxt c)
     val (u', v', is_pos') = JLit.orient lp' (JClause.lit_at cp' c)
     val (u, v, is_pos) = JLit.orient lp (JClause.lit_at cp c)
+    val () = Jeha_Common.trace_msg_e_fact ctxt (fn () =>
+      "EFact: " ^ Jeha_Common.pretty_term ctxt u ^ " ?= " ^ Jeha_Common.pretty_term ctxt u')
     val unifiers =
       Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     val nothing_selected_in_c = JClause.selected c = []
     fun build_conclusion unifier =
       let
+        val () = Jeha_Common.trace_msg_e_fact ctxt (fn () => "EFact build_conclusion")
         val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val (u', v', _) = JLit.orient lp' (JClause.lit_at cp' c)
         val uv_literal = JClause.lit_at cp c
@@ -670,9 +692,15 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         val u_v_comp = Jeha_Order.kbo (u, v)
         val uv_maximal = Jeha_Order.is_maximal JLit.kbo false uv_literal (JClause.literals c)
       in
-        if SOME EQUAL = u_v_comp orelse SOME LESS = u_v_comp then NONE else
-        if not uv_maximal then NONE else
-        if not nothing_selected_in_c then NONE else
+        if SOME EQUAL = u_v_comp orelse SOME LESS = u_v_comp then
+          (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: u\<sigma> \<preceq> v\<sigma>");
+            NONE) else
+        if not uv_maximal then
+          (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: (u=v) not maximal");
+            NONE) else
+        if not nothing_selected_in_c then
+          (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: something selected");
+            NONE) else
         c
         |> JClause.delete_lit_at ctxt (Int.max (cp, cp'))
         |> JClause.delete_lit_at ctxt (Int.min (cp, cp'))
@@ -687,11 +715,16 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
               , left_literal = (lp', cp')
               , right_literal = (lp, cp)
               , substitution = unifier })
+        |> tap (fn concl => Jeha_Common.trace_msg_e_fact ctxt (K ("EFact concl: " ^ JClause.pretty_clause ctxt concl)))
         |> SOME
       end
     in
-      if not (is_pos andalso is_pos') then [] else
-      if cp' = cp then [] else
+      if not (is_pos andalso is_pos') then
+        (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: negative literal");
+          []) else
+      if cp' = cp then
+        (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: equal positions");
+          []) else
       map_filter build_conclusion unifiers
     end
 
