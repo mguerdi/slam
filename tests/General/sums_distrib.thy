@@ -1,4 +1,4 @@
-theory sums 
+theory sums_distrib
 
 imports JEHA.jeha HOL.Main
 

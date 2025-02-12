@@ -19,7 +19,7 @@ session "JEHA_TEST_GENERAL" in General = JEHA_TEST_BASE +
   "
   theories
     paper_example_25
-    sums
+    sums_distrib
     paper_example_26
     propositional
     misc
