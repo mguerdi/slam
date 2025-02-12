@@ -45,7 +45,9 @@ sig
                           -> { simplifications: JClause.T list, archive: JClause.T list }
   val backward_simplify :
     Proof.context -> JClause.T list -> JClause.T -> JClause.T list * JClause.T list * JClause.T list
-  val infer_clauses : Proof.context -> JClause.T list -> JClause.T -> JClause.T list
+  val infer_clauses :
+    Proof.context -> JClause.T list -> JClause.T -> (int * JClause.full_pos) Term_Index.T
+    -> JClause.T list
   (* *)
   structure Passive_Set : HEAP
   val init_passive_set : JClause.T list -> Passive_Set.T
@@ -56,6 +58,7 @@ sig
     , countdown: int
     , passive: Passive_Set.T
     , active: JClause.T list
+    , green_index: (int * JClause.full_pos) Term_Index.T
     , archive: JClause.T list
     }
   (* original exception + prover state before the exception was raised *)
@@ -640,6 +643,34 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     in
       map_filter build_conclusion unifiers
     end
+  end
+
+(* given clause as the left premise of superposition *)
+fun sup_given_into_active
+  (ctxt : Proof.context)
+  (given_clause : JClause.T)
+  (active : JClause.T list)
+  (green_index: (int * JClause.full_pos) Term_Index.T)
+  : JClause.T list
+=
+  let
+    (* the equality literals that are being eliminated *)
+    val ts_in_given_clause : (term * (JLit.lpos * JClause.cpos)) list =
+      (Jeha_Common.cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of given_clause))
+      |> map (`(fn (lp, cp) => JClause.subterm_at_full_pos given_clause ([], lp, cp)))
+    fun candidate_green_subterms t : (JClause.T * JClause.full_pos) list =
+      Term_Index.get_unifiables t green_index
+      (* FIXME: replace this by `map`, once we delete from the index. *)
+      |> map_filter (fn (id, fp) =>
+        case find_first (curry op= id o JClause.id) active of
+          SOME active_clause => SOME (active_clause, fp)
+        | NONE => NONE)
+  in
+    ts_in_given_clause
+    |> maps (fn (t, (lp, cp)) =>
+        candidate_green_subterms t
+        |> maps (fn (c, u_pos) =>
+            infer_sup ctxt (given_clause, (lp, cp)) (c, u_pos)))
   end
 
 (* ERes inference *)
@@ -1458,7 +1489,7 @@ fun backward_simplify ctxt active given_clause =
     map_filter_partition ctxt (forward_simplify simp_ctxt false [given_clause]) active
   end
 
-fun infer_clauses ctxt active given_clause =
+fun infer_clauses ctxt active given_clause green_index =
   let
     (* the equality literals that are being eliminated *)
     val eqs_given : (JClause.T * (JLit.lpos * JClause.cpos)) list =
@@ -1475,8 +1506,7 @@ fun infer_clauses ctxt active given_clause =
     val targets_active : (JClause.T * JClause.full_pos) list =
       maps (fn c => map (pair c) (JClause.green_full_poss_of c)) active
     val eq_target_pairs =
-      Jeha_Common.cartesian_product eqs_given targets_active
-      @ Jeha_Common.cartesian_product eqs_active targets_given
+      Jeha_Common.cartesian_product eqs_active targets_given
     (* for ERes, EFact *)
     val given_clause_cposs = JClause.cposs_of given_clause
     val given_clause_lpos_cpos_pairs =
@@ -1491,6 +1521,7 @@ fun infer_clauses ctxt active given_clause =
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else []
   in
     []
+    @ (if_cfg Jeha_Common.rule_sup (fn _ => sup_given_into_active ctxt given_clause active green_index))
     @ (if_cfg Jeha_Common.rule_sup (fn _ => (maps (uncurry (infer_sup ctxt)) eq_target_pairs)))
     (* ERes, EFact have already been performed for the active clauses *)
     @ (if_cfg Jeha_Common.rule_e_res (fn _ =>
@@ -1526,10 +1557,11 @@ type prover_state =
   , countdown: int
   , passive: Passive_Set.T
   , active: JClause.T list
+  , green_index: (int * JClause.full_pos) Term_Index.T
   , archive: JClause.T list
   }
 
-fun given_clause_step { context, countdown, passive, active, archive } =
+fun given_clause_step { context, countdown, passive, green_index, active, archive } =
   if countdown <= 0 then error "TIMEOUT" else
   (Runtime.exn_trace (fn () =>
   let
@@ -1566,6 +1598,7 @@ fun given_clause_step { context, countdown, passive, active, archive } =
           , countdown = countdown - 1
           , passive = passive
           , active = active
+          , green_index = green_index
           , archive = archive } )
       (* select first simplification as given_clause *)
     | { simplifications = given_clause :: simplifications, archive = intermediate } =>
@@ -1577,6 +1610,7 @@ fun given_clause_step { context, countdown, passive, active, archive } =
             , countdown = countdown - 1
             , passive = passive
             , active = empty_clause :: active
+            , green_index = green_index
             , archive = intermediate @ archive } )
       | NONE =>
           let
@@ -1597,10 +1631,11 @@ fun given_clause_step { context, countdown, passive, active, archive } =
             val archive = redundant_active_and_intermediate_simplifications @ archive
             (* remove simplified and redundant actives, add given_clause to active set *)
             val active = given_clause :: unsimplifiable_active
+            val green_index = Term_Index.insert_clause given_clause green_index
             (* perform all possible inferences between given_clause and active set NOTE: also
             computes inferences between given_clause and itself! *)
             val _ = Jeha_Common.trace_msg_inferred context (K "START INFERRING NEW CLAUSES")
-            val inferred_clauses = infer_clauses context active given_clause
+            val inferred_clauses = infer_clauses context active given_clause green_index
             val _ = trace_msg_clauses Jeha_Common.trace_msg_inferred "inferred: " inferred_clauses
             (* clauses to be added to passive set *)
             val _ = Jeha_Common.trace_msg_cheap_simp context (K "START CHEAP SIMPLIFICATION")
@@ -1638,6 +1673,7 @@ fun given_clause_step { context, countdown, passive, active, archive } =
               , countdown = countdown - 1
               , passive = passive
               , active = active
+              , green_index = green_index
               , archive = archive } )
           end
   end
@@ -1680,6 +1716,7 @@ fun try_saturate context prems =
           , countdown = Config.get context Jeha_Common.max_number_of_steps
           , passive = (init_passive_set clauses)
           , active = []
+          , green_index = Term_Index.empty
           , archive = [] })
   in
     (result, final_state)

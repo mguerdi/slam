@@ -26,7 +26,8 @@ fun reconstruct_proof
           countdown = _,
           passive = passive,
           active = active,
-          archive = archive })
+          archive = archive,
+          ... })
       _
     =
   let

@@ -76,7 +76,7 @@ fun feature_of (Free (name, _)) = FOFree name
   | feature_of (Bound i) = DB i
   | feature_of (Var _) = error "var should have been checked previously"
 
-(* FIXME: if we have to, \<eta>-expand everything before calling this *)
+(* FIXME: check if we have to, \<eta>-expand everything before calling this *)
 fun feature_at Ts p (Abs (_, T, t)) = feature_at (T::Ts) p t
   | feature_at Ts [] t =
       (* position is \<epsilon>, analyse the head *)
@@ -224,12 +224,12 @@ end;
 signature TERM_INDEX =
 sig
   include JEHA_TRIE
-  val insert_term : JTerm.tpos list -> term -> term T -> term T
-  val compute_key : JTerm.tpos list -> term -> key
-  val get_unifiables : JTerm.tpos list -> term -> term T -> term list
-  val get_instances : JTerm.tpos list -> term -> term T -> term list
+  val insert_term : (term * 'a) -> 'a T -> 'a T
+  val compute_key : term -> key
+  val get_unifiables : term -> 'a T -> 'a list
+  val get_instances : term -> 'a T -> 'a list
+  val insert_clause : JClause.T -> (int * JClause.full_pos) T -> (int * JClause.full_pos) T
 end;
-
 
 structure Term_Index : TERM_INDEX =
 struct
@@ -237,30 +237,46 @@ struct
   structure Term_Index_Trie = Jeha_Trie(structure FeatureTable = FPFeatureTable);
 
   open Term_Index_Trie
-
-  fun compute_key feature_positions t = map (fn p => Jeha_Fingerprint.feature_at [] p t) feature_positions
   
-  fun get_unifiables feature_positions t index =
+  (* Duper's defaults (?) *)
+  val feature_positions = [[], [1], [2]]
+  (* Zipperposition's defaults (?) *)
+  (* val feature_positions = [[3], [1, 1], [4], [1, 2]] *)
+
+  fun compute_key t = map (fn p => Jeha_Fingerprint.feature_at [] p t) feature_positions
+  
+  fun get_unifiables t index =
     let
-      val key = compute_key feature_positions t
+      val key = compute_key t
     in
       fold Jeha_Fingerprint.could_unify key cons index []
     end
   
-  fun get_instances feature_positions t index =
+  fun get_instances t index =
     let
-      val key = compute_key feature_positions t
+      val key = compute_key t
     in
       fold Jeha_Fingerprint.could_match key cons index []
     end
 
   (* FIXME: we want insert term and subterms *)
   (* FIXME: for testing purposes only *)
-  fun insert_term feature_positions t index =
+  fun insert_term (t, x) index =
     let
-      val key = compute_key feature_positions t
+      val key = compute_key t
     in
-      insert (key, t) index
+      insert (key, x) index
+    end
+  
+  fun insert_clause c index : (int * JClause.full_pos) T =
+    let
+      val id = JClause.id c
+      val green_subterm_positions = JClause.green_full_poss_of c 
+    in
+      Basics.fold
+        (fn fp => insert_term (JClause.subterm_at_full_pos c fp, (id, fp)))
+        green_subterm_positions
+        index 
     end
 end;
 

@@ -12,6 +12,7 @@ ML_file \<open>jclause_pos.ML\<close>
 ML_file \<open>jeha_log.ML\<close>
 ML_file \<open>jclause.ML\<close>
 ML_file \<open>jeha_argo.ML\<close>
+ML_file \<open>jeha_index.ML\<close>
 ML_file \<open>jeha_unify.ML\<close>
 ML_file \<open>jeha_subsumption.ML\<close>
 ML_file \<open>jeha_simplify.ML\<close>
