@@ -228,7 +228,9 @@ sig
   val compute_key : term -> key
   val get_unifiables : term -> 'a T -> 'a list
   val get_instances : term -> 'a T -> 'a list
+  val get_generalizations : term -> 'a T -> 'a list
   val insert_clause : JClause.T -> (int * JClause.full_pos) T -> (int * JClause.full_pos) T
+  val insert_unit : JClause.T -> (int * JLit.lpos) T -> (int * JLit.lpos) T
 end;
 
 structure Term_Index : TERM_INDEX =
@@ -258,6 +260,13 @@ struct
     in
       fold Jeha_Fingerprint.could_match key cons index []
     end
+  
+  fun get_generalizations t index =
+    let
+      val key = compute_key t
+    in
+      fold (Jeha_Fingerprint.could_match o swap) key cons index []
+    end
 
   (* FIXME: we want insert term and subterms *)
   (* FIXME: for testing purposes only *)
@@ -277,6 +286,19 @@ struct
         (fn fp => insert_term (JClause.subterm_at_full_pos c fp, (id, fp)))
         green_subterm_positions
         index 
+    end
+
+  fun insert_unit c index : (int * JLit.lpos) T =
+    let
+      val id = JClause.id c
+      val [(lhs, rhs, b)] = JClause.literals c
+      val top_level_term_positions =
+        [(JLit.Left, lhs), (JLit.Right, rhs)]
+    in
+      Basics.fold
+        (fn (lp, t) => insert_term (t, (id, lp)))
+        top_level_term_positions
+        index
     end
 end;
 

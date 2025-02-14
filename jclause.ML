@@ -53,6 +53,7 @@ sig
   val is_eligible_full_pos : T -> full_pos -> bool
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
   val is_false : T -> bool
+  val is_unit : T -> bool
   val maxidx_of_literal_list : JLit.T list -> int
   (* literal selection *)
   val selected : T -> int list
@@ -368,5 +369,7 @@ fun is_position_of_fully_applied_logical_symbol (tpos, lpos, cpos) c =
   |> JTerm.is_position_of_fully_applied_logical_symbol tpos
 
 val is_false = length #> curry (op =) 0
+
+val is_unit = length #> curry (op =) 1
 
 end;

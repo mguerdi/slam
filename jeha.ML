@@ -41,10 +41,21 @@ sig
   val infer_exists_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_forall_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_exists_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val forward_simplify : Proof.context -> bool -> JClause.T list -> JClause.T
-                          -> { simplifications: JClause.T list, archive: JClause.T list }
+  val forward_simplify :
+    Proof.context
+    -> bool
+    -> JClause.T list
+    -> (int * JLit.lpos) Term_Index.T
+    -> (int * JClause.full_pos) Term_Index.T
+    -> JClause.T
+    -> { simplifications: JClause.T list, archive: JClause.T list }
   val backward_simplify :
-    Proof.context -> JClause.T list -> JClause.T -> JClause.T list * JClause.T list * JClause.T list
+    Proof.context
+    -> JClause.T list
+    -> (int * JLit.lpos) Term_Index.T
+    -> (int * JClause.full_pos) Term_Index.T
+    -> JClause.T
+    -> JClause.T list * JClause.T list * JClause.T list
   val infer_clauses :
     Proof.context -> JClause.T list -> JClause.T -> (int * JClause.full_pos) Term_Index.T
     -> JClause.T list
@@ -59,6 +70,7 @@ sig
     , passive: Passive_Set.T
     , active: JClause.T list
     , green_index: (int * JClause.full_pos) Term_Index.T
+    , unit_index: (int * JLit.lpos) Term_Index.T
     , archive: JClause.T list
     }
   (* original exception + prover state before the exception was raised *)
@@ -271,6 +283,77 @@ val simp_rewrite_positive_lits = impl_simp_rewrite_lits true
 
 (* Rewriting of positive literals (RN) simplification (Schulz) *)
 val simp_rewrite_negative_lits = impl_simp_rewrite_lits false
+
+(* active units rewrite given clause *)
+fun forward_rewrite ctxt active unit_index given_clause =
+  let
+    val all_disabled = Config.get ctxt Jeha_Common.disable_all
+    fun cfg_rule rule = if not all_disabled orelse Config.get ctxt rule then true else false
+    val cfg_rp = cfg_rule Jeha_Common.rule_rewrite_positive_lits
+    val cfg_rn = cfg_rule Jeha_Common.rule_rewrite_negative_lits
+    val green_subterms_in_given_clause =
+      JClause.green_full_poss_of given_clause
+      |> map (`(JClause.subterm_at_full_pos given_clause))
+    fun candidate_units t : (JClause.T * JLit.lpos) list =
+      Term_Index.get_generalizations t unit_index
+      (* FIXME: replace this by `map`, once we delete from the index. *)
+      |> map_filter (fn (id, lp) =>
+        case find_first (curry op= id o JClause.id) active of
+          SOME active_clause => SOME (active_clause, lp)
+        | NONE => NONE)
+  in
+    green_subterms_in_given_clause
+    |> get_first (fn (t, fp) =>
+    candidate_units t
+    |> get_first (fn (c, lp) =>
+    merge_options
+      ( if cfg_rp then simp_rewrite_positive_lits ctxt (c, lp) (given_clause, fp) else NONE
+      , if cfg_rn then simp_rewrite_negative_lits ctxt (c, lp) (given_clause, fp) else NONE
+      )
+    ))
+  end
+
+(* given clause (a unit) rewrites active clauses *)
+fun backward_rewrite ctxt active green_index given_clause
+  : { simplifications : JClause.T list, archive : JClause.T list }
+=
+  if not (JClause.is_unit given_clause) then { simplifications = [], archive = [] } else
+  let
+    val all_disabled = Config.get ctxt Jeha_Common.disable_all
+    fun cfg_rule rule = if not all_disabled orelse Config.get ctxt rule then true else false
+    val cfg_rp = cfg_rule Jeha_Common.rule_rewrite_positive_lits
+    val cfg_rn = cfg_rule Jeha_Common.rule_rewrite_negative_lits
+    fun backward_rewrite_oriented lp acc =
+      let
+        val candidate_subterms_in_active_clauses =
+          Term_Index.get_instances
+            (JClause.subterm_at_full_pos given_clause ([], lp, 0))
+            green_index
+        fun go (id, fp) (acc as { simplifications = simplifications, archive = archive }) =
+          (* We don't update neither index nor active set, but instead check if the active clause is
+            in the archive (indicating it is has already been simplified and is about to be
+            deactivated after backward_rewrite returns).
+            Conceptually: up-to-date active set = old active set - archive. *)
+          (case find_first (curry op= id o JClause.id) archive of
+            SOME _ => acc (* skip *)
+          | NONE => (case find_first (curry op= id o JClause.id) active of
+              SOME active_clause => (case if cfg_rp then (simp_rewrite_positive_lits ctxt (given_clause, lp) (active_clause, fp)) else NONE of
+                  SOME result => { simplifications = result::simplifications, archive = active_clause::archive }
+                | NONE => (case if cfg_rn then (simp_rewrite_negative_lits ctxt (given_clause, lp) (active_clause, fp)) else NONE of
+                    SOME result => { simplifications = result::simplifications, archive = active_clause::archive }
+                  | NONE => acc))
+            | NONE => 
+              (* FIXME: error here, once we delete from the index. *)
+              (* error "clause was not deleted from index" *)
+              acc))
+      in
+        fold go candidate_subterms_in_active_clauses acc
+      end
+  in
+    { simplifications = [], archive = [] }
+    |> backward_rewrite_oriented JLit.Left 
+    |> backward_rewrite_oriented JLit.Right
+  end
 
 (* Negative simplify-reflect (NS) simplification (Schulz) *)
 fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, target_cp) =
@@ -1304,7 +1387,7 @@ fun add_new_clauses passive clauses = fold add_new_clause clauses passive
 fun select_given_clause cs = Passive_Set.min_elem cs |>> snd
 
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
-fun forward_simplify ctxt cheap active given_clause =
+fun forward_simplify ctxt cheap active unit_index green_index given_clause =
   let
     (* tracing *)
     val ctxt = ctxt |> Config.map Jeha_Common.trace (fn s =>
@@ -1313,17 +1396,13 @@ fun forward_simplify ctxt cheap active given_clause =
     val active_units = Seq.filter (fn c => JClause.length c = 1) (Seq.of_list active)
     val all_orientations : JClause.T Seq.seq -> (JClause.T * JLit.lpos) Seq.seq =
       fn cs => Jeha_Common.seq_cartesian_product cs (Seq.of_list [JLit.Left, JLit.Right])
-      
-    (* create index *)
-    val active_unit_trival_index: Jeha_Simplify.unit_index =
-      fn t => filter (fn c => JClause.length c = 1) active
-      
+
     (* rule configuration *)
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
     (* val _ = if all_disabled then writeln "ALL SIMPLIFICATIONS DISABLED!!!" else () *)
     fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K Seq.empty
-    
-    fun simp_fun_of_seq clause_seq unit_idx c =
+
+    fun simp_fun_of_seq clause_seq c =
       case Seq.pull (clause_seq c) of
         NONE => []
       | SOME (c, _) => [c]
@@ -1351,7 +1430,7 @@ fun forward_simplify ctxt cheap active given_clause =
             end)
 
         (* FIXME rewrites is a misnomer inherited from rn_rp_rewrites *)
-        val oc_rewrites : Jeha_Simplify.simp_fun = fn _ => fn c =>
+        val oc_rewrites : Jeha_Simplify.simp_fun = fn c =>
           if_cfg Jeha_Common.rule_simp_outer_claus (
           (Seq.map (pair c) (Seq.of_list (0 upto (length (JClause.literals c) - 1))))
           |> Seq.map (simp_bool_outer_claus ctxt)
@@ -1361,19 +1440,8 @@ fun forward_simplify ctxt cheap active given_clause =
           |> Jeha_Common.map_some fst
           |> the_default []
         (* successful rewrites of c (NONE filtered out) *)
-        val rn_rp_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
-          let
-            val rn_rp_rules = Seq.append
-              (if_cfg Jeha_Common.rule_rewrite_negative_lits (Seq.single simp_rewrite_negative_lits))
-              (if_cfg Jeha_Common.rule_rewrite_positive_lits (Seq.single simp_rewrite_positive_lits))
-            val green_targets : (JClause.T * JClause.full_pos) Seq.seq =
-              Seq.map (pair c) (Seq.of_list (JClause.green_full_poss_of c))
-            val unit_target_pairs =
-              Jeha_Common.seq_cartesian_product (all_orientations active_units) green_targets
-          in
-            Jeha_Common.seq_cartesian_product rn_rp_rules unit_target_pairs
-            |> Seq.map_filter (fn (rule, (unit, target)) => rule ctxt unit target)
-          end
+        val rn_rp_rewrites : JClause.T -> JClause.T list =
+          the_list o forward_rewrite ctxt active unit_index
         val ps_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           if_cfg Jeha_Common.rule_positive_simplify_reflect (
             Jeha_Common.seq_cartesian_product active_units
@@ -1403,15 +1471,19 @@ fun forward_simplify ctxt cheap active given_clause =
         [simp_fun_of_seq simp_bool_rewrites]
         @ [simp_fun_of_seq simp_false_elim_rewrites]
         @ [oc_rewrites]
+        @ [rn_rp_rewrites]
         @ map simp_fun_of_seq
-          ( [rn_rp_rewrites]
-          @ (if not cheap then [ps_rewrites] else [])
+          ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
           @ [dd_dr_rewrites] )
       end
     (* rewrite until not possible anymore *)
     val (simplifications, archive) =
-      Jeha_Simplify.simplify false ctxt simp_funs (fn _ => error "no index") given_clause
+      Jeha_Simplify.simplify
+        false
+        ctxt
+        simp_funs
+        given_clause
     fun trace_msg_clauses tracer msg clauses =
       tracer ctxt 
         (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
@@ -1438,26 +1510,24 @@ fun forward_simplify ctxt cheap active given_clause =
     { simplifications = flat (map discard_redundant simplifications), archive = archive }
   end
 
-fun map_filter_partition _ _ [] = ([], [], [])
-  | map_filter_partition ctxt f (x :: xs) =
-      let
-        (* archive includes in particular deleted actives! *)
-        val (archive, changed, unchanged) = map_filter_partition ctxt f xs
-      in
+fun map_filter_partition _ _ [] acc = acc
+    (* archive includes in particular deleted actives! *)
+  | map_filter_partition ctxt f (x :: xs) (archive, changed, unchanged) =
         case f x of
           (* NOTE: Discarding new_archive, since the active clause was deleted, and we don't need
           the simplification steps that led to deletion for proof reconstruction. *)
-          { simplifications = [], archive = new_archive }  => (x :: archive, changed, unchanged)
+          { simplifications = [], archive = new_archive } =>
+            map_filter_partition ctxt f xs (x :: archive, changed, unchanged)
         | { simplifications = [y], archive = new_archive } =>
             (* One simplification, check the id to see if it is actually the original clause and no
             simplification was performed. *)
             if JClause.id y <> JClause.id x
               (* id changed, clause was simplified *)
-              then (new_archive @ archive, y :: changed, unchanged)
+              then map_filter_partition ctxt f xs (new_archive @ archive, y :: changed, unchanged)
               (* clause was not simplified *)
               else
                 if null new_archive
-                  then (archive, changed, y :: unchanged)
+                  then map_filter_partition ctxt f xs (archive, changed, y :: unchanged)
                   (* error *)
                   else (
                     let
@@ -1476,17 +1546,52 @@ fun map_filter_partition _ _ [] = ([], [], [])
                           "intermediate simplificaitons"
                           new_archive
                     in
-                      error "map_filter_partition: clause id was unchanged, but intermediate simplifications returned."
+                      error ("map_filter_partition: clause id was unchanged, but intermediate " ^
+                        "simplifications returned.")
                     end)
-        | ys => error "map_filter_partition: multiple simplifications in backward simplification but there is no binary simplification with multiple conclusions!"
-      end
+        (* This cannot happen in backwards simplification, because all the unary simplification
+        rules (some of which have multiple conclusions) have been applied to active clauses already,
+        so the only simplifications that apply are binary one between the active clause and the
+        given clause. None of these yield multiple conclusions (this could change in the future). *)
+        | ys => error ("map_filter_partition: multiple simplifications in backward " ^
+            "simplification but there is no binary simplification with multiple conclusions!")
 
-fun backward_simplify ctxt active given_clause =
+(* Returns a 3-tuple of:
+* redundant actives and intermediate simplifications (for archival)
+* simplified active clauses (to be added to the passive set after cheap simplification)
+* unsimplifiable active clauses (to remain active)
+*)
+fun backward_simplify ctxt active unit_index green_index given_clause =
   let
-    val simp_ctxt = ctxt |> Config.map Jeha_Common.trace (fn s =>
-      s andalso Config.get ctxt Jeha_Common.trace_backward_simp)
+    val active_ids = map JClause.id active
+    val simp_ctxt =
+      ctxt
+      |> Config.map Jeha_Common.trace
+        (fn s => s andalso Config.get ctxt Jeha_Common.trace_backward_simp)
+    val archive = []
+    val simplifications = []
+    val { simplifications = rewrite_simplifications, archive = rewrite_archive } =
+      backward_rewrite simp_ctxt active green_index given_clause
+    val archive = rewrite_archive @ archive 
+    val simplifications = rewrite_simplifications @ simplifications
+    (* remove archived clauses from active set *)
+    (* FIXME: remove deactivated clauses from indices? *)
+    val active = filter_out (member (op= o apply2 JClause.id) rewrite_archive) active
+    (* Turn off (RN) (RP) because forward_simplify uses them. *)
+    val simp_ctxt =
+      simp_ctxt
+      |> Config.put Jeha_Common.rule_rewrite_positive_lits false
+      |> Config.put Jeha_Common.rule_rewrite_negative_lits false
+    val (archive, simplified_actives, unsimplifiable_actives) =
+      map_filter_partition
+        ctxt
+        (forward_simplify simp_ctxt false [given_clause] unit_index green_index)
+        active
+        (archive, simplifications, [])
+    val () = \<^assert>
+      (subset (op=) (active_ids, map JClause.id archive @ map JClause.id unsimplifiable_actives))
   in
-    map_filter_partition ctxt (forward_simplify simp_ctxt false [given_clause]) active
+    (archive, simplified_actives, unsimplifiable_actives)
   end
 
 fun infer_clauses ctxt active given_clause green_index =
@@ -1558,10 +1663,11 @@ type prover_state =
   , passive: Passive_Set.T
   , active: JClause.T list
   , green_index: (int * JClause.full_pos) Term_Index.T
+  , unit_index: (int * JLit.lpos) Term_Index.T
   , archive: JClause.T list
   }
 
-fun given_clause_step { context, countdown, passive, green_index, active, archive } =
+fun given_clause_step { context, countdown, passive, green_index, unit_index, active, archive } =
   if countdown <= 0 then error "TIMEOUT" else
   (Runtime.exn_trace (fn () =>
   let
@@ -1590,7 +1696,7 @@ fun given_clause_step { context, countdown, passive, green_index, active, archiv
   in
     (* simplify given_clause with active set *)
     (* FIXME TODO add simplification steps to archive *)
-    case forward_simplify forward_simp_ctxt false active given_clause of
+    case forward_simplify forward_simp_ctxt false active unit_index green_index given_clause of
       (* given_clause redundant w.r.t. active set, don't add intermediat simplifications to archive *)
       { simplifications = [], archive = _ } =>
         ( Next
@@ -1599,6 +1705,7 @@ fun given_clause_step { context, countdown, passive, green_index, active, archiv
           , passive = passive
           , active = active
           , green_index = green_index
+          , unit_index = unit_index
           , archive = archive } )
       (* select first simplification as given_clause *)
     | { simplifications = given_clause :: simplifications, archive = intermediate } =>
@@ -1611,6 +1718,7 @@ fun given_clause_step { context, countdown, passive, green_index, active, archiv
             , passive = passive
             , active = empty_clause :: active
             , green_index = green_index
+            , unit_index = unit_index
             , archive = intermediate @ archive } )
       | NONE =>
           let
@@ -1627,11 +1735,15 @@ fun given_clause_step { context, countdown, passive, green_index, active, archiv
               , simplified_active
               , unsimplifiable_active )
             =
-              backward_simplify context active given_clause
+              backward_simplify context active unit_index green_index given_clause
             val archive = redundant_active_and_intermediate_simplifications @ archive
             (* remove simplified and redundant actives, add given_clause to active set *)
             val active = given_clause :: unsimplifiable_active
             val green_index = Term_Index.insert_clause given_clause green_index
+            val unit_index =
+              if JClause.is_unit given_clause
+                then Term_Index.insert_unit given_clause unit_index
+                else unit_index
             (* perform all possible inferences between given_clause and active set NOTE: also
             computes inferences between given_clause and itself! *)
             val _ = Jeha_Common.trace_msg_inferred context (K "START INFERRING NEW CLAUSES")
@@ -1646,7 +1758,7 @@ fun given_clause_step { context, countdown, passive, green_index, active, archiv
                     let
                       val { simplifications = new_simplifications, archive = new_intermediate } =
                         (* cheap_simplify *)
-                        forward_simplify context true active inferred_clause
+                        forward_simplify context true active unit_index green_index inferred_clause
                     in
                       (* FIXME: only add new_intermediate if simplifications non-empty. OR: just
                       move this logic into forward_simplify *)
@@ -1674,6 +1786,7 @@ fun given_clause_step { context, countdown, passive, green_index, active, archiv
               , passive = passive
               , active = active
               , green_index = green_index
+              , unit_index = unit_index
               , archive = archive } )
           end
   end
@@ -1717,6 +1830,7 @@ fun try_saturate context prems =
           , passive = (init_passive_set clauses)
           , active = []
           , green_index = Term_Index.empty
+          , unit_index = Term_Index.empty
           , archive = [] })
   in
     (result, final_state)
