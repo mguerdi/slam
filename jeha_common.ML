@@ -225,6 +225,14 @@ val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<o
 val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)
 val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_equality_subsumption\<close> (K rule_default)
 
+(* FIXME: Here's the solution:
+\<top> \<noteq> \<top> \<mapsto> \<top> = \<bottom>
+\<top> \<noteq> \<bottom> \<mapsto> \<top> = \<top>
+are not valid simplifications (the conclusion is not smaller than the premise). Thus
+x \<noteq> \<top> \<mapsto> x = \<bottom>
+isn't either.
+TODO: Check all cases and fix, then remove this hack.
+*)
 val no_norm_neg_pred_if_both_truth_values = Attrib.setup_config_bool \<^binding>\<open>jeha_no_norm_neg_pred_if_both_truth_values\<close> (K false)
 
 
