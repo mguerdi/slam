@@ -12,8 +12,8 @@ signature JEHA_SUBSUMPTION =
 sig
   (* Extend environment to match second argument against third. *)
   val literal_subsumes : Context.generic -> int -> (JLit.T * JLit.T) -> Envir.env option
-  (* FIXME: This type signature is wrong but *)
-  val subsumed_alternatives : Context.generic -> int -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
+  val subsumed_alternatives :
+    Context.generic -> int -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
   (* Top level clause subsumption. *)
   val subsumes : Context.generic -> (JClause.T * JClause.T) -> bool
 end;
@@ -77,6 +77,21 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
          else try_alternatives_with_backtracking ctxt alternatives ls
       end
 
+val subsumption_ord = prod_ord int_ord int_ord
+
+fun subsumption_sort_key (l, r, sign) =
+  (if sign then 1 else ~1, size_of_term l + size_of_term r)
+
+fun subsumption_sort lits =
+  let
+    val keys = map subsumption_sort_key lits
+    val idxs = 0 upto (length lits - 1)
+    val idxs_sorted = sort (subsumption_ord o apply2 (nth keys)) idxs
+    val lits_sorted = map (nth lits) idxs_sorted
+  in
+    lits_sorted 
+  end
+
 fun subsumes ctxt (c, d) =
   let
     (* make vars of c (the pattern) distinct from those of d *)
@@ -84,8 +99,10 @@ fun subsumes ctxt (c, d) =
     (* to ensure generate variables are fresh w.r.t. both clauses *)
     val maxidx = JClause.maxidx_of2 (c, d)
     (* val _ = writeln ("check if " ^ JClause.pretty_clause (Context.the_proof ctxt) c ^ " subsumes " ^ JClause.pretty_clause (Context.the_proof ctxt) d) *)
+    val (c_lits, d_lits) = apply2 JClause.literals (c, d)
+    val (c_lits_sorted, d_lits_sorted) = apply2 subsumption_sort (c_lits, d_lits)
   in
-    impl_subsumes ctxt maxidx (apply2 JClause.literals (c, d))
+    impl_subsumes ctxt maxidx (c_lits_sorted, d_lits_sorted)
   end
 
 end;
