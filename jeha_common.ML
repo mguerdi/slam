@@ -106,6 +106,8 @@ sig
 
   val literal_selection_function : string Config.T
 
+  val unify_search_bound : int Config.T
+
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
 
   datatype ('a, 'b) either = Left of 'a | Right of 'b
@@ -237,6 +239,8 @@ val no_norm_neg_pred_if_both_truth_values = Attrib.setup_config_bool \<^binding>
 
 
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_none")
+
+val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)
 
 (** term parsing antiquotations **)
 
