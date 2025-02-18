@@ -387,12 +387,17 @@ struct
   In zipperposition does the first guard the second?
   Can we do ~1 if the symbol is not present?
   *)
+  
+  fun dummify_symbol_type (Const (name, _)) = Const (name, dummyT)
+    | dummify_symbol_type (Free (name, _)) = Free (name, dummyT)
+    | dummify_symbol_type t =
+        error
+          ("dummify_symbol_type: should only be called on Const and Free, got " ^ @{make_string} t)
 
   (* compare zipperposition FV_tree.ML:182 (symbols_depth) *)
   (* FIXME: Collect all features with one traversal: depth map, multiset,
   weight. OR: only compute features once they're needed? Unclear which one is
   better. *)
-  (* FIXME: WHAT ABOUT TYPES? *)
   fun add_term_symbols_with_depth combine t =
     let
       fun add_term depth (Abs(_,_,t)) = add_term depth t (* same depth *)
@@ -414,7 +419,7 @@ struct
         Idea: encode Bound i : T as Bound i $ dummy_pattern T *)
         | add_term _ (Bound _) = I
         (* Const and Free *)
-        | add_term depth t = Termtab.map_default (t, depth) (combine depth)
+        | add_term depth t = Termtab.map_default (dummify_symbol_type t, depth) (combine depth)
     in
       (* starting depth of 1 allows us to use 0 as default for symbols that
       aren't present *)
