@@ -19,7 +19,7 @@ sig
   (* outer clausification *)
   val outer_clausify : Proof.context -> bool -> term -> JClause.T -> JClause.T list
   val is_trivial : JClause.T -> bool
-  val is_redundant : Proof.context -> JClause.T list -> JClause.T -> bool
+  val is_equality_subsumed : Proof.context -> JClause.T list -> JClause.T -> bool
   val simp_bool_outer_claus : Proof.context -> JClause.T * JClause.cpos -> JClause.T list
   val simp_rewrite_positive_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val simp_rewrite_negative_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
@@ -43,10 +43,11 @@ sig
   val infer_exists_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val forward_simplify :
     Proof.context
-    -> bool
+    -> { forward: bool, cheap: bool }
     -> JClause.T list
     -> (int * JLit.lpos) Term_Index.T
     -> (int * JClause.full_pos) Term_Index.T
+    -> Subsumption_Index.index
     -> JClause.T
     -> { simplifications: JClause.T list, archive: JClause.T list }
   val backward_simplify :
@@ -54,6 +55,7 @@ sig
     -> JClause.T list
     -> (int * JLit.lpos) Term_Index.T
     -> (int * JClause.full_pos) Term_Index.T
+    -> Subsumption_Index.index
     -> JClause.T
     -> JClause.T list * JClause.T list * JClause.T list
   val infer_clauses :
@@ -71,6 +73,7 @@ sig
     , active: JClause.T list
     , green_index: (int * JClause.full_pos) Term_Index.T
     , unit_index: (int * JLit.lpos) Term_Index.T
+    , subsumption_index: Subsumption_Index.index
     , archive: JClause.T list
     }
   (* original exception + prover state before the exception was raised *)
@@ -531,10 +534,70 @@ fun is_trivial c =
   contains_syntactic_equation (JClause.literals c) orelse
   contains_syntactic_complementaries (JClause.literals c)
 
-fun is_redundant ctxt active c =
-  let fun trace_subsumed unit subsumed =
-    subsumed andalso
-      (Jeha_Common.trace_msg_simp_steps ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+(* FIXME: given_clause is a misnomer, as it could also (potentially) be a simplification result. But
+maybe we shouldn't check simplification results that we add to the passive set for subsumption.
+Pros: We don't re-do all the subsumption checks against unchanged actives, by the time the
+  simplified clause comes around again.
+Cons: We miss out on the subsumption check by the given_clause (which is a sister clause of the
+  simplified clause)
+There is a middle ground, where we put the clause back into the passive set, but also remember,
+against which clauses we checked for subsumption, and w.r.t. which clauses we already performed
+simplifications.
+*)
+fun is_forward_subsumed ctxt clause active subsumption_index : bool =
+  let
+    fun trace_subsumed unit subsumed =
+      subsumed andalso
+        (Jeha_Common.trace_msg_simp_steps ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+    val all_disabled = Config.get ctxt Jeha_Common.disable_all
+    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
+    
+    fun clause_subsumed_by active_clause_id =
+      (case find_first (curry op= active_clause_id o JClause.id) active of
+        SOME active_clause =>         
+          if_cfg
+            Jeha_Common.rule_clause_subsumption
+            (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (active_clause, clause)
+              |> trace_subsumed active_clause)
+      | NONE => false)
+
+    fun is_subsumed_folder active_id already_subsumed =
+      already_subsumed orelse clause_subsumed_by active_id
+
+    val subsumed =
+      Subsumption_Index.fold_subsuming clause is_subsumed_folder subsumption_index false
+  in
+    subsumed
+  end
+
+fun get_backward_subsumed ctxt given_clause active subsumption_index : int list =
+  let
+    fun trace_subsumed unit subsumed =
+      subsumed andalso
+        (Jeha_Common.trace_msg_simp_steps ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+    val all_disabled = Config.get ctxt Jeha_Common.disable_all
+    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
+
+    fun is_subsumed_by_given_clause active_clause_id =
+      (case find_first (curry op= active_clause_id o JClause.id) active of
+        SOME active_clause =>         
+          if_cfg
+            Jeha_Common.rule_clause_subsumption
+            (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (given_clause, active_clause)
+              |> trace_subsumed active_clause)
+      | NONE => false)
+      
+    val subsumed_candidates =
+      Subsumption_Index.fold_subsumed given_clause (curry op::) subsumption_index []
+    
+    val subsumed_actives = filter is_subsumed_by_given_clause subsumed_candidates
+  in
+    subsumed_actives
+  end
+
+(* FIXME: implement forwards and backwards variants using indexing *)
+fun is_equality_subsumed ctxt active c =
+  let
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
     (* val _ = if all_disabled then writeln "REDUNDANCY CHECKS DISABLED" else () *)
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
@@ -542,16 +605,10 @@ fun is_redundant ctxt active c =
       if_cfg
         Jeha_Common.rule_equality_subsumption
         (fn _ => equality_subsumes ctxt (active_clause, c))
-    fun clause_subsumed_by active_clause =
-      if_cfg
-        Jeha_Common.rule_clause_subsumption
-        (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (active_clause, c)
-          |> trace_subsumed active_clause)
   in
-  (* forward subsumption: does any active clause subsume c? *)
-  exists
-    (fn active_clause => equality_subsumed_by active_clause orelse clause_subsumed_by active_clause)
-    active
+    exists
+      (fn active_clause => equality_subsumed_by active_clause)
+      active
   end
 
 (** Clausification **)
@@ -1387,7 +1444,15 @@ fun add_new_clauses passive clauses = fold add_new_clause clauses passive
 fun select_given_clause cs = Passive_Set.min_elem cs |>> snd
 
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
-fun forward_simplify ctxt cheap active unit_index green_index given_clause =
+fun forward_simplify
+  ctxt
+  { forward = forward, cheap = cheap }
+  active
+  unit_index
+  green_index
+  subsumption_index
+  given_clause
+=
   let
     (* tracing *)
     val ctxt = ctxt |> Config.map Jeha_Common.trace (fn s =>
@@ -1471,7 +1536,7 @@ fun forward_simplify ctxt cheap active unit_index green_index given_clause =
         [simp_fun_of_seq simp_bool_rewrites]
         @ [simp_fun_of_seq simp_false_elim_rewrites]
         @ [oc_rewrites]
-        @ [rn_rp_rewrites]
+        @ (if forward then [rn_rp_rewrites] else [])
         @ map simp_fun_of_seq
           ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
@@ -1491,23 +1556,24 @@ fun forward_simplify ctxt cheap active unit_index green_index given_clause =
     val _ = trace_msg_clauses Jeha_Common.trace_msg_archive "intermediates " archive;
     (* val _ = Jeha_Common.trace_msg ctxt (K "START REDUNDANCY CHECK") *)
     (* FIXME: return NONE/SOME instead of lists? *)
-    fun discard_redundant clause =
-      if
-        (not cheap andalso is_redundant ctxt active clause)
-        (* FIXME: this is not specified in the E paper, so should we perform inferences with
-        tautologies?? *)
-        (* NOTE: triviality check *should* to be done during or after cheap simplification *)
-        orelse is_trivial clause
-          then
-            let
-              val _ = Jeha_Common.trace_msg ctxt (fn () => "discarding redundant or trivial clause")
-            in
-              []
-            end
-          else [clause]
+    fun discard_trivial clause =
+      (* FIXME: this is not specified in the E paper, so should we perform inferences with
+      tautologies?? *)
+      (* NOTE: triviality check *should* to be done during or after cheap simplification *)
+      if is_trivial clause orelse
+          (not cheap andalso forward andalso
+            is_forward_subsumed ctxt clause active subsumption_index) orelse
+          (not cheap andalso is_equality_subsumed ctxt active given_clause)
+        then
+          let
+            val _ = Jeha_Common.trace_msg ctxt (fn () => "discarding redundant or trivial clause")
+          in
+            []
+          end
+        else [clause]
   in
     (* FIXME: Rename "archive" to "intermediate" or "to_archive". *)
-    { simplifications = flat (map discard_redundant simplifications), archive = archive }
+    { simplifications = flat (map discard_trivial simplifications), archive = archive }
   end
 
 fun map_filter_partition _ _ [] acc = acc
@@ -1561,7 +1627,7 @@ fun map_filter_partition _ _ [] acc = acc
 * simplified active clauses (to be added to the passive set after cheap simplification)
 * unsimplifiable active clauses (to remain active)
 *)
-fun backward_simplify ctxt active unit_index green_index given_clause =
+fun backward_simplify ctxt active unit_index green_index subsumption_index given_clause =
   let
     val active_ids = map JClause.id active
     val simp_ctxt =
@@ -1577,17 +1643,26 @@ fun backward_simplify ctxt active unit_index green_index given_clause =
     (* remove archived clauses from active set *)
     (* FIXME: remove deactivated clauses from indices? *)
     val active = filter_out (member (op= o apply2 JClause.id) rewrite_archive) active
-    (* Turn off (RN) (RP) because forward_simplify uses them. *)
-    val simp_ctxt =
-      simp_ctxt
-      |> Config.put Jeha_Common.rule_rewrite_positive_lits false
-      |> Config.put Jeha_Common.rule_rewrite_negative_lits false
     val (archive, simplified_actives, unsimplifiable_actives) =
       map_filter_partition
         ctxt
-        (forward_simplify simp_ctxt false [given_clause] unit_index green_index)
+        (forward_simplify
+          simp_ctxt
+          { forward = false, cheap = false }
+          [given_clause]
+          unit_index
+          green_index
+          subsumption_index)
         active
         (archive, simplifications, [])
+    (* FIXME: at this point the active set and its indices are in an unusual state *)
+    val subsumed_unsimplifiable_active_ids =
+      get_backward_subsumed ctxt given_clause unsimplifiable_actives subsumption_index
+    val (subsumed_unsimplifiable_actives, unsimplifiable_actives) =
+      List.partition
+        (member (op=) subsumed_unsimplifiable_active_ids o JClause.id)
+        unsimplifiable_actives
+    val archive = subsumed_unsimplifiable_actives @ archive
     val () = \<^assert>
       (subset (op=) (active_ids, map JClause.id archive @ map JClause.id unsimplifiable_actives))
   in
@@ -1664,10 +1739,13 @@ type prover_state =
   , active: JClause.T list
   , green_index: (int * JClause.full_pos) Term_Index.T
   , unit_index: (int * JLit.lpos) Term_Index.T
+  , subsumption_index: Subsumption_Index.index
   , archive: JClause.T list
   }
 
-fun given_clause_step { context, countdown, passive, green_index, unit_index, active, archive } =
+fun given_clause_step
+  { context, countdown, passive, green_index, unit_index, active, subsumption_index, archive }
+=
   if countdown <= 0 then error "TIMEOUT" else
   (Runtime.exn_trace (fn () =>
   let
@@ -1696,7 +1774,16 @@ fun given_clause_step { context, countdown, passive, green_index, unit_index, ac
   in
     (* simplify given_clause with active set *)
     (* FIXME TODO add simplification steps to archive *)
-    case forward_simplify forward_simp_ctxt false active unit_index green_index given_clause of
+    case
+      forward_simplify
+        forward_simp_ctxt
+        { forward = true, cheap = false }
+        active
+        unit_index
+        green_index
+        subsumption_index
+        given_clause
+    of
       (* given_clause redundant w.r.t. active set, don't add intermediat simplifications to archive *)
       { simplifications = [], archive = _ } =>
         ( Next
@@ -1706,6 +1793,7 @@ fun given_clause_step { context, countdown, passive, green_index, unit_index, ac
           , active = active
           , green_index = green_index
           , unit_index = unit_index
+          , subsumption_index = subsumption_index
           , archive = archive } )
       (* select first simplification as given_clause *)
     | { simplifications = given_clause :: simplifications, archive = intermediate } =>
@@ -1719,6 +1807,7 @@ fun given_clause_step { context, countdown, passive, green_index, unit_index, ac
             , active = empty_clause :: active
             , green_index = green_index
             , unit_index = unit_index
+            , subsumption_index = subsumption_index
             , archive = intermediate @ archive } )
       | NONE =>
           let
@@ -1735,7 +1824,7 @@ fun given_clause_step { context, countdown, passive, green_index, unit_index, ac
               , simplified_active
               , unsimplifiable_active )
             =
-              backward_simplify context active unit_index green_index given_clause
+              backward_simplify context active unit_index green_index subsumption_index given_clause
             val archive = redundant_active_and_intermediate_simplifications @ archive
             (* remove simplified and redundant actives, add given_clause to active set *)
             val active = given_clause :: unsimplifiable_active
@@ -1744,6 +1833,8 @@ fun given_clause_step { context, countdown, passive, green_index, unit_index, ac
               if JClause.is_unit given_clause
                 then Term_Index.insert_unit given_clause unit_index
                 else unit_index
+            val subsumption_index =
+              Subsumption_Index.insert_clause given_clause subsumption_index
             (* perform all possible inferences between given_clause and active set NOTE: also
             computes inferences between given_clause and itself! *)
             val _ = Jeha_Common.trace_msg_inferred context (K "START INFERRING NEW CLAUSES")
@@ -1758,7 +1849,14 @@ fun given_clause_step { context, countdown, passive, green_index, unit_index, ac
                     let
                       val { simplifications = new_simplifications, archive = new_intermediate } =
                         (* cheap_simplify *)
-                        forward_simplify context true active unit_index green_index inferred_clause
+                        forward_simplify
+                          context
+                          { forward = true, cheap = true }
+                          active
+                          unit_index
+                          green_index
+                          subsumption_index
+                          inferred_clause
                     in
                       (* FIXME: only add new_intermediate if simplifications non-empty. OR: just
                       move this logic into forward_simplify *)
@@ -1787,6 +1885,7 @@ fun given_clause_step { context, countdown, passive, green_index, unit_index, ac
               , active = active
               , green_index = green_index
               , unit_index = unit_index
+              , subsumption_index = subsumption_index
               , archive = archive } )
           end
   end
@@ -1831,6 +1930,8 @@ fun try_saturate context prems =
           , active = []
           , green_index = Term_Index.empty
           , unit_index = Term_Index.empty
+          , subsumption_index =
+              Subsumption_Index.make_index (Subsumption_Index.collect_symbols clauses)
           , archive = [] })
   in
     (result, final_state)

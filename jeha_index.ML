@@ -200,7 +200,7 @@ struct
         |> FeatureTable.map_default (k, empty) (insert (ks, value))
         |> Node
     | insert _ _ = error "key too long"
-  
+
   (* fold but need to skip branches *)
   (* always look at head of key, decide which branches to descend into, chop head off on recursive calls *)
   (* fold : key -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b *)
@@ -217,6 +217,7 @@ struct
           acc
     | fold _ [] _ (Node _) _ = error "fold: key too short"
     | fold _ (_::_) _ (Leaf _) _ = error "fold: key too long"
+
 end;
 
 (* Index for green subterms, etc. *)
@@ -315,8 +316,11 @@ sig
   val num_negative : feature_fun
   val max_depth_in_positive : JClause.T -> int Termtab.table
   val max_depth_in_negative : JClause.T -> int Termtab.table
-  val fold_subsumed : int list -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
-  val fold_subsuming : int list -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
+  val fold_subsumed : JClause.T -> (int -> 'b -> 'b) -> index -> 'b -> 'b
+  val fold_subsuming : JClause.T -> (int -> 'b -> 'b) -> index -> 'b -> 'b
+  val make_index : term list -> index
+  val collect_symbols : JClause.T list -> term list
+  val insert_clause : JClause.T -> index -> index
 end;
 
 (* FIXME: aggregate features (i.e. all depths) into sets, maps like zipperposition's FV_Tree.ml *)
@@ -357,8 +361,8 @@ struct
   type feature_fun = JClause.T -> FeatureTable.key
 
   type index =
-    { compute_features : feature_fun list,
-      trie : (int list) Subsumption_Index_Trie.T }
+    { compute_features : JClause.T -> int list,
+      trie : int Subsumption_Index_Trie.T }
   
   (* features *)
   (* independent of signature *)
@@ -385,6 +389,7 @@ struct
   (* FIXME: Collect all features with one traversal: depth map, multiset,
   weight. OR: only compute features once they're needed? Unclear which one is
   better. *)
+  (* FIXME: WHAT ABOUT TYPES? *)
   fun add_term_symbols_with_depth combine t =
     let
       fun add_term depth (Abs(_,_,t)) = add_term depth t (* same depth *)
@@ -449,33 +454,62 @@ struct
       |> cons (num_positive clause)
       |> cons (num_negative clause)
     end
+  
+  fun collect_symbols (clauses : JClause.T list) : term list =
+    let
+      val default_symbols =
+        [@{term "True"}, @{term "False"}, @{term "HOL.eq"}, @{term "HOL.All"}, @{term "HOL.Ex"}]
+      val add_term_symbols = add_term_symbols_with_depth (K (K 0))
+      fun add_lit_symbols (s, t, _) = add_term_symbols s #> add_term_symbols t
+      val add_clause = JClause.literals #> Basics.fold add_lit_symbols
+      val symbols = Termtab.empty |> Basics.fold add_clause clauses |> Termtab.keys 
+    in
+      default_symbols @ symbols 
+    end
 
   (* symbols should be a list of Const _ and Free _ *)
-  fun make_index symbols =
+  fun make_index (symbols : term list) : index =
     { compute_features = make_features_fun symbols,
       trie = Subsumption_Index_Trie.empty }
 
   (* FIXME: get rid of the key terminology in favour of lists. Try to hide
   tables a bit. *)
 
-  fun fold_subsumed [] f (Leaf ts) = Basics.fold f ts
-    | fold_subsumed (x::xs) f (Node branches) =
+  (* FIXME: allow f to say that it wants to stop iterating, and actually stop (this is unrelated to
+  the remark below, which is about making use of the transitivity of the feature comparison) *)
+
+  fun impl_fold_subsumed [] f (Leaf ts) = Basics.fold f ts
+    | impl_fold_subsumed (x::xs) f (Node branches) =
         (* we need to check all branches whose feature is smaller or equal to x *)
         (* fold starts from the smallest element, compare min *)
         FeatureTable.fold
           (fn (y, branch) =>
             (* FIXME: use stop bool to not have to check y > x anymore? But this
             works best in conjunction with binary search. *)
-            if y > x then I else fold_subsumed xs f branch)
+            if y > x then I else impl_fold_subsumed xs f branch)
           branches
   
-  fun fold_subsuming [] f (Leaf ts) = Basics.fold f ts
-    | fold_subsuming (x::xs) f (Node branches) =
+  fun fold_subsumed clause f { compute_features, trie } =
+    impl_fold_subsumed (compute_features clause) f trie
+  
+  fun impl_fold_subsuming [] f (Leaf ts) = Basics.fold f ts
+    | impl_fold_subsuming (x::xs) f (Node branches) =
         FeatureTable.fold
           (fn (y, branch) =>
-            if y < x then I else fold_subsuming xs f branch)
+            if y < x then I else impl_fold_subsuming xs f branch)
           branches
 
+  fun fold_subsuming clause f { compute_features, trie } =
+    impl_fold_subsuming (compute_features clause) f trie
+  
+  fun insert_clause clause { compute_features, trie } : index =
+    let
+      val features = compute_features clause
+      val trie = Subsumption_Index_Trie.insert (features, (JClause.id clause)) trie
+    in
+      { compute_features = compute_features, trie = trie }
+    end
+  
 end;
 
 (*
