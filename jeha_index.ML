@@ -321,6 +321,9 @@ sig
   val make_index : term list -> index
   val collect_symbols : JClause.T list -> term list
   val insert_clause : JClause.T -> index -> index
+  (* debugging *)
+  val add_term_symbols_with_depth :
+    (int -> int -> int) -> term -> int Termtab.table -> int Termtab.table
 end;
 
 (* FIXME: aggregate features (i.e. all depths) into sets, maps like zipperposition's FV_Tree.ml *)
@@ -411,7 +414,7 @@ struct
         Idea: encode Bound i : T as Bound i $ dummy_pattern T *)
         | add_term _ (Bound _) = I
         (* Const and Free *)
-        | add_term depth t = Termtab.map_entry t (combine depth)
+        | add_term depth t = Termtab.map_default (t, depth) (combine depth)
     in
       (* starting depth of 1 allows us to use 0 as default for symbols that
       aren't present *)
@@ -462,7 +465,7 @@ struct
       val add_term_symbols = add_term_symbols_with_depth (K (K 0))
       fun add_lit_symbols (s, t, _) = add_term_symbols s #> add_term_symbols t
       val add_clause = JClause.literals #> Basics.fold add_lit_symbols
-      val symbols = Termtab.empty |> Basics.fold add_clause clauses |> Termtab.keys 
+      val symbols = Termtab.empty |> Basics.fold add_clause clauses |> Termtab.keys
     in
       default_symbols @ symbols 
     end

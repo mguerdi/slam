@@ -1920,6 +1920,10 @@ fun try_saturate context prems =
       "clauses: "
       ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of context) (map JClause.term_of clauses))
     val _ = Jeha_Common.trace_msg context (fn () => "\n>>> start of given clause procedure <<<")
+    val symbols = Subsumption_Index.collect_symbols clauses
+    val () = Jeha_Common.trace_msg context (fn () =>
+      "Symbols for feature vector index:" ^ "\n" ^
+      Jeha_Common.pretty_terms (Jeha_Common.verbose_of context) symbols)
     val (result, final_state) =
       Runtime.exn_trace (fn () =>
         given_clause_loop
@@ -1931,7 +1935,7 @@ fun try_saturate context prems =
           , green_index = Term_Index.empty
           , unit_index = Term_Index.empty
           , subsumption_index =
-              Subsumption_Index.make_index (Subsumption_Index.collect_symbols clauses)
+              Subsumption_Index.make_index symbols
           , archive = [] })
   in
     (result, final_state)
