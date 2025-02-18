@@ -458,16 +458,27 @@ struct
       |> cons (num_negative clause)
     end
   
+  (* The signature of a clause set *)
   fun collect_symbols (clauses : JClause.T list) : term list =
     let
       val default_symbols =
-        [@{term "True"}, @{term "False"}, @{term "HOL.eq"}, @{term "HOL.All"}, @{term "HOL.Ex"}]
+        [ @{term "True"}
+        , @{term "False"}
+        , @{term "HOL.eq"}
+        , @{term "HOL.All"}
+        , @{term "HOL.Ex"}
+        , @{term "HOL.Not"}
+        ]
       val add_term_symbols = add_term_symbols_with_depth (K (K 0))
       fun add_lit_symbols (s, t, _) = add_term_symbols s #> add_term_symbols t
       val add_clause = JClause.literals #> Basics.fold add_lit_symbols
-      val symbols = Termtab.empty |> Basics.fold add_clause clauses |> Termtab.keys
+      val symbols =
+        Termtab.empty
+        |> Basics.fold add_term_symbols default_symbols
+        |> Basics.fold add_clause clauses
+        |> Termtab.keys
     in
-      default_symbols @ symbols 
+      symbols
     end
 
   (* symbols should be a list of Const _ and Free _ *)
