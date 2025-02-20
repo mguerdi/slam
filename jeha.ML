@@ -546,19 +546,21 @@ simplifications.
 *)
 fun is_forward_subsumed ctxt clause active subsumption_index : bool =
   let
-    fun trace_subsumed unit subsumed =
-      subsumed andalso
-        (Jeha_Common.trace_msg_simp_steps ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+    fun trace_subsumer subsuming_clause subsumed =
+      (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
+        (if subsumed then "" else "not ") ^ "subsumed by " ^
+        JClause.pretty_clause ctxt subsuming_clause);
+      subsumed)
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
     
     fun clause_subsumed_by active_clause_id =
       (case find_first (curry op= active_clause_id o JClause.id) active of
-        SOME active_clause =>         
+        SOME active_clause =>
           if_cfg
             Jeha_Common.rule_clause_subsumption
             (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (active_clause, clause)
-              |> trace_subsumed active_clause)
+              |> trace_subsumer active_clause)
       | NONE => false)
 
     fun is_subsumed_folder active_id already_subsumed =
@@ -572,9 +574,11 @@ fun is_forward_subsumed ctxt clause active subsumption_index : bool =
 
 fun get_backward_subsumed ctxt given_clause active subsumption_index : int list =
   let
-    fun trace_subsumed unit subsumed =
-      subsumed andalso
-        (Jeha_Common.trace_msg_simp_steps ctxt (fn () => "subsumed by " ^ JClause.pretty_clause ctxt unit); true)
+    fun trace_subsumer subsuming_clause subsumed =
+      (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
+        (if subsumed then "" else "not ") ^ "subsumed by " ^
+        JClause.pretty_clause ctxt subsuming_clause);
+      subsumed)
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
 
@@ -584,7 +588,7 @@ fun get_backward_subsumed ctxt given_clause active subsumption_index : int list 
           if_cfg
             Jeha_Common.rule_clause_subsumption
             (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (given_clause, active_clause)
-              |> trace_subsumed active_clause)
+              |> trace_subsumer given_clause)
       | NONE => false)
       
     val subsumed_candidates =
