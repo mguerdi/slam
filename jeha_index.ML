@@ -177,8 +177,6 @@ end;
 functor Jeha_Trie(structure FeatureTable : TABLE) : JEHA_TRIE =
 struct
   structure FeatureTable = FeatureTable;
-  (* FIXME: DELETE open Jeha_Index *)
-  (* FIXME: DELETE type feature = feature *)
   type key = FeatureTable.key list
 
   (* A Trie storing lists of 'a. *)
@@ -277,7 +275,7 @@ struct
     in
       insert (key, x) index
     end
-  
+
   fun insert_clause c index : (int * JClause.full_pos) T =
     let
       val id = JClause.id c
@@ -498,29 +496,33 @@ struct
   the remark below, which is about making use of the transitivity of the feature comparison) *)
 
   fun impl_fold_subsumed [] f (Leaf ts) = Basics.fold f ts
-    | impl_fold_subsumed (x::xs) f (Node branches) =
-        (* we need to check all branches whose feature is smaller or equal to x *)
+    | impl_fold_subsumed (subsuming_feature::xs) f (Node branches) =
+        (* we need to check all branches whose feature is greater or equal to x *)
         (* fold starts from the smallest element, compare min *)
         FeatureTable.fold
-          (fn (y, branch) =>
+          (fn (subsumed_feature, branch) =>
             (* FIXME: use stop bool to not have to check y > x anymore? But this
             works best in conjunction with binary search. *)
-            if y > x then I else impl_fold_subsumed xs f branch)
+            if subsuming_feature > subsumed_feature
+              then I (* skip *)
+              else impl_fold_subsumed xs f branch)
           branches
-  
+
   fun fold_subsumed clause f { compute_features, trie } =
     impl_fold_subsumed (compute_features clause) f trie
-  
+
   fun impl_fold_subsuming [] f (Leaf ts) = Basics.fold f ts
-    | impl_fold_subsuming (x::xs) f (Node branches) =
+    | impl_fold_subsuming (subsumed_feature::subsumed_features) f (Node branches) =
         FeatureTable.fold
-          (fn (y, branch) =>
-            if y < x then I else impl_fold_subsuming xs f branch)
+          (fn (subsuming_feature, branch) =>
+            if subsuming_feature > subsumed_feature
+              then I (* skip *)
+              else impl_fold_subsuming subsumed_features f branch)
           branches
 
   fun fold_subsuming clause f { compute_features, trie } =
     impl_fold_subsuming (compute_features clause) f trie
-  
+
   fun insert_clause clause { compute_features, trie } : index =
     let
       val features = compute_features clause
