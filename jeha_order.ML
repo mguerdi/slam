@@ -1,13 +1,39 @@
+infix 6 +++
+infix 6 ---
+
+signature JEHA_WEIGHT =
+sig
+  type weight = int * int
+  val +++ : weight * weight -> weight 
+  val --- : weight * weight -> weight
+end;
+
+structure Jeha_Weight : JEHA_WEIGHT =
+struct
+
+(* (omega, one) represents the number: omega * \<omega> + one * 1 *)
+type weight = int * int;
+
+fun plus_weight (omega, one) (omega', one') = (omega + omega', one + one')
+fun (w +++ w') = plus_weight w w'
+fun (w --- (omega', one')) = plus_weight w (~omega', ~one')
+
+end;
+
 (* Transfinite Higher Order Knuth Bendix Ordering *)
 
 signature JEHA_ORDER =
 sig
+  include JEHA_WEIGHT
   type partial_order = order option
-  type weight = int * int
-  val plus_weight : weight -> weight -> weight
   val weight_ord : weight ord
+  val zero_weight : weight
   val var_weight : weight
   val const_weight : weight
+  val weight_of_type_constructor : string -> weight
+  val weight_of_tfree : string -> weight
+  val weight_of_tfree_or_type_constructor : typ -> weight
+  val weight_of_const : string -> weight
   val quantifier_weight : bool -> weight
   val bound_weight : weight
   val fo_lambda_weight : weight
@@ -33,25 +59,24 @@ end;
 structure Jeha_Order: JEHA_ORDER =
 struct
 
-infix 6 +++
-infix 6 ---
+open Jeha_Weight
 
 type partial_order = order option
 
-(* (omega, one) represents the number: omega * \<omega> + one * 1 *)
-type weight = int * int;
-
 val zero_weight = (0, 0)
-
-fun plus_weight (omega, one) (omega', one') = (omega + omega', one + one')
-fun (w +++ w') = plus_weight w w'
-fun (w --- (omega', one')) = plus_weight w (~omega', ~one')
 
 (* lexicographic comparison *)
 val weight_ord = prod_ord int_ord int_ord
 
 val var_weight = (0, 1)
 val const_weight = (0, 1)
+
+fun weight_of_type_constructor _ = const_weight
+fun weight_of_tfree _ = const_weight
+fun weight_of_tfree_or_type_constructor (TFree (name, _)) = weight_of_tfree name
+  | weight_of_tfree_or_type_constructor (Type (name, _)) = weight_of_type_constructor name
+fun weight_of_const _ = const_weight
+
 (* below lambdas there are only \<forall>' and \<exists>' *)
 fun quantifier_weight below_lam = if below_lam then const_weight else (1, 0)
 val bound_weight = const_weight

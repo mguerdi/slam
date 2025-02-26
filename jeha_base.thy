@@ -7,6 +7,7 @@ ML_file \<open>clause_id.ML\<close>
 ML_file \<open>jterm.ML\<close>
 ML_file \<open>jeha_order_reference.ML\<close>
 ML_file \<open>jeha_order.ML\<close>
+ML_file \<open>jeha_kbo.ML\<close>
 ML_file \<open>jlit.ML\<close>
 ML_file \<open>jclause_pos.ML\<close>
 ML_file \<open>jeha_log.ML\<close>
