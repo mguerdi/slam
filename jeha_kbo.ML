@@ -1,8 +1,10 @@
 signature WEIGHT_BALANCE =
 sig
   type T
+  val empty : T
   val weight_of : T -> Jeha_Order.weight
   val add_weight : bool -> Jeha_Order.weight -> T -> T 
+  val swap : T -> T
 end;
 
 structure Weight_Balance : WEIGHT_BALANCE =
@@ -12,8 +14,9 @@ open Jeha_Weight
 
 type T = { weight: weight, swapped: bool } 
 
-fun weight_of { weight = weight, swapped = swapped } =
-  if swapped then Jeha_Order.zero_weight --- weight else weight
+val empty = { weight = Jeha_Order.zero_weight, swapped = false }
+
+fun weight_of { weight = weight, swapped = swapped } = (swapped ? Jeha_Weight.negate) weight
 
 fun add_weight increment added_weight { weight = weight, swapped = swapped } =
   let
@@ -23,6 +26,8 @@ fun add_weight increment added_weight { weight = weight, swapped = swapped } =
       then { weight = weight +++ added_weight, swapped = swapped }
       else { weight = weight --- added_weight, swapped = swapped }
   end
+
+fun swap { weight = weight, swapped = swapped } = { weight = weight, swapped = not swapped }
 
 end;
 
@@ -141,13 +146,19 @@ sig
     { var : Term_Balance.T
     , var_below_lam : Term_Balance.T
     , tvar : Typ_Balance.T
-    , weight : Jeha_Order.weight
+    , weight : Weight_Balance.T
     }
+
+  val weight : kbo_data -> Jeha_Weight.weight
+
+  val empty : kbo_data
+  
+  val swap : kbo_data -> kbo_data
 
   val map_var : (Term_Balance.T -> Term_Balance.T) -> kbo_data -> kbo_data
   val map_var_below_lam : (Term_Balance.T -> Term_Balance.T) -> kbo_data -> kbo_data
   val map_tvar : (Typ_Balance.T -> Typ_Balance.T) -> kbo_data -> kbo_data
-  val map_weight : (Jeha_Order.weight -> Jeha_Order.weight) -> kbo_data -> kbo_data
+  val map_weight : (Weight_Balance.T -> Weight_Balance.T) -> kbo_data -> kbo_data
 
   val add_weight : bool -> Jeha_Order.weight -> kbo_data -> kbo_data
 
@@ -160,10 +171,8 @@ sig
   val T_tckbo : kbo_data -> typ -> typ -> kbo_data * Jeha_Order.partial_order
   val T_tckbo' :
     kbo_data
-    -> string
-    -> string
-    -> typ list
-    -> typ list
+    -> typ
+    -> typ
     -> kbo_data * Jeha_Order.partial_order
   val T_tckbolex : kbo_data -> typ list -> typ list -> kbo_data * Jeha_Order.partial_order
 
@@ -240,7 +249,23 @@ type kbo_data =
   { var : Term_Balance.T
   , var_below_lam : Term_Balance.T
   , tvar : Typ_Balance.T
-  , weight : Jeha_Order.weight
+  , weight : Weight_Balance.T 
+  }
+
+val weight = Weight_Balance.weight_of o #weight
+
+val empty =
+  { var = Term_Balance.empty
+  , var_below_lam = Term_Balance.empty
+  , tvar = Typ_Balance.empty
+  , weight = Weight_Balance.empty
+  }
+
+fun swap { var = var, var_below_lam = var_below_lam, tvar = tvar, weight = weight } =
+  { var = Term_Balance.swap var
+  , var_below_lam = Term_Balance.swap var_below_lam
+  , tvar = Typ_Balance.swap tvar
+  , weight = Weight_Balance.swap weight
   }
 
 fun map_var f { var = var, var_below_lam = var_below_lam, tvar = tvar, weight = weight } =
@@ -256,8 +281,7 @@ fun map_weight f { var = var, var_below_lam = var_below_lam, tvar = tvar, weight
   { var = var, var_below_lam = var_below_lam, tvar = tvar, weight = f weight }
 
 fun add_weight increment weight =
-  map_weight (fn current_weight =>
-    if increment then current_weight +++ weight else current_weight --- weight)
+  map_weight (Weight_Balance.add_weight increment weight)
 
 fun T_mfyVWBc kbo_data (x as (TVar (x_name, x_sort))) (y_name, y_sort) increment =
       ( kbo_data
@@ -325,7 +349,7 @@ fun T_tckbo kbo_data (x as (TVar x_data)) (y as (TVar y_data)) : kbo_data * Jeha
         val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
         val LESS_or_NONE = if Typ_Balance.no_pos (#tvar kbo_data) then SOME LESS else NONE
         val res =
-          (case Jeha_Order.weight_ord (#weight kbo_data, Jeha_Order.zero_weight) of
+          (case Jeha_Order.weight_ord (weight kbo_data, Jeha_Order.zero_weight) of
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
@@ -352,7 +376,7 @@ fun T_tckbo kbo_data (x as (TVar x_data)) (y as (TVar y_data)) : kbo_data * Jeha
         val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
         val LESS_or_NONE = if Typ_Balance.no_pos (#tvar kbo_data) then SOME LESS else NONE
         val res =
-          (case Jeha_Order.weight_ord (#weight kbo_data, Jeha_Order.zero_weight) of
+          (case Jeha_Order.weight_ord (weight kbo_data, Jeha_Order.zero_weight) of
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
@@ -362,16 +386,16 @@ fun T_tckbo kbo_data (x as (TVar x_data)) (y as (TVar y_data)) : kbo_data * Jeha
         (kbo_data, res)
       end
 
-  | T_tckbo kbo_data (Type (f, ss)) (Type (g, ts)) =
+  | T_tckbo kbo_data (s as (Type (f, ss))) (t as (Type (g, ts))) =
       let
         val (kbo_data, lex) =
-          T_tckbo' kbo_data f g ss ts
+          T_tckbo' kbo_data s t 
           |>> add_weight true (Jeha_Order.weight_of_type_constructor f)
           |>> add_weight false (Jeha_Order.weight_of_type_constructor g)
         val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
         val LESS_or_NONE = if Typ_Balance.no_pos (#tvar kbo_data) then SOME LESS else NONE
         val res =
-          (case Jeha_Order.weight_ord (#weight kbo_data, Jeha_Order.zero_weight) of
+          (case Jeha_Order.weight_ord (weight kbo_data, Jeha_Order.zero_weight) of
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
@@ -389,42 +413,38 @@ fun T_tckbo kbo_data (x as (TVar x_data)) (y as (TVar y_data)) : kbo_data * Jeha
         (kbo_data, res) 
       end
 
-  (*
-  | T_tckbo kbo_data (Type (f, ts)) (TFree b) = error "FIXME: reuse previous case"
-  | T_tckbo kbo_data (TFree a) (TVar y) = error "FIXME: reuse previous case"
-  | T_tckbo kbo_data (Type (f, ts)) (TVar y) = error "FIXME: reuse previous case"
-  *)
-
   (* TFree - TVar, Type - TVar, Type - TFree *) 
-  | T_tckbo kbo_data s t = error "T_tckbo: reuse previous cases, see thoughts below"
+  | T_tckbo kbo_data s t =
+      let
+        val (kbo_data, res) = T_tckbo (swap kbo_data) t s
+      in
+        (swap kbo_data, Jeha_Common.map_some rev_order res)
+      end
 
-  (* 
-  | T_tckbo swapped kbo_data s t =
-      T_tckbo (not swapped) kbo_data t s
-      |>> Jeha_Common.map_some rev_order
-      |> error "T_tckbo: reuse previous cases, see thoughts below"
-  *)
+and T_tckbo' kbo_data (Type (f, ss)) (Type (g, ts)) =
+  if f = g
+    then T_tckbolex kbo_data ss ts
+    else
+      ( kbo_data
+        |> (fn d => T_mfyVWB_tl d ss true)
+        |> (fn d => T_mfyVWB_tl d ts false)
+      , NONE
+      )
 
-    (* swap arguments, swap resulting order *)
-    (* Do we also need to swap how s and t affect vb and wb. Possibly relevant: *)
-    (* Invariant I: At each invocation of tckbo and tckbolex both functions are called with vb = 0
-    and wb = 0 *)
-    (* But what matters, are the vb and wb that tckbo and tckbolex return. Those are not 0. *)
-
-    (* Precise: The following is a symmetry: *)
-    (* swapping the arguments negating vb and wb, flipping the result *)
-    (* Instead of negating vb and wb, we introduce an additional argument `swapped`, which
-    determines wheter vb, wb get added to or subtracted from. *)
-    (* Issue: At certain points, we look at vb and wb. Do we need to take `swapped` into account? *)
-
-    (* Idea: Equip Balance.T with a `swapped` attribute, then swapping becomes very efficient. *)
-
-    (* The alternative is copy-pasting, search and replacing *)
-
-and T_tckbo' kbo_data f g ss ts = error "T_tckbo' unimplemented"
-
-and T_tckbolex kbo_data [] [] = error "T_tckbolex unimplemented"
-  | T_tckbolex kbo_data (s :: ss) (t :: ts) = error "T_tckbolex unimplemented"
+and T_tckbolex kbo_data [] [] = (kbo_data, SOME EQUAL)
+  | T_tckbolex kbo_data (s :: ss) (t :: ts) =
+      let
+        val (kbo_data, res) = T_tckbo kbo_data s t 
+      in
+        if res = SOME EQUAL
+          then T_tckbolex kbo_data ss ts
+          else
+            ( kbo_data
+              |> (fn d => T_mfyVWB_tl d ss true)
+              |> (fn d => T_mfyVWB_tl d ts false)
+            , res
+            )
+      end
 
 fun tckbo kbo_data f g = error "tckbo unimplemented"
 
