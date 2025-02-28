@@ -50,6 +50,7 @@ session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
     unification
     normalization
     preprocessing
+    fast_kbo
 
     (* still failing: *)
     (* leo3 *)

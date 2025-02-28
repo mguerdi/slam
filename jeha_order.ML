@@ -6,6 +6,7 @@ sig
   type weight = int * int
   val +++ : weight * weight -> weight 
   val --- : weight * weight -> weight
+  val negate : weight -> weight
 end;
 
 structure Jeha_Weight : JEHA_WEIGHT =
@@ -16,7 +17,8 @@ type weight = int * int;
 
 fun plus_weight (omega, one) (omega', one') = (omega + omega', one + one')
 fun (w +++ w') = plus_weight w w'
-fun (w --- (omega', one')) = plus_weight w (~omega', ~one')
+fun negate (omega, one) = (~omega, ~one)
+fun (w --- w') = w +++ negate w'
 
 end;
 
@@ -33,7 +35,6 @@ sig
   val weight_of_type_constructor : string -> weight
   val weight_of_tfree : string -> weight
   val weight_of_tfree_or_type_constructor : typ -> weight
-  val weight_of_const : string -> weight
   val quantifier_weight : bool -> weight
   val bound_weight : weight
   val fo_lambda_weight : weight
@@ -75,7 +76,6 @@ fun weight_of_type_constructor _ = const_weight
 fun weight_of_tfree _ = const_weight
 fun weight_of_tfree_or_type_constructor (TFree (name, _)) = weight_of_tfree name
   | weight_of_tfree_or_type_constructor (Type (name, _)) = weight_of_type_constructor name
-fun weight_of_const _ = const_weight
 
 (* below lambdas there are only \<forall>' and \<exists>' *)
 fun quantifier_weight below_lam = if below_lam then const_weight else (1, 0)
