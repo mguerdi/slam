@@ -146,7 +146,7 @@ fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
   (* fall back to multiset comparison *)
   else Jeha_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
 
-val kbo = kbo_generic Jeha_Order.kbo
+val kbo = kbo_generic Jeha_KBO.ord
 
 fun pretty_lit' ctxt = Jeha_Common.pretty_term' ctxt o term_of
 

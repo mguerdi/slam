@@ -312,7 +312,7 @@ to define JTerm.kbo etc. *)
 
 fun is_eligible_tpos_in_eq (Const (@{const_name "HOL.eq"}, _) $ s $ t) (i :: tpos) =
   let 
-    val s_t_comp = Jeha_Order.kbo (s, t)
+    val s_t_comp = Jeha_KBO.ord (s, t)
   in
     not (s_t_comp = SOME EQUAL) andalso
       case i of
@@ -355,7 +355,7 @@ fun is_eligible_full_pos c (tpos, lpos, cpos) =
   let
     val literal = nth (literals c) cpos
     val (s, t, _) = JLit.orient lpos literal
-    val s_t_comp = Jeha_Order.kbo (s, t)
+    val s_t_comp = Jeha_KBO.ord (s, t)
     val s_leq_t =
       (SOME LESS = s_t_comp) orelse (SOME EQUAL = s_t_comp)
   in

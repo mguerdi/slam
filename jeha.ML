@@ -240,7 +240,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
       in
         (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
         (* Schulz: \<sigma>(s) > \<sigma>(t) *)
-        if SOME GREATER <> Jeha_Order.kbo (from, to)
+        if SOME GREATER <> Jeha_KBO.ord (from, to)
           then NONE
         else
         let
@@ -751,7 +751,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
           val (t, t', _) = JLit.orient lp (JClause.lit_at cp d)
           val ct' = JClause.map_at_full_pos u_pos (K t') c (* FIXME: recompute selected *)
-          val t_comp_t' = Jeha_Order.kbo (t, t')
+          val t_comp_t' = Jeha_KBO.ord (t, t')
           (* val _ = writeln ("t_comp_t' " ^ @{make_string} t_comp_t') *)
         in
           (* order restrictions *)
@@ -864,7 +864,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         val (u', v', _) = JLit.orient lp' (JClause.lit_at cp' c)
         val uv_literal = JClause.lit_at cp c
         val (u, v, _) = JLit.orient lp uv_literal
-        val u_v_comp = Jeha_Order.kbo (u, v)
+        val u_v_comp = Jeha_KBO.ord (u, v)
         val uv_maximal = Jeha_Order.is_maximal JLit.kbo false uv_literal (JClause.literals c)
       in
         if SOME EQUAL = u_v_comp orelse SOME LESS = u_v_comp then
