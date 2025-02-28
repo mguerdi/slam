@@ -233,7 +233,12 @@ fun ord
         | (Bound i, Bound j) =>
             (case int_ord (i, j) of
               (* FIXME: cache the results of this comparison for each loose bound var *)
-              EQUAL => Term_Ord.typ_ord (nth x_boundTs i, nth y_boundTs j)
+              EQUAL =>
+                if i < smallestFree (* bound *)
+                  then EQUAL 
+                  else
+                    Term_Ord.typ_ord
+                      (nth x_boundTs (i - smallestFree), nth y_boundTs (j - smallestFree))
             | r => r)
         | _ => Term_Ord.fast_term_ord tu)
     in
