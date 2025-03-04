@@ -5,6 +5,7 @@ sig
   datatype lpos = Left | Right
   val is_positive : T -> bool
   val is_negative : T -> bool
+  val is_negative_or_negativoid_cfg : Proof.context -> T -> bool
   val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
@@ -44,6 +45,16 @@ fun is_positive (_, _, b) = b
 
 val is_negative = not o is_positive
 
+fun is_negativoid (l as (s, t, b)) =
+  is_negative l
+    orelse JTerm.is_false s andalso not (JTerm.is_false t)
+    orelse JTerm.is_false t andalso not (JTerm.is_false s)
+
+fun is_negative_or_negativoid_cfg ctxt =
+  if Config.get ctxt (Jeha_Common.select_negativoid)
+    then is_negativoid
+    else is_negative
+
 fun map f (s, t, b) = (f s, f t, b)
 
 fun lposs_of _ = [Left, Right]
@@ -62,7 +73,7 @@ fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
 (* turn a boolean term into an equational literal *)
 fun of_term t =
   if not (fastype_of t = @{typ bool})
-    then error "can only turn boolean terms into clauses"
+    then error "can only turn boolean terms into literals"
     else of_term_signed true t
 
 fun aconv_as ((s, t, b), (s', t', b')) =
@@ -78,32 +89,43 @@ fun swap (s, t, b) = (t, s, b)
 fun swap_lpos Left = Right
   | swap_lpos Right = Left
 
-fun is_truth_value t = t = @{term True} orelse t = @{term False}
-
-fun is_pred (s, t, true) = exists is_truth_value [s, t]
+fun is_pred (s, t, true) = exists JTerm.is_truth_value [s, t]
   | is_pred _ = false
 
 fun dest_pred (s, t, true) =
   (* FIXME: what about when both are truth values? do we prefer an orientation? *)
-  if is_truth_value t
+  if JTerm.is_truth_value t
     then (s, t)
-  else if is_truth_value s
+  else if JTerm.is_truth_value s
     then (t, s)
   else error "neither is HOL.True or HOL.False"
   (* FIXME: allow disequations? (see similar comment above mk_pred) *)
   | dest_pred _ = error "disequation"
 
+(* FIXME: If we used the correct literal order these two
+\<top> \<noteq> \<top> \<mapsto> \<top> = \<bottom>
+\<top> \<noteq> \<bottom> \<mapsto> \<top> = \<top>
+would probably not be valid simplifications (the conclusion is not smaller than the premise). Thus
+?x \<noteq> \<top> \<mapsto> x = \<bottom>
+?x a b c \<noteq> \<top> \<mapsto> ...
+aren't either.
+The function below disallows the non-simplifications w.r.t. the current literal ordering (or at least
+its implementaiton) 
+*)
 (* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
 fun norm_negative_pred ctxt (l as (_, _, true)) = l
   | norm_negative_pred ctxt (l as (s, t, false)) =
-      if (Config.get ctxt Jeha_Common.no_norm_neg_pred_if_both_truth_values
-          andalso is_truth_value s andalso is_truth_value t)
+      if JTerm.is_truth_value s andalso JTerm.ml_bool_of s andalso JTerm.is_variable_headed t
         then l
-      else if is_truth_value s
+      else if JTerm.is_truth_value t andalso JTerm.ml_bool_of t andalso JTerm.is_variable_headed s
+        then l
+      else if JTerm.is_truth_value s andalso JTerm.is_truth_value t andalso JTerm.ml_bool_of s andalso JTerm.ml_bool_of t
+        then l
+      else if JTerm.is_truth_value s
         then (JTerm.negate_hol_bool s, t, true)
-      else if is_truth_value t
+      else if JTerm.is_truth_value t
         then (s, JTerm.negate_hol_bool t, true)
-      else l 
+      else l
 
 fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 

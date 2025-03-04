@@ -116,24 +116,31 @@ struct
 
 fun norm_negative_predicate_literals ctxt premise =
   let
-    val tac =
-      (if Config.get ctxt Jeha_Common.no_norm_neg_pred_if_both_truth_values
-        then
-          (* The first four serve as "overrides" to make sure negative literals where both sides are
-          truth values don't get normalized *)
-          [ @{lemma "True = True \<Longrightarrow> True = True" by auto}
-          , @{lemma "True = False \<Longrightarrow> True = False" by auto}
-          , @{lemma "False = True \<Longrightarrow> False = True" by auto}
-          , @{lemma "False = False \<Longrightarrow> False = False" by auto} ]
-        else
-          [])
-      @
+    (* guards against normalizing literals where the normalization is not a permitted simplification *)
+    (* serves as an "override" *)
+    fun guard_tac i =
+      let
+        fun do_guard st =
+          let
+            (* negated literal *)
+            val (s, t, b) = JLit.of_term (HOLogic.dest_Trueprop (the_single (Thm.prems_of st)))
+            val lit = (s, t, not b)
+            val normed_lit = JLit.norm_negative_pred ctxt lit
+          in
+            if lit = normed_lit
+              then all_tac st
+              else no_tac st
+          end
+      in
+        SELECT_GOAL do_guard i
+      end
+    val norm_tac =
       [ @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
       , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
       , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}
       , @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto} ]
       |> map (fn lemma => (resolve_tac ctxt [lemma]))
-      |> FIRST'
+    val tac = FIRST' (guard_tac :: norm_tac)
   in
     Seq.hd (ALLGOALS (TRY o tac) premise)
   end

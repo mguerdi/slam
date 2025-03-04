@@ -102,8 +102,7 @@ sig
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
   
-  val no_norm_neg_pred_if_both_truth_values : bool Config.T
-
+  val select_negativoid : bool Config.T
   val literal_selection_function : string Config.T
 
   val unify_search_bound : int Config.T
@@ -227,18 +226,8 @@ val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<o
 val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_clause_subsumption\<close> (K rule_default)
 val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_equality_subsumption\<close> (K rule_default)
 
-(* FIXME: Here's the solution:
-\<top> \<noteq> \<top> \<mapsto> \<top> = \<bottom>
-\<top> \<noteq> \<bottom> \<mapsto> \<top> = \<top>
-are not valid simplifications (the conclusion is not smaller than the premise). Thus
-x \<noteq> \<top> \<mapsto> x = \<bottom>
-isn't either.
-TODO: Check all cases and fix, then remove this hack.
-*)
-val no_norm_neg_pred_if_both_truth_values = Attrib.setup_config_bool \<^binding>\<open>jeha_no_norm_neg_pred_if_both_truth_values\<close> (K false)
-
-
-val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_none")
+val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>jeha_select_negativoid\<close> (K true)
+val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_maximal_neg_lit")
 
 val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)
 

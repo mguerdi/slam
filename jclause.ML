@@ -57,7 +57,7 @@ sig
   val maxidx_of_literal_list : JLit.T list -> int
   (* literal selection *)
   val selected : T -> int list
-  type literal_selection_function = JLit.T list -> int list
+  type literal_selection_function = Proof.context -> JLit.T list -> int list
   val select_none : literal_selection_function
   val select_all_neg_lit : literal_selection_function
   val select_first_maximal_neg_lit : literal_selection_function
@@ -137,29 +137,51 @@ fun selected { selected, ... } = case selected of
   [~1] => error "selected has been invalidated"
   | _ => selected
 
-type literal_selection_function = JLit.T list -> int list
+type literal_selection_function = Proof.context -> JLit.T list -> int list
 
-fun select_none _ = []
+fun select_none _ _ = []
 
-fun select_all_neg_lit lits =
+fun select_all_neg_lit (ctxt : Proof.context) lits =
   lits
   |> map_index I
-  |> map_filter (fn (cpos, lit) => if JLit.is_negative lit then SOME cpos else NONE)
+  |> map_filter (fn (cpos, lit) => if JLit.is_negative_or_negativoid_cfg ctxt lit then SOME cpos else NONE)
 
-fun select_first_maximal_neg_lit lits = error "select_first_maximal_neg_lit unimplemented"
+fun select_first_neg_lit ctxt lits =
+  lits
+  |> map_index I
+  |> get_first (fn (cpos, lit) => if JLit.is_negative_or_negativoid_cfg ctxt lit then SOME cpos else NONE)
+  |> the_list
+
+fun select_first_maximal_neg_lit ctxt lits =
+  let
+    val neg_lits_cposs =
+      lits
+      |> map_index I
+      (* FIXME: maybe the blocker disallowing for selection of literals with a variable-headed side
+      is really important? *)
+      |> filter (fn (cpos, lit) => JLit.is_negative_or_negativoid_cfg ctxt lit)
+    val max_neg_lits = Jeha_Order.idxs_of_maximal_elements (JLit.kbo o apply2 #2) neg_lits_cposs
+  in
+    case max_neg_lits of
+      (* index into neg_lits_cposs! *)
+      (idx, _)::_ => [#1 (nth neg_lits_cposs idx)]
+    | _ => []
+  end
 
 val literal_selection_functions =
-  ["select_none", "select_all_neg_lit", "select_first_maximal_neg_lit"]
+  ["select_none", "select_all_neg_lit", "select_first_neg_lit", "select_first_maximal_neg_lit"]
 
 fun literal_selection_function_from_name name = case name of
   "select_none" => select_none
   | "select_all_neg_lit" => select_all_neg_lit
+  | "select_first_neg_lit" => select_first_neg_lit
   | "select_first_maximal_neg_lit" => select_first_maximal_neg_lit
   | _ => error ("literal_selection_function_from_name: unknown selection function \"" ^ name ^ "\"")
 
 fun get_literal_selection_function ctxt =
   Config.get ctxt Jeha_Common.literal_selection_function
   |> literal_selection_function_from_name
+  |> (fn f => f ctxt)
 
 (* NOTE: This needs to be done every time before checking eligibility and also after normalizing
 negative predicate literals (s \<noteq> \<top> \<mapsto> s = \<bottom>) before the clause is "finalized". *)
