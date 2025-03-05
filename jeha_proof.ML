@@ -109,6 +109,11 @@ sig
     -> { premise: HClause.hthm
        , literal: JClause.cpos }
     -> HClause.hthm list
+  val reconstruct_neg_ext:
+    Proof.context
+    -> { premise: HClause.hthm
+       , literal: JClause.cpos }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -786,6 +791,24 @@ fun reconstruct_simp_outer_claus ctxt { premise, literal } =
     |> map move_new_literals_to_last
   end
 
+fun reconstruct_neg_ext ctxt { premise, literal } =
+  let
+    val premise = HClause.move_from_to literal 0 premise
+    val (s, s', false) = HClause.dest_lit_at 0 premise
+    val T = s |> Thm.ctyp_of_cterm |> Thm.dest_ctyp0
+    val rT = s |> Thm.ctyp_of_cterm |> Thm.dest_ctyp1
+    val lemma = \<^instantiate>\<open>s and s' and 'a=T and 'b=rT in
+      lemma \<open>
+        (s :: 'a \<Rightarrow> 'b) (SOME x_neg_ext. s x_neg_ext \<noteq> s' x_neg_ext)
+          = s' (SOME x_neg_ext. s x_neg_ext \<noteq> s' x_neg_ext)
+        \<Longrightarrow> s = s'\<close>
+      by (insert someI_ex[of "\<lambda>uub. s uub \<noteq> s' uub"], blast)\<close>
+    val conclusion =
+      HClause.comp_no_flatten_no_incr (lemma, 1) 1 premise
+      |> HClause.move_from_to 0 literal
+  in
+    conclusion
+  end
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
 (* some inference rules require additional lemmas *)
@@ -1055,6 +1078,10 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
         reconstruct_false_elim
           ctxt
           { premise = get_and_instantiate substitution NONE premise, literal = literal }
+    | Jeha_Log.NegExt { premise, literal } =>
+        reconstruct_neg_ext
+          ctxt
+          { premise = get_thm premise, literal = literal }
     (*
     | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
         Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }

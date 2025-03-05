@@ -86,6 +86,7 @@ sig
   val rule_fluid_bool_hoist : bool Config.T
   val rule_fluid_loob_ho : bool Config.T
   val rule_ext : bool Config.T
+  val rule_neg_ext : bool Config.T
   val rule_choice : bool Config.T
   (* simplifications *)
   val rule_delete_duplicated_lits : bool Config.T
@@ -210,6 +211,7 @@ val rule_exists_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_exists
 val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_bool_hoist\<close> (K rule_default)
 val rule_fluid_loob_ho = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_loob_hoist\<close> (K rule_default)
 val rule_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_ext\<close> (K rule_default)
+val rule_neg_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neg_ext\<close> (K rule_default)
 val rule_choice = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_choice\<close> (K rule_default)
 (* simplifications *)
 val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_duplicated_lits\<close> (K rule_default)

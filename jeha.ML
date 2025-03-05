@@ -41,6 +41,7 @@ sig
   val infer_exists_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_forall_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
   val infer_exists_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
+  val infer_neg_ext : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
   val forward_simplify :
     Proof.context
     -> { forward: bool, cheap: bool }
@@ -955,7 +956,7 @@ fun infer_arg_cong ctxt c cpos =
 
         val new_clause =
           c
-          |> JClause.map_at_cpos cpos (K new_literal) (* FIXME: recompute selected *)
+          |> JClause.map_at_cpos cpos (K new_literal)
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
           |> JClause.recompute_selected ctxt
           |> JClause.set_maxidx new_maxidx
@@ -1423,6 +1424,34 @@ val infer_forall_rw = impl_infer_forall_exists_rw true
 
 val infer_exists_rw = impl_infer_forall_exists_rw false
 
+(* C \<or> s                      \<noteq> s'                              *)
+(* ------------------------------------------------------ NegExt *)
+(* C \<or> s (SOME x. s x \<noteq> s' x) \<noteq> s' (SOME x. s x \<noteq> s' x)        *)
+fun infer_neg_ext ctxt c cpos =
+  if not (JClause.is_eligible_cpos c cpos) then [] else
+  let val lit = JClause.lit_at cpos c in
+  if JLit.is_positive lit then [] else
+  let val (s, s', false) = lit in
+  if null (Term.binder_types (fastype_of s)) then [] (* not of function type *) else
+  let
+    val xT = domain_type (fastype_of s)
+    val x = ("x_neg_ext", xT)
+    val choice_body = HOLogic.mk_not (HOLogic.mk_eq (s $ Free x, s' $ Free x))
+    val skolem_symbol = HOLogic.choice_const xT $ (absfree x choice_body)
+    val new_literal = (s $ skolem_symbol, s' $ skolem_symbol, false)
+
+    val new_clause =
+      c
+      |> JClause.map_at_cpos cpos (K new_literal)
+      |> JClause.norm_beta_eta_qeta ctxt
+      |> JClause.recompute_selected ctxt
+      |> JClause.set_maxidx (JClause.maxidx c)
+      |> JClause.refresh_id ()
+      |> JClause.set_origin
+          (Jeha_Log.NegExt { premise = JClause.id c, literal = cpos })
+  in
+    [new_clause]
+  end end end
 
 (** Saturation Loop **)
 
@@ -1714,6 +1743,8 @@ fun infer_clauses ctxt active given_clause green_index =
         (maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs)))
     @ (if_cfg Jeha_Common.rule_arg_cong (fn _ =>
         (maps (infer_arg_cong ctxt given_clause) given_clause_cposs)))
+    @ (if_cfg Jeha_Common.rule_neg_ext (fn _ =>
+        (maps (infer_neg_ext ctxt given_clause) given_clause_cposs)))
     @ (if_cfg Jeha_Common.rule_bool_hoist (fn _ =>
         (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
     @ (if_cfg Jeha_Common.rule_false_elim (fn _ =>

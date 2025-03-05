@@ -25,6 +25,7 @@ sig
   | FluidLoobHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (* axioms *)
   | Ext
+  | NegExt of { premise: 'a, literal: JClause_Pos.cpos }
   | Choice
   (* simplification *)
   (* FIXME: | DeleteDuplicatedLits of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
@@ -82,6 +83,7 @@ datatype 'a inference =
   | FluidLoobHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (** axioms **)
   | Ext
+  | NegExt of { premise: 'a, literal: JClause_Pos.cpos }
   | Choice
   (** simplification **)
   | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos, orientation: JLit.lpos } list }
@@ -119,6 +121,7 @@ fun premises (Axiom { thm: thm }) = []
   | premises (FluidBoolHoist { premise, ... }) = [premise]
   | premises (FluidLoobHoist { premise, ... }) = [premise]
   | premises Ext = error "Ext undefined"
+  | premises (NegExt { premise, ...}) = [premise]
   | premises Choice = error "Choice undefined"
   | premises (DeleteDuplicatedLits { premise, ... }) = [premise]
   | premises (DeleteResolvedLits { premise, ... }) = [premise]
@@ -250,6 +253,7 @@ fun name_of (Axiom _) = "Axiom"
   | name_of (FluidBoolHoist _) = "FluidBoolHoist" 
   | name_of (FluidLoobHoist _) = "FluidLoobHoist" 
   | name_of Ext = "Ext" 
+  | name_of (NegExt _) = "NegExt"
   | name_of Choice = "Choice" 
   | name_of (DeleteDuplicatedLits _) = "DeleteDuplicatedLits" 
   | name_of (DeleteResolvedLits _) = "DeleteResolvedLits" 
