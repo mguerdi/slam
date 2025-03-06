@@ -958,6 +958,7 @@ fun infer_arg_cong ctxt c cpos =
           c
           |> JClause.map_at_cpos cpos (K new_literal)
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
           |> JClause.set_maxidx new_maxidx
           |> JClause.refresh_id ()
@@ -991,7 +992,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
             (Proof_Context.theory_of ctxt)
             (u_typ, @{typ "HOL.bool"})
             (Vartab.empty, JClause.maxidx c)
-        val u_eq_true = JLit.mk_pred u true
+        val u_eq_true = JLit.mk_eq u (@{term "HOL.True"})
         val unifier = Envir.Envir { maxidx = maxidx, tenv = Vartab.empty, tyenv = unifier }
       in
         if
@@ -1003,7 +1004,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
           []
         else
           c
-          |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"}) (* FIXME: recompute selected *)
+          |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"})
           |> JClause.add_literal ctxt u_eq_true
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
           |> JClause.norm_negative_predicate_literals ctxt
@@ -1444,6 +1445,7 @@ fun infer_neg_ext ctxt c cpos =
       c
       |> JClause.map_at_cpos cpos (K new_literal)
       |> JClause.norm_beta_eta_qeta ctxt
+      |> JClause.norm_negative_predicate_literals ctxt
       |> JClause.recompute_selected ctxt
       |> JClause.set_maxidx (JClause.maxidx c)
       |> JClause.refresh_id ()

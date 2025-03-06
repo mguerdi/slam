@@ -15,6 +15,8 @@ sig
   val swap : T -> T
   val swap_lpos : lpos -> lpos
   (* make predicate literal, by equating the term to the boolean *)
+  val mk_eq : term -> term -> T
+  val mk_neq : term -> term -> T
   val mk_pred : term -> bool -> T
   val is_pred : T -> bool
   val dest_pred : T -> term * term
@@ -58,6 +60,10 @@ fun is_negative_or_negativoid_cfg ctxt =
 fun map f (s, t, b) = (f s, f t, b)
 
 fun lposs_of _ = [Left, Right]
+
+fun mk_eq s t = (s, t, true)
+
+fun mk_neq s t = (s, t, false)
 
 (* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
 (* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?

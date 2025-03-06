@@ -140,7 +140,8 @@ fun norm_negative_predicate_literals ctxt premise =
         SELECT_GOAL do_guard i
       end
     val norm_tac =
-      [ @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
+      [ @{lemma "True \<noteq> False \<Longrightarrow> False = False" by auto}
+      , @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
       , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
       , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}
       , @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto} ]
@@ -171,6 +172,7 @@ fun instantiate_norm ctxt (tyenv, tenv) thm =
     val insts = Vartab.fold (cons o mk) tenv []
   in
     Thm.instantiate_beta (TVars.make instsT, Vars.make insts) thm
+    |> Drule.eta_contraction_rule 
     |> norm_negative_predicate_literals ctxt
   end
 
@@ -895,206 +897,210 @@ fun replay_inference ctxt clause_db origin reconstructed_clause_db =
   let
     fun get_thm id =
       Inttab.lookup reconstructed_clause_db id
-      |> (fn x => case x of SOME x => x | NONE =>
+      |> (fn x => case x of SOME x => norm_negative_predicate_literals ctxt x | NONE =>
         error ("premise " ^ @{make_string} (clause_db id) ^ " missing from reconstructed clauses"))
     fun get_and_instantiate (substitution: Envir.env) (shift: int option) (id: int) =
       get_thm id 
       |> Thm.incr_indexes (the_default 0 shift)
       |> instantiate_norm_with_env ctxt substitution
-  in                      
-    case origin of
-      Jeha_Log.Axiom { thm } =>
-        thm
-        |> hclause_of_axiom ctxt
-        |> instantiate_norm_with_env ctxt Envir.init
-    | Jeha_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
-        reconstruct_sup
-          ctxt
-          { left_premise = get_and_instantiate substitution (SOME left_premise_shift) left_premise
-          , right_premise = get_and_instantiate substitution NONE right_premise
-          , literal = literal
-          , subterm = subterm }
-    (*
-    | Jeha_Log.FluidSup =>
-        Jeha_Log.FluidSup
-    *)
-    | Jeha_Log.ERes { premise, literal, substitution } =>
-        reconstruct_eres { literal = literal, premise = get_and_instantiate substitution NONE premise }
-    | Jeha_Log.EFact { premise, left_literal, right_literal, substitution } =>
-        reconstruct_efact
-          { left_literal = left_literal
-          , right_literal = right_literal
-          , premise = get_and_instantiate substitution NONE premise }
-    | Jeha_Log.ArgCong { premise, substitution, literal, vars } =>
-       reconstruct_arg_cong ctxt { premise = get_and_instantiate substitution NONE premise, literal = literal, vars = vars }
-    | Jeha_Log.BoolHoist { premise, subterm, substitution } =>
-        reconstruct_bool_hoist
-          ctxt
-          { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
-    | Jeha_Log.FalseElim { premise, literal, substitution } =>
-        reconstruct_false_elim
-          ctxt
-          { premise = get_and_instantiate substitution NONE premise, literal = literal }
-    | Jeha_Log.EqHoist { premise, subterm, substitution } =>
-        reconstruct_eq_hoist
-          ctxt
-          { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
-    | Jeha_Log.NeqHoist { premise, subterm, substitution } =>
-        reconstruct_neq_hoist
-         ctxt
-         { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
-    | Jeha_Log.ForallHoist { premise, subterm, substitution, fresh_x } =>
-        let
-          val { uninstantiated_premise, predicate, subterm, fresh_x } =
-            prepare_forall_exists_hoist_log
+    val conclusion =
+      case origin of
+        Jeha_Log.Axiom { thm } =>
+          thm
+          |> hclause_of_axiom ctxt
+          |> instantiate_norm_with_env ctxt Envir.init
+      | Jeha_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
+          reconstruct_sup
+            ctxt
+            { left_premise = get_and_instantiate substitution (SOME left_premise_shift) left_premise
+            , right_premise = get_and_instantiate substitution NONE right_premise
+            , literal = literal
+            , subterm = subterm }
+      (*
+      | Jeha_Log.FluidSup =>
+          Jeha_Log.FluidSup
+      *)
+      | Jeha_Log.ERes { premise, literal, substitution } =>
+          reconstruct_eres { literal = literal, premise = get_and_instantiate substitution NONE premise }
+      | Jeha_Log.EFact { premise, left_literal, right_literal, substitution } =>
+          reconstruct_efact
+            { left_literal = left_literal
+            , right_literal = right_literal
+            , premise = get_and_instantiate substitution NONE premise }
+      | Jeha_Log.ArgCong { premise, substitution, literal, vars } =>
+         reconstruct_arg_cong ctxt { premise = get_and_instantiate substitution NONE premise, literal = literal, vars = vars }
+      | Jeha_Log.BoolHoist { premise, subterm, substitution } =>
+          reconstruct_bool_hoist
+            ctxt
+            { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
+      | Jeha_Log.FalseElim { premise, literal, substitution } =>
+          reconstruct_false_elim
+            ctxt
+            { premise = get_and_instantiate substitution NONE premise, literal = literal }
+      | Jeha_Log.EqHoist { premise, subterm, substitution } =>
+          reconstruct_eq_hoist
+            ctxt
+            { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
+      | Jeha_Log.NeqHoist { premise, subterm, substitution } =>
+          reconstruct_neq_hoist
+           ctxt
+           { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
+      | Jeha_Log.ForallHoist { premise, subterm, substitution, fresh_x } =>
+          let
+            val { uninstantiated_premise, predicate, subterm, fresh_x } =
+              prepare_forall_exists_hoist_log
+                ctxt
+                clause_db
+                { uninstantiated_premise = premise
+                , subterm = subterm
+                , substitution = substitution
+                , fresh_x = fresh_x }
+            (* val premise = only_instantiate substitution uninstantiated_premise *)
+            val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
+          in
+            reconstruct_forall_hoist
               ctxt
-              clause_db
-              { uninstantiated_premise = premise
+              { premise = premise, predicate = predicate, subterm = subterm, fresh_x = fresh_x }
+          end
+      | Jeha_Log.ExistsHoist { premise, subterm, substitution, fresh_x } =>
+          let
+            val { uninstantiated_premise, predicate, subterm, fresh_x } =
+              prepare_forall_exists_hoist_log
+                ctxt
+                clause_db
+                { uninstantiated_premise = premise
+                , subterm = subterm
+                , substitution = substitution
+                , fresh_x = fresh_x }
+            (* val premise = only_instantiate substitution uninstantiated_premise *)
+            val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
+          in
+            reconstruct_exists_hoist
+              ctxt
+              { premise = premise, predicate = predicate, subterm = subterm, fresh_x = fresh_x }
+          end
+      | Jeha_Log.BoolRw { premise, subterm, subrule, substitution } =>
+          let
+            val instantiated_subrule =
+              subrule
+              |> Jeha_Lemma.hclause_of_uninstantiated_bool_rw_rule ctxt
+              |> instantiate_with_env ctxt substitution
+          in
+            reconstruct_bool_rw
+              ctxt
+              { premise = get_and_instantiate substitution NONE premise
               , subterm = subterm
-              , substitution = substitution
-              , fresh_x = fresh_x }
-          (* val premise = only_instantiate substitution uninstantiated_premise *)
-          val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
-        in
-          reconstruct_forall_hoist
+              , instantiated_subrule = instantiated_subrule }
+          end
+      | Jeha_Log.ForallRw { premise, subterm, substitution } =>
+          let
+            val { predicate, subterm, uninstantiated_premise } =
+              prepare_forall_exists_rw_log
+                ctxt
+                clause_db
+                { uninstantiated_premise = premise, subterm = subterm, substitution = substitution }
+            (* val premise = only_instantiate substitution uninstantiated_premise *)
+            val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
+          in
+            reconstruct_forall_rw ctxt { predicate = predicate, subterm = subterm, premise = premise }
+          end
+      | Jeha_Log.ExistsRw { premise, subterm, substitution } =>
+          let
+            val { predicate, subterm, uninstantiated_premise } =
+              prepare_forall_exists_rw_log
+                ctxt
+                clause_db
+                { uninstantiated_premise = premise, subterm = subterm, substitution = substitution }
+            (* val premise = only_instantiate substitution uninstantiated_premise *)
+            val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
+          in
+            reconstruct_exists_rw ctxt { predicate = predicate, subterm = subterm, premise = premise }
+          end
+      | Jeha_Log.FluidBoolHoist { premise, subterm, substitution } =>
+          error "manual FluidBoolHoist reconstruction unimplemented"
+      | Jeha_Log.FluidLoobHoist { premise, subterm, substitution } =>
+          error "manual FluidLoobHoist reconstruction unimplemented"
+      | Jeha_Log.Ext =>
+          error "manual Ext reconstruction unimplemented" 
+      | Jeha_Log.Choice =>
+          error "manual Choice reconstruction unimplemented" 
+      | Jeha_Log.DeleteDuplicatedLits { premise, duplicate_cposs } =>
+          reconstruct_delete_duplicated_lits
+            { premise = get_thm premise, duplicate_cposs = duplicate_cposs }
+      | Jeha_Log.DeleteResolvedLits { premise, cposs } =>
+          reconstruct_delete_resolved_lits { premise = get_thm premise, cposs = cposs }
+      | Jeha_Log.RewritePositiveLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
+          reconstruct_sup
             ctxt
-            { premise = premise, predicate = predicate, subterm = subterm, fresh_x = fresh_x }
-        end
-    | Jeha_Log.ExistsHoist { premise, subterm, substitution, fresh_x } =>
-        let
-          val { uninstantiated_premise, predicate, subterm, fresh_x } =
-            prepare_forall_exists_hoist_log
+            { left_premise = get_and_instantiate substitution (SOME unit_shift) unit
+            , right_premise = get_thm right_premise
+            , literal = (unit_orientation, 0)
+            , subterm = subterm }
+      | Jeha_Log.RewriteNegativeLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
+          reconstruct_sup
+            ctxt
+            { left_premise = get_and_instantiate substitution (SOME unit_shift) unit
+            , right_premise = get_thm right_premise
+            , literal = (unit_orientation, 0)
+            , subterm = subterm }
+      | Jeha_Log.PositiveSimplifyReflect { unit, unit_shift, unit_orientation, matcher, right_premise, disagreement } =>
+          reconstruct_positive_simplify_reflect
+            ctxt
+            { unit = get_and_instantiate matcher (SOME unit_shift) unit
+            , unit_orientation = unit_orientation
+            , right_premise = get_thm right_premise
+            , disagreement = disagreement }
+      | Jeha_Log.NegativeSimplifyReflect { unit, matcher, unit_shift, unit_orientation, right_premise, literal } =>
+          reconstruct_negative_simplify_reflect
+            ctxt
+            { unit = get_and_instantiate matcher (SOME unit_shift) unit
+            , unit_orientation = unit_orientation
+            , right_premise = get_thm right_premise
+            , literal = literal }
+      | Jeha_Log.SimpPosNegOuterClaus { premise, literal, conclusion_index }  =>
+          nth
+            (reconstruct_simp_outer_claus ctxt { premise = get_thm premise, literal = literal })
+            conclusion_index
+      | Jeha_Log.SimpBoolRw { premise, subterm, subrule, substitution } =>
+          (* See BoolRw above *)
+          let
+            val instantiated_subrule =
+              subrule
+              |> Jeha_Lemma.hclause_of_uninstantiated_bool_rw_rule ctxt
+              |> instantiate_with_env ctxt substitution
+          in
+            reconstruct_bool_rw
               ctxt
-              clause_db
-              { uninstantiated_premise = premise
+              { premise = get_and_instantiate substitution NONE premise
               , subterm = subterm
-              , substitution = substitution
-              , fresh_x = fresh_x }
-          (* val premise = only_instantiate substitution uninstantiated_premise *)
-          val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
-        in
-          reconstruct_exists_hoist
+              , instantiated_subrule = instantiated_subrule }
+          end
+      | Jeha_Log.SimpFalseElim { premise, literal, substitution } =>
+          (* See FalseElim above *)
+          reconstruct_false_elim
             ctxt
-            { premise = premise, predicate = predicate, subterm = subterm, fresh_x = fresh_x }
-        end
-    | Jeha_Log.BoolRw { premise, subterm, subrule, substitution } =>
-        let
-          val instantiated_subrule =
-            subrule
-            |> Jeha_Lemma.hclause_of_uninstantiated_bool_rw_rule ctxt
-            |> instantiate_with_env ctxt substitution
-        in
-          reconstruct_bool_rw
+            { premise = get_and_instantiate substitution NONE premise, literal = literal }
+      | Jeha_Log.NegExt { premise, literal } =>
+          reconstruct_neg_ext
             ctxt
-            { premise = get_and_instantiate substitution NONE premise
-            , subterm = subterm
-            , instantiated_subrule = instantiated_subrule }
-        end
-    | Jeha_Log.ForallRw { premise, subterm, substitution } =>
-        let
-          val { predicate, subterm, uninstantiated_premise } =
-            prepare_forall_exists_rw_log
-              ctxt
-              clause_db
-              { uninstantiated_premise = premise, subterm = subterm, substitution = substitution }
-          (* val premise = only_instantiate substitution uninstantiated_premise *)
-          val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
-        in
-          reconstruct_forall_rw ctxt { predicate = predicate, subterm = subterm, premise = premise }
-        end
-    | Jeha_Log.ExistsRw { premise, subterm, substitution } =>
-        let
-          val { predicate, subterm, uninstantiated_premise } =
-            prepare_forall_exists_rw_log
-              ctxt
-              clause_db
-              { uninstantiated_premise = premise, subterm = subterm, substitution = substitution }
-          (* val premise = only_instantiate substitution uninstantiated_premise *)
-          val premise = get_and_instantiate substitution NONE (JClause.id uninstantiated_premise)
-        in
-          reconstruct_exists_rw ctxt { predicate = predicate, subterm = subterm, premise = premise }
-        end
-    | Jeha_Log.FluidBoolHoist { premise, subterm, substitution } =>
-        error "manual FluidBoolHoist reconstruction unimplemented"
-    | Jeha_Log.FluidLoobHoist { premise, subterm, substitution } =>
-        error "manual FluidLoobHoist reconstruction unimplemented"
-    | Jeha_Log.Ext =>
-        error "manual Ext reconstruction unimplemented" 
-    | Jeha_Log.Choice =>
-        error "manual Choice reconstruction unimplemented" 
-    | Jeha_Log.DeleteDuplicatedLits { premise, duplicate_cposs } =>
-        reconstruct_delete_duplicated_lits
-          { premise = get_thm premise, duplicate_cposs = duplicate_cposs }
-    | Jeha_Log.DeleteResolvedLits { premise, cposs } =>
-        reconstruct_delete_resolved_lits { premise = get_thm premise, cposs = cposs }
-    | Jeha_Log.RewritePositiveLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
-        reconstruct_sup
-          ctxt
-          { left_premise = get_and_instantiate substitution (SOME unit_shift) unit
-          , right_premise = get_thm right_premise
-          , literal = (unit_orientation, 0)
-          , subterm = subterm }
-    | Jeha_Log.RewriteNegativeLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
-        reconstruct_sup
-          ctxt
-          { left_premise = get_and_instantiate substitution (SOME unit_shift) unit
-          , right_premise = get_thm right_premise
-          , literal = (unit_orientation, 0)
-          , subterm = subterm }
-    | Jeha_Log.PositiveSimplifyReflect { unit, unit_shift, unit_orientation, matcher, right_premise, disagreement } =>
-        reconstruct_positive_simplify_reflect
-          ctxt
-          { unit = get_and_instantiate matcher (SOME unit_shift) unit
-          , unit_orientation = unit_orientation
-          , right_premise = get_thm right_premise
-          , disagreement = disagreement }
-    | Jeha_Log.NegativeSimplifyReflect { unit, matcher, unit_shift, unit_orientation, right_premise, literal } =>
-        reconstruct_negative_simplify_reflect
-          ctxt
-          { unit = get_and_instantiate matcher (SOME unit_shift) unit
-          , unit_orientation = unit_orientation
-          , right_premise = get_thm right_premise
-          , literal = literal }
-    | Jeha_Log.SimpPosNegOuterClaus { premise, literal, conclusion_index }  =>
-        nth
-          (reconstruct_simp_outer_claus ctxt { premise = get_thm premise, literal = literal })
-          conclusion_index
-    | Jeha_Log.SimpBoolRw { premise, subterm, subrule, substitution } =>
-        (* See BoolRw above *)
-        let
-          val instantiated_subrule =
-            subrule
-            |> Jeha_Lemma.hclause_of_uninstantiated_bool_rw_rule ctxt
-            |> instantiate_with_env ctxt substitution
-        in
-          reconstruct_bool_rw
-            ctxt
-            { premise = get_and_instantiate substitution NONE premise
-            , subterm = subterm
-            , instantiated_subrule = instantiated_subrule }
-        end
-    | Jeha_Log.SimpFalseElim { premise, literal, substitution } =>
-        (* See FalseElim above *)
-        reconstruct_false_elim
-          ctxt
-          { premise = get_and_instantiate substitution NONE premise, literal = literal }
-    | Jeha_Log.NegExt { premise, literal } =>
-        reconstruct_neg_ext
-          ctxt
-          { premise = get_thm premise, literal = literal }
-    (*
-    | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
-        Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
-    | Jeha_Log.SyntacticTautologyDeletion2 { premise, left_literal, right_literal, substitution } =>
-        Jeha_Log.SyntacticTautologyDeletion2 { premise = f premise, left_literal = left_literal, right_literal = right_literal, substitution = substitution }
-    | Jeha_Log.ClauseSubsumption { subsumer, subsumed, substitution } =>
-        Jeha_Log.ClauseSubsumption { subsumer = subsumer, subsumed = subsumed, substitution = substitution }
-    | Jeha_Log.EqualitySubsumption { unit, disagreement, substitution } =>
-        Jeha_Log.EqualitySubsumption { unit = f unit, disagreement = disagreement, substitution = substitution }
-    | Jeha_Log.Invalid =>
-        Jeha_Log.Invalid
-*)
-    | origin => error ("replay_inference unimplemented for " ^ @{make_string} origin)
+            { premise = get_thm premise, literal = literal }
+      (*
+      | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
+          Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
+      | Jeha_Log.SyntacticTautologyDeletion2 { premise, left_literal, right_literal, substitution } =>
+          Jeha_Log.SyntacticTautologyDeletion2 { premise = f premise, left_literal = left_literal, right_literal = right_literal, substitution = substitution }
+      | Jeha_Log.ClauseSubsumption { subsumer, subsumed, substitution } =>
+          Jeha_Log.ClauseSubsumption { subsumer = subsumer, subsumed = subsumed, substitution = substitution }
+      | Jeha_Log.EqualitySubsumption { unit, disagreement, substitution } =>
+          Jeha_Log.EqualitySubsumption { unit = f unit, disagreement = disagreement, substitution = substitution }
+      | Jeha_Log.Invalid =>
+          Jeha_Log.Invalid
+*)    
+      | origin => error ("replay_inference unimplemented for " ^ @{make_string} origin)
+  in
+    conclusion
+    |> Drule.eta_contraction_rule
+    |> norm_negative_predicate_literals ctxt
   end
 
 (* Topological sort of a rooted DAG without cycle detection. Note that the parent / children
@@ -1145,8 +1151,12 @@ fun reconstruct_manual
           ^ "\n(origin: " ^ @{make_string} (JClause.origin clause) ^ ")" )
         val replayed = replay_inference ctxt clause_db (JClause.origin clause) reconstructed_clause_db
         val () =
-          if not (expected_conclusion aconvc (Thm.cprop_of replayed))
-            then Jeha_Common.trace_msg ctxt (fn () => "RECONSTRUCTION: WARNING: reconstructed clause " ^ @{make_string} replayed ^ " does not match expected conclusion " ^ @{make_string} expected_conclusion)
+          if not ((Thm.term_of expected_conclusion) aconv (Thm.prop_of replayed))
+            then Jeha_Common.trace_msg ctxt (fn () =>
+              "RECONSTRUCTION: WARNING: reconstructed clause " ^ @{make_string} replayed ^ " does not match expected conclusion " ^ @{make_string} expected_conclusion
+              (* ^ "\n (compared " ^ Jeha_Common.pretty_term (Jeha_Common.verbose_of ctxt) (Thm.prop_of replayed) ^ " and " ^ Jeha_Common.pretty_term (Jeha_Common.verbose_of ctxt) (Thm.term_of expected_conclusion) ^ ")" *)
+              (* ^ "\n (compared " ^ @{make_string} (Thm.prop_of replayed) ^ " and " ^ @{make_string} (Thm.term_of expected_conclusion) ^ ")" *)
+              )
             else ()
       in
         Inttab.update_new (JClause.id clause, replayed) reconstructed_clause_db
