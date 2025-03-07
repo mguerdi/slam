@@ -1,17 +1,5 @@
 import os
 
-# Instructions:
-# # create directory for this run
-# mkdir ~/analysis/runs/run1
-# # in jeha
-# git rev-parse HEAD > ~/analysis/runs/run1/commit
-# # in home
-# ./replay_mirabelle_sledgehammer.sh
-# # copy to run
-# cp ~/mirabelle_output/mirabelle.log analysis/runs/run1/
-# # view results
-# python3 main.py
-
 def squeeze(line):
     # tr -s ' '
     return " ".join(part for part in line.split(" ") if len(part) > 0)
