@@ -141,15 +141,19 @@ type literal_selection_function = Proof.context -> JLit.T list -> int list
 
 fun select_none _ _ = []
 
+fun is_selectable ctxt lit =
+  JLit.is_negative_or_negativoid_cfg ctxt lit
+    andalso (Config.get ctxt Jeha_Common.select_flex_sided orelse not (JLit.is_flex_sided lit))
+
 fun select_all_neg_lit (ctxt : Proof.context) lits =
   lits
   |> map_index I
-  |> map_filter (fn (cpos, lit) => if JLit.is_negative_or_negativoid_cfg ctxt lit then SOME cpos else NONE)
+  |> map_filter (fn (cpos, lit) => if is_selectable ctxt lit then SOME cpos else NONE)
 
 fun select_first_neg_lit ctxt lits =
   lits
   |> map_index I
-  |> get_first (fn (cpos, lit) => if JLit.is_negative_or_negativoid_cfg ctxt lit then SOME cpos else NONE)
+  |> get_first (fn (cpos, lit) => if is_selectable ctxt lit then SOME cpos else NONE)
   |> the_list
 
 fun select_first_maximal_neg_lit ctxt lits =
@@ -159,7 +163,7 @@ fun select_first_maximal_neg_lit ctxt lits =
       |> map_index I
       (* FIXME: maybe the blocker disallowing for selection of literals with a variable-headed side
       is really important? *)
-      |> filter (fn (cpos, lit) => JLit.is_negative_or_negativoid_cfg ctxt lit)
+      |> filter (fn (cpos, lit) => is_selectable ctxt lit)
     val max_neg_lits = Jeha_Order.idxs_of_maximal_elements (JLit.kbo o apply2 #2) neg_lits_cposs
   in
     case max_neg_lits of

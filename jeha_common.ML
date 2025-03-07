@@ -104,6 +104,7 @@ sig
   val rule_equality_subsumption : bool Config.T
   
   val select_negativoid : bool Config.T
+  val select_flex_sided : bool Config.T
   val literal_selection_function : string Config.T
 
   val unify_search_bound : int Config.T
@@ -229,6 +230,7 @@ val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_ru
 val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_equality_subsumption\<close> (K rule_default)
 
 val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>jeha_select_negativoid\<close> (K true)
+val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>jeha_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_maximal_neg_lit")
 
 val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)

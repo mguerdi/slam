@@ -6,6 +6,8 @@ sig
   val is_positive : T -> bool
   val is_negative : T -> bool
   val is_negative_or_negativoid_cfg : Proof.context -> T -> bool
+  val is_flex_sided : T -> bool
+  val is_flex_flex : T -> bool
   val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
@@ -56,6 +58,12 @@ fun is_negative_or_negativoid_cfg ctxt =
   if Config.get ctxt (Jeha_Common.select_negativoid)
     then is_negativoid
     else is_negative
+
+fun is_flex_sided (s, t, _) =
+  JTerm.is_variable_headed s orelse JTerm.is_variable_headed t
+
+fun is_flex_flex (s, t, _) =
+  JTerm.is_variable_headed s andalso JTerm.is_variable_headed t
 
 fun map f (s, t, b) = (f s, f t, b)
 
