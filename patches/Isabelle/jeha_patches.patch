@@ -132,12 +132,34 @@ diff --git a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML b/src/HOL/
 new file mode 100644
 --- /dev/null
 +++ b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,247 @@
 +(* Uses results from Mirabelle's sledgehammer action to rerun the preplay only (without calling the
 +external provers). *)
 +(* Only works with ATPs *)
 +structure Mirabelle_Sledgehammer_Replay: MIRABELLE_ACTION =
 +struct
++
++fun filter_preferred_methss
++  name
++  (preferred_methss
++    : Sledgehammer_Proof_Methods.proof_method * Sledgehammer_Proof_Methods.proof_method list list)
++=
++  let
++    val meths = flat (#2 preferred_methss)
++    val filtered_meths =
++      filter
++        (fn meth =>
++          String.isSubstring name (Sledgehammer_Proof_Methods.short_name_of_proof_method meth))
++      meths
++  in
++    (#1 preferred_methss, map single filtered_meths)
++  end
++
++fun filter_mini_preplay_input
++  name
++  ({used_facts, preferred_methss} : Sledgehammer.mini_preplay_input)
++=
++  {used_facts = used_facts, preferred_methss = filter_preferred_methss name preferred_methss}
 +
 +fun mini_preplay_input_to_mock_prover_result
 +  ({used_facts, preferred_methss} : Sledgehammer.mini_preplay_input)
@@ -309,35 +331,42 @@ new file mode 100644
 +        (* FIXME: consider replacing by K "MOCK MESSAGE" *)
 +        val message = atp_proof_text "MOCKNAME" params state goal subgoal subgoal_count
 +
-+        val mocked_prover_result = mini_preplay_input_to_mock_prover_result mini_preplay_input message
-+        val (outcome, message) =
-+          Sledgehammer.preplay_prover_result
-+            params
-+            state
-+            goal 
-+            subgoal 
-+            mocked_prover_result
-+        val message = message ()
++        fun run_methods name =
++          let
++            val mini_preplay_input = filter_mini_preplay_input name mini_preplay_input
++            val mocked_prover_result =
++              mini_preplay_input_to_mock_prover_result mini_preplay_input message
++            val (outcome, message) =
++              Sledgehammer.preplay_prover_result
++                params
++                state
++                goal
++                subgoal
++                mocked_prover_result
++            val message = message ()
 +
-+        (* Log *)
-+        val preplay_results =
-+          (case outcome of
-+            Sledgehammer.SH_Some (_, preplay_results) => preplay_results
-+          | _ => error "outcome: ATP_Proof.atp_failure option is hardcoded to be NONE so this shouldn't happen!")
-+        val exhaustive_preplay_msg =
-+            preplay_results
-+            |> map
-+              (fn (meth, (play_outcome, used_facts)) =>
-+                  "Preplay: " ^ Sledgehammer_Proof_Methods.string_of_proof_method
-+                    (map (ATP_Util.content_of_pretty o fst) used_facts) meth ^
-+                  " (" ^ Sledgehammer_Proof_Methods.string_of_play_outcome play_outcome ^ ")")
-+            |> cat_lines
-+              
-+        val log = exhaustive_preplay_msg 
++            (* Log *)
++            val preplay_results =
++              (case outcome of
++                Sledgehammer.SH_Some (_, preplay_results) => preplay_results
++              | _ => error "outcome: ATP_Proof.atp_failure option is hardcoded to be NONE so this shouldn't happen!")
++            val exhaustive_preplay_msg =
++                preplay_results
++                |> map
++                  (fn (meth, (play_outcome, used_facts)) =>
++                      "Preplay: " ^ Sledgehammer_Proof_Methods.string_of_proof_method
++                        (map (ATP_Util.content_of_pretty o fst) used_facts) meth ^
++                      " (" ^ Sledgehammer_Proof_Methods.string_of_play_outcome play_outcome ^ ")")
++                |> cat_lines
++
++            val log = exhaustive_preplay_msg
++          in
++            log
++            |> Symbol.trim_blanks
++            |> prefix_lines (Sledgehammer.short_string_of_sledgehammer_outcome outcome ^ " ")
++          end
 +      in
-+        log
-+        |> Symbol.trim_blanks
-+        |> prefix_lines (Sledgehammer.short_string_of_sledgehammer_outcome outcome ^ " ")
++        run_methods "metis" ^ run_methods "jeha"
 +      end
 +
 +    fun finalize () = "mirabelle sledgehammer replay done"
