@@ -366,7 +366,7 @@ new file mode 100644
 +            |> prefix_lines (Sledgehammer.short_string_of_sledgehammer_outcome outcome ^ " ")
 +          end
 +      in
-+        run_methods "metis" ^ run_methods "jeha"
++        run_methods "metis" ^ "\n" ^ run_methods "jeha"
 +      end
 +
 +    fun finalize () = "mirabelle sledgehammer replay done"
