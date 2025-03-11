@@ -17,6 +17,11 @@ USER isabelle
 # Isabelle
 WORKDIR /home/isabelle
 
+# # FIXME: use this instead of hg clone
+# # 31b1c203357a (2025-01-08)
+# # Look at Docker_Build.packages.mkString(" ")
+# RUN curl "https://isabelle.sketis.net/repos/isabelle/archive/31b1c203357a.tar.gz"
+
 RUN hg clone "https://isabelle-dev.sketis.net/source/isabelle/" Isabelle
 # 31b1c203357a (2025-01-08)
 RUN Isabelle/Admin/init -u -L -n -r 31b1c203357a
