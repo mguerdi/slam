@@ -1,10 +1,10 @@
 
-signature CLAUSE_ID =
+signature ID_GENERATOR =
 sig
   val new : unit -> int
 end;
 
-structure Clause_Id : CLAUSE_ID =
+functor Id_Generator(val name: string) : ID_GENERATOR =
 struct
 
 (* FIXME: why do we need this? Doesn't the prover run in a single thread? If not, how can we get one
@@ -12,7 +12,7 @@ id generator per prover instance? *)
 local
   val lock = Thread.Mutex.mutex ();
 in
-  fun critical e () = Multithreading.synchronized "jeha" lock e
+  fun critical e () = Multithreading.synchronized name lock e
 end;
 
 (* basically newId from metis.ML *)
@@ -32,3 +32,5 @@ val new  =
   end
 
 end;
+
+structure JClause_Id : ID_GENERATOR = Id_Generator(val name = "jeha_clause_id")

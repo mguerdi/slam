@@ -1950,7 +1950,7 @@ fun try_saturate context prems =
       prem
       |> Thm.prop_of
       |> Object_Logic.drop_judgment context (* remove Trueprop *)
-      |> (fn t => JClause.of_term context (t, Clause_Id.new ()))
+      |> (fn t => JClause.of_term context (t, JClause_Id.new ()))
       |> JClause.set_origin (Jeha_Log.Axiom { thm = prem })
     val clauses = map clause_of_prem prems
     val _ = Jeha_Common.trace_msg context (fn () =>

@@ -107,7 +107,7 @@ fun dummy literals =
 fun map_id f { literals, id, maxidx, origin, selected } =
   { literals = literals, id = f id, maxidx = maxidx, origin = origin, selected = selected }
 
-fun refresh_id _ = map_id (K (Clause_Id.new ()))
+fun refresh_id _ = map_id (K (JClause_Id.new ()))
 
 fun maxidx_of_literal_list ls =
   fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
