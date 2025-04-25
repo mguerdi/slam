@@ -1,62 +1,21 @@
 theory jeha_lemma
 
-imports jeha_base (* HOL.Sledgehammer *) HOL.Hilbert_Choice
+imports HOL.Hilbert_Choice HOL.Transfer
 
 begin
 
-ML \<open>
-  (* Goal: Only instantiate the term variables. Instantiate type variables as required by the term
-  instantiation.
-  1. Collect all term variables
-  2. Compare to the given term instantiations and deduce necessary type instantiations
-  3. Perform type instantiations
-  4. Perform term instantiations
-  *)
-  (* Difficult because we need to have the thm's variables in the same order as in the implementation
-  of Thm.instantiate'
-  fun deduce_type_instantiations ts thm =
-    let
-      val vars = fold Term.add_vars [] ts
-    in
-      error "unimplemented"
-    end *)
+datatype 'a type_arg_wrapper = Skolem_Type_Arg (inner: "'a itself")
+
+term "Skolem_Type_Arg TYPE(bool)"
+
+ML_val \<open>
+  val t = @{term "Skolem_Type_Arg"}
+  val c = @{const Skolem_Type_Arg(bool)}
 \<close>
 
 (* from SMT.thy *)
 lemma verit_sko_forall: \<open>(\<forall>x. P x) \<longleftrightarrow> P (SOME x. \<not>P x)\<close>
   by (insert someI[of \<open>\<lambda>x. \<not>P x\<close>], auto)
-
-ML \<open>
-  (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
-  (* fun forall_rw_lemma ctxt predicate = fastype_instantiate' ctxt T *)
-      (* we can't say [NONE] and have it figure out the type by itself *)
-      (* Thm.instantiate' [SOME T] [SOME P] @{thm verit_sko_forall} *)
-  
-
-  (* Alternative: Old Version 
-  fun forall_rw_lemma ctxt predicate =
-    let
-      val T = fastype_of predicate |> domain_type |> Thm.ctyp_of ctxt
-      val P = Thm.cterm_of ctxt predicate
-    in
-      (* FIXME: is there a way of not instantiating 'a explicitly? See verit_sko_forall proof? *)
-      \<^instantiate>\<open>
-        P and 'a=T in lemma (open) \<open>(\<forall>x. P x) \<longleftrightarrow> P (SOME x. \<not>P x)\<close>
-        by
-        (* (auto intro ! : someI[of \<open>\<lambda>x. \<not>P x\<close>]) *)
-        (* (auto simp add : someI[of \<open>\<lambda>x. \<not>P x\<close>]) *)
-        (* (force simp add : someI some_eq_imp) *)
-        (insert someI[of \<open>\<lambda>x. \<not>P x\<close>]) auto
-        \<close>
-    end
-  *)
-  
-  (*
-  val p = @{term "\<lambda> x :: bool . x"}
-  
-  val frwp = forall_rw_lemma @{context} p
-  *)
-\<close>
 
 lemma LEM: \<open>P \<or> \<not>P\<close>
   by auto
@@ -74,21 +33,6 @@ ML \<open>
 (* This is the contrapositive of what Isabelle calls "fun_cong" *)
 lemma arg_cong_contrapositive: \<open>s x \<noteq> s' x \<Longrightarrow> s \<noteq> s'\<close>
   by auto
-
-(* FIXME: delete 
-ML \<open>
-  fun arg_cong_lemma ctxt s s' x =
-    let
-      val cs = Thm.cterm_of ctxt s
-      val cs' = Thm.cterm_of ctxt s'
-      val cx = Thm.cterm_of ctxt x
-      val cT = Thm.ctyp_of ctxt (fastype_of s)
-      val cT' = Thm.ctyp_of ctxt (fastype_of s')
-      val cTx = Thm.ctyp_of ctxt (fastype_of x)
-    in
-      Thm.instantiate' [SOME cT, SOME cTx, SOME cT'] [SOME cs, SOME cx, SOME cs'] @{thm arg_cong_contrapositive}
-    end
-\<close> *)
 
 lemma sup_full_inference:
   "   (\<not>D \<Longrightarrow> t \<noteq> t' \<Longrightarrow> False)
@@ -112,7 +56,8 @@ ML \<open>
 signature JEHA_LEMMA = sig
   (* FIXME: the result of these should really be HClause.hthm *)
   val hclause_of_uninstantiated_bool_rw_rule: Proof.context -> term * term -> thm
-  val forall_exists_rw_lemma: Proof.context -> cterm -> bool -> thm
+  val forall_exists_rw_lemma: Proof.context -> term -> bool -> term * term * term -> thm
+  val neg_ext_lemma: Proof.context -> term * term -> term * term * term -> thm
 end
 
 structure Jeha_Lemma: JEHA_LEMMA = struct
@@ -134,17 +79,70 @@ fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
       else lemma
   end
 
-  fun forall_exists_rw_lemma ctxt predicate is_forall_rw =
+  (* Turn P with schematic vars ?x\<^sub>1, \<dots>, ?x\<^sub>n into \<lambda>x\<^sub>1 \<dots> x\<^sub>n. P [?x\<^sub>1:=x\<^sub>1, \<dots>?x\<^sub>n:=x\<^sub>n]. *)
+  fun abstract_over_schematic_vars predicate =
+    error "abstract_over_schematic_vars unimplemented"
+
+  (* FIXME: Pass skolem prem (HOLogic.mk_eq \<dots>) and sk_with_args only? But that makes a manual
+  proof (without fast) harder / impossible. *)
+  fun forall_exists_rw_lemma ctxt predicate is_forall_rw (sk, sk_with_args, sk_def) =
     let
-      val T = predicate |> Thm.term_of |> fastype_of |> domain_type |> Thm.ctyp_of ctxt
+      val T = predicate |> fastype_of |> domain_type
       val P = predicate
+      val skT = fastype_of sk
+      (* FIXME: Question: does `instantiate lemma \<dots>` prove first and then instantiate or the other
+      way around. *)
+      val prop = 
+        if is_forall_rw then
+          \<^instantiate>\<open>'skT = skT and sk and sk_def and sk_with_args and P and 'a=T in
+            prop \<open>(sk :: 'skT) = sk_def \<Longrightarrow> (\<forall>x :: 'a. P x) \<noteq> P sk_with_args \<Longrightarrow> False\<close>\<close>
+        else
+          \<^instantiate>\<open>'skT = skT and sk and sk_def and sk_with_args and P and 'a=T in
+            prop \<open>(sk :: 'skT) = sk_def \<Longrightarrow> (\<exists>x :: 'a. P x) \<noteq> P sk_with_args \<Longrightarrow> False\<close>\<close>
+      val th =
+        prop
+        |> Thm.cterm_of ctxt
+        |> Goal.init
+        |> fast_tac ctxt 1
+        |> Seq.hd
+        |> Goal.finish ctxt
     in
-      if is_forall_rw then
-        \<^instantiate>\<open>P and 'a=T in
-          lemma \<open>(\<forall>x. P x) \<noteq> P (SOME x. \<not>P x) \<Longrightarrow> False\<close> by (insert someI[of \<open>\<lambda>x. \<not>P x\<close>], auto)\<close>
-      else
-        \<^instantiate>\<open>P and 'a=T in
-          lemma \<open>(\<exists>x. P x) \<noteq> P (SOME x. P x) \<Longrightarrow> False\<close> by (insert someI[of \<open>P\<close>], auto)\<close>
+      th 
+    end
+
+  fun neg_ext_lemma ctxt (s, s') (sk, sk_with_args, sk_def) =
+    let
+      val skT = fastype_of sk
+      val (dom, codom) = dest_funT (fastype_of s)
+      val prop = \<^instantiate>\<open>
+        'skT = skT and sk and sk_def and sk_with_args and s and s' and 'a=dom and 'b=codom in
+        prop \<open>
+          (sk :: 'skT) = sk_def
+          \<Longrightarrow> (s :: 'a \<Rightarrow> 'b) sk_with_args = s' sk_with_args
+          \<Longrightarrow> s = s'\<close>\<close>
+      (* FIXME: Where does instantiate get its proof context from? Or is that not necessary for type
+      checking terms? *)
+      val term_hint = \<^instantiate>\<open>
+        s and s' and 'a=dom and 'b=codom in term \<open>\<lambda>uub. (s :: 'a \<Rightarrow> 'b) uub \<noteq> s' uub\<close>\<close>
+      val P = Thm.cterm_of ctxt term_hint
+      val dom = Thm.ctyp_of ctxt dom
+      val lemma_lemma = \<^instantiate>\<open>
+        P and 'a=dom in lemma \<open>\<exists>x :: 'a. P x \<Longrightarrow> P (SOME x. P x)\<close> by (insert someI_ex)\<close>
+      val th =
+        prop
+        |> Thm.cterm_of ctxt
+        |> Goal.init
+        |> (
+          print_tac ctxt "BEFORE FAST"
+          THEN Method.insert_tac ctxt [lemma_lemma] 1
+          THEN print_tac ctxt "AFTER_INSERT"
+          THEN fast_tac ctxt 1
+          THEN print_tac ctxt "AFTER FAST"
+        )
+        |> Seq.hd
+        |> Goal.finish ctxt
+    in
+      th
     end
 end
 \<close>

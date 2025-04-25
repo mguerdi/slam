@@ -34,3 +34,5 @@ val new  =
 end;
 
 structure JClause_Id : ID_GENERATOR = Id_Generator(val name = "jeha_clause_id")
+
+structure JSkolem_Id : ID_GENERATOR = Id_Generator(val name = "jeha_skolem_id")

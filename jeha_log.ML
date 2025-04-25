@@ -19,13 +19,13 @@ sig
   | ForallHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
   | ExistsHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
   | BoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
-  | ForallRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ForallRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, skolems: (term * term * term) list }
+  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, skolems: (term * term * term) list }
   | FluidBoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidLoobHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (* axioms *)
   | Ext
-  | NegExt of { premise: 'a, literal: JClause_Pos.cpos }
+  | NegExt of { premise: 'a, literal: JClause_Pos.cpos, skolems: (term * term * term) list }
   | Choice
   (* simplification *)
   (* FIXME: | DeleteDuplicatedLits of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
@@ -77,13 +77,13 @@ datatype 'a inference =
   | ForallHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
   | ExistsHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
   | BoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
-  | ForallRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
-  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | ForallRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, skolems: (term * term * term) list }
+  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, skolems: (term * term * term) list } 
   | FluidBoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidLoobHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (** axioms **)
   | Ext
-  | NegExt of { premise: 'a, literal: JClause_Pos.cpos }
+  | NegExt of { premise: 'a, literal: JClause_Pos.cpos, skolems: (term * term * term) list }
   | Choice
   (** simplification **)
   | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos, orientation: JLit.lpos } list }

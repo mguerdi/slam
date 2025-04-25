@@ -1193,6 +1193,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   end
   end
 
+(* FIXME: duplication with impl_infer_bool_rw_eq_neq_fa_ex_hoist *)
 fun impl_simp_bool_rw
   ctxt
   (c : JClause.T)
@@ -1376,6 +1377,114 @@ val infer_forall_hoist = impl_forall_exists_hoist true
 
 val infer_exists_hoist = impl_forall_exists_hoist false
 
+(* impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt clause u_pos pattern insert_for_u *)
+fun impl_fa_ex_rw
+  is_forall
+  ctxt
+  (c : JClause.T)
+  (u_pos : JClause.full_pos)
+  : JClause.T list
+=
+  (* condition 5. *)
+  if
+    (case u_pos of
+      ([], lpos, cpos) =>
+        let
+          val (_, other_side, is_positive) = c |> JClause.lit_at cpos |> JLit.orient lpos
+        in
+          if not is_positive then false else
+          if (is_forall andalso other_side = @{term True})
+            orelse (not is_forall andalso other_side = @{term False})
+          then
+            true
+          else
+            false 
+        end
+      | _ => false) then [] else
+  let val u = JClause.subterm_at_full_pos c u_pos in
+  if is_Var u then [] else (* 2. *)
+  let
+    (* from outer *)
+    val maxidx = JClause.maxidx c
+    val fresh_typ = TVar (("'b", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* \<beta> *)
+    val fresh_predicate = Var (("y_faexrw", maxidx + 1), fresh_typ --> @{typ bool})
+    val quantifier =
+      (if is_forall then HOLogic.all_const else HOLogic.exists_const) fresh_typ
+    (* \<forall> ?y / \<exists> ?y *)
+    val pattern = quantifier $ fresh_predicate
+
+    val maxidx = Int.max (JClause.maxidx c, maxidx_of_term pattern)
+    val u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term =
+      case u_pos of
+        ([], lpos, cpos) =>
+          let
+            val (_, other_side, is_positive) = c |> JClause.lit_at cpos |> JLit.orient lpos
+          in
+            is_positive andalso
+              (other_side = @{term True}
+                orelse other_side = @{term False}
+                orelse JTerm.is_variable_headed other_side)
+          end
+      | _ => false
+    val u_variable_headed_condition =
+      not (JTerm.is_variable_headed u)
+        orelse u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term
+    val unifiers =
+      Jeha_Unify.smash_unifiers
+        (Context.Proof ctxt)
+        [(u, pattern)]
+        (Envir.empty (maxidx + 1))
+    val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
+    fun build_conclusion unifier =
+      let
+        val c =
+          c
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.recompute_selected ctxt
+
+        val abstract_over = Free ("z", fresh_typ)
+        val choice_body = (is_forall ? HOLogic.mk_not) (fresh_predicate $ abstract_over)
+        val choice_witness =
+          JTerm.make_choice_witness abstract_over choice_body
+          (* critical *)
+          |> JTerm.norm_beta_eta_qeta_env unifier
+        (* Note: FV(?y\<sigma>) = FV((SOME z. ?y z)\<sigma>), where FV gives the set of *schematic* variables *)
+        val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
+          JTerm.make_skolem_constant choice_witness
+        
+        (* Note: ?y\<sigma> (sk TYPE(\<dots>) x\<^sub>1 \<dots>) is not equal to (?y (sk TYPE(\<dots>) x\<^sub>1 \<dots>)) \<sigma>, because \<sigma> can
+        assign the x\<^sub>i, since \<sigma> \<in> CSU(Q. ?y, u) *)
+        val insert_for_u =
+          JTerm.norm_beta_eta_qeta_env unifier (fresh_predicate $ skolem_constant_with_args)
+
+        val maxidx = Int.max (JClause.maxidx c, maxidx_of_term insert_for_u)
+      in
+        (* 3. the position of u is eligible in C w.r.t. \<sigma> *)
+        if not (JClause.is_eligible_full_pos c u_pos) then NONE else
+        (* 4. if the head of u is a variable ... *)
+        if not u_variable_headed_condition then NONE else
+
+        c
+        |> JClause.map_at_full_pos u_pos (K insert_for_u)
+        |> JClause.set_maxidx maxidx
+        |> JClause.norm_negative_predicate_literals ctxt
+        |> JClause.recompute_selected ctxt
+        |> JClause.refresh_id ()
+        |> JClause.set_origin (
+          (if is_forall then Jeha_Log.ForallRw else Jeha_Log.ExistsRw)
+            { premise = JClause.id c
+            , subterm = u_pos
+            , substitution = unifier
+            , skolems =
+                [(skolem_constant, skolem_constant_with_args, skolem_constant_definition)]
+            })
+        |> SOME
+      end
+  in
+    map_filter build_conclusion unifiers
+  end
+  end
+
 (* We diverge from the o\<lambda>Sup paper to avoid skolemization. (FIXME: Experimental)
 Idea: Replace \<forall>x. y x by y (SOME z. \<not> (y z))
 If the universal statement holds then there is no z s.t. \<not> (y z) and the r.h.s
@@ -1383,42 +1492,12 @@ is also true. If the universal statement does not hold, then there is such a z
 and the r.h.s. becomes false, because z witnesses \<not> (y z).
 Similarly replace \<exists>x. y x by y (SOME z. y z) *)
 fun impl_infer_forall_exists_rw is_forall ctxt clause u_pos =
-  (* condition 5. *)
-  (case u_pos of
-    ([], lpos, cpos) =>
-      let
-        val (_, other_side, is_positive) = clause |> JClause.lit_at cpos |> JLit.orient lpos
-      in
-        if not is_positive then I else
-        if (is_forall andalso other_side = @{term True})
-          orelse (not is_forall andalso other_side = @{term False})
-        then
-          K []
-        else
-          I
-      end
-  | _ => I)
   (let
 
-    val maxidx = JClause.maxidx clause
-    val fresh_typ = TVar (("'b", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* \<beta> *)
-    val fresh_predicate = Var (("y_faexrw", maxidx + 1), fresh_typ --> @{typ bool})
-    
-    val choice_body = (is_forall ? HOLogic.mk_not) (fresh_predicate $ Free ("z", fresh_typ))
-    val skolem_symbol = HOLogic.choice_const fresh_typ $ (absfree ("z", fresh_typ) choice_body)
-    val insert_for_u = fresh_predicate $ skolem_symbol
-
-    val quantifier =
-      (if is_forall then HOLogic.all_const else HOLogic.exists_const) fresh_typ
-    (* \<forall> y / \<exists> y*)
-    val pattern = quantifier $ fresh_predicate
-
+    val () = ()
     (* val _ = writeln ("FaExRw past more with u_pos" ^ @{make_string} u_pos ) *)
   in
-      impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt clause u_pos pattern false insert_for_u NONE
-      |> map (fn (unifier, c) => c |> JClause.set_origin (
-          (if is_forall then Jeha_Log.ForallRw else Jeha_Log.ExistsRw)
-            { premise = JClause.id clause, subterm = u_pos, substitution = unifier }))
+      impl_fa_ex_rw is_forall ctxt clause u_pos
   end)
 
 val infer_forall_rw = impl_infer_forall_exists_rw true
@@ -1435,11 +1514,14 @@ fun infer_neg_ext ctxt c cpos =
   let val (s, s', false) = lit in
   if null (Term.binder_types (fastype_of s)) then [] (* not of function type *) else
   let
-    val xT = domain_type (fastype_of s)
-    val x = ("x_neg_ext", xT)
-    val choice_body = HOLogic.mk_not (HOLogic.mk_eq (s $ Free x, s' $ Free x))
-    val skolem_symbol = HOLogic.choice_const xT $ (absfree x choice_body)
-    val new_literal = (s $ skolem_symbol, s' $ skolem_symbol, false)
+    val x = Free ("x_neg_ext", domain_type (fastype_of s))
+    val choice_body = HOLogic.mk_not (HOLogic.mk_eq (s $ x, s' $ x))
+    (* Note: FV(s\<noteq>s') = FV(SOME z. s z \<noteq> s' z), where FV gives the set of *schematic* variables. *)
+    val choice_witness = JTerm.make_choice_witness x choice_body
+    val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
+      JTerm.make_skolem_constant choice_witness
+
+    val new_literal = (s $ skolem_constant_with_args, s' $ skolem_constant_with_args, false)
 
     val new_clause =
       c
@@ -1450,7 +1532,11 @@ fun infer_neg_ext ctxt c cpos =
       |> JClause.set_maxidx (JClause.maxidx c)
       |> JClause.refresh_id ()
       |> JClause.set_origin
-          (Jeha_Log.NegExt { premise = JClause.id c, literal = cpos })
+          (Jeha_Log.NegExt
+            { premise = JClause.id c
+            , literal = cpos
+            , skolems = [(skolem_constant, skolem_constant_with_args, skolem_constant_definition)]
+            })
   in
     [new_clause]
   end end end

@@ -33,6 +33,7 @@ session "JEHA_TEST_RULES" in Rules = JEHA_TEST_BASE +
     bool_rw
     eq_hoist
     positive_simplify_reflect
+    subsumption
     sup
 
 session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
@@ -45,12 +46,12 @@ session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
     redundant_boolean
     eligibility
     faexhoist
+    fast_kbo
     (* utilities *)
     subsumption
     unification
     normalization
     preprocessing
-    fast_kbo
 
     (* still failing: *)
     (* leo3 *)
@@ -91,6 +92,7 @@ session "JEHA_TEST_RECONSTRUCTION" in Reconstruction = JEHA_TEST_BASE +
     neg_ext
     neq_hoist
     positive_simplify_reflect
+    proof_util
     simp_outer_claus
     sup
 

@@ -1,5 +1,5 @@
 theory jeha_base
-  imports HOL.Transfer HOL.Argo
+  imports HOL.Transfer HOL.Argo jeha_lemma
 begin
 
 ML_file \<open>jeha_common.ML\<close>
