@@ -403,8 +403,10 @@ and tckbolex below_lam vb wb [] [] = (vb, wb, SOME EQUAL)
             end
       end
 
-val kbo_fast = #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term [])
-val kbo = Jeha_Order_Reference.kbo
+fun kbo_fast _ = (* #3 o uncurry (tckbo false empty_var_balance zero_weight) o apply2 (to_fo_term []) *)
+  error "Use new fast kbo in jeha_kbo.ML"
+fun kbo _ = (* Jeha_Order_Reference.kbo *)
+  error "Use new fast kbo in jeha_kbo.ML"
 
 fun multiset_eq a_eq (m, n) = submultiset a_eq (m, n) andalso submultiset a_eq (n, m)
 
