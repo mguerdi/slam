@@ -175,7 +175,7 @@ fun parse_proof_reconstruction_mode "cheat" = Cheat
   | parse_proof_reconstruction_mode s = error
       ( "Not a valid jeha proof reconstruction mode: "
       ^ s
-      ^ " (must be either of \"none\", \"argo\", \"metis\", \"blast\" or \"manual\")" )
+      ^ " (must be either of \"cheat\", \"argo\", \"metis\", \"blast\" or \"manual\")" )
 
 val proof_reconstruction =
   Attrib.setup_config_string
