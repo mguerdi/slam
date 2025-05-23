@@ -1,9 +1,9 @@
 theory jeha_base
-  imports ATP Argo Metis
+  imports ATP Argo Metis jeha_lemma
 begin
 
 ML_file \<open>Tools/Jeha/jeha_common.ML\<close>
-ML_file \<open>Tools/Jeha/clause_id.ML\<close>
+ML_file \<open>Tools/Jeha/jeha_id.ML\<close>
 ML_file \<open>Tools/Jeha/jterm.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_order_reference.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_order.ML\<close>
