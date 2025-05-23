@@ -89,21 +89,35 @@ fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
     let
       val T = predicate |> fastype_of |> domain_type
       val P = predicate
+      val cP = Thm.cterm_of ctxt P
+      val cT = Thm.ctyp_of ctxt T
       val skT = fastype_of sk
       (* FIXME: Question: does `instantiate lemma \<dots>` prove first and then instantiate or the other
       way around. *)
-      val prop = 
+      val (prop, helper_lemma) =
         if is_forall_rw then
-          \<^instantiate>\<open>'skT = skT and sk and sk_def and sk_with_args and P and 'a=T in
-            prop \<open>(sk :: 'skT) = sk_def \<Longrightarrow> (\<forall>x :: 'a. P x) \<noteq> P sk_with_args \<Longrightarrow> False\<close>\<close>
+          ( \<^instantiate>\<open>'skT = skT and sk and sk_def and sk_with_args and P and 'a=T in
+              prop \<open>(sk :: 'skT) = sk_def \<Longrightarrow> (\<forall>x :: 'a. P x) \<noteq> P sk_with_args \<Longrightarrow> False\<close>\<close>
+          , \<^instantiate>\<open>P=cP and 'a=cT in lemma\<open>(\<forall>x. P x) \<longleftrightarrow> P (SOME x. \<not>P x)\<close>
+              by (rule verit_sko_forall)\<close>
+          )
         else
-          \<^instantiate>\<open>'skT = skT and sk and sk_def and sk_with_args and P and 'a=T in
-            prop \<open>(sk :: 'skT) = sk_def \<Longrightarrow> (\<exists>x :: 'a. P x) \<noteq> P sk_with_args \<Longrightarrow> False\<close>\<close>
+          ( \<^instantiate>\<open>'skT = skT and sk and sk_def and sk_with_args and P and 'a=T in
+              prop \<open>(sk :: 'skT) = sk_def \<Longrightarrow> (\<exists>x :: 'a. P x) \<noteq> P sk_with_args \<Longrightarrow> False\<close>\<close>
+          , \<^instantiate>\<open>P=cP and 'a=cT in lemma\<open>(\<exists>x. P x) \<longleftrightarrow> P (SOME x. P x)\<close>
+              by (insert someI_ex[of \<open>P\<close>], auto)\<close>
+          )
       val th =
         prop
         |> Thm.cterm_of ctxt
         |> Goal.init
-        |> fast_tac ctxt 1
+        |> (
+          print_tac ctxt "BEFORE INSERT"
+          THEN Method.insert_tac ctxt [helper_lemma] 1
+          THEN print_tac ctxt "BEFORE FAST"
+          THEN fast_tac ctxt 1
+          THEN print_tac ctxt "AFTER FAST"
+        )
         |> Seq.hd
         |> Goal.finish ctxt
     in
@@ -126,7 +140,7 @@ fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
         s and s' and 'a=dom and 'b=codom in term \<open>\<lambda>uub. (s :: 'a \<Rightarrow> 'b) uub \<noteq> s' uub\<close>\<close>
       val P = Thm.cterm_of ctxt term_hint
       val dom = Thm.ctyp_of ctxt dom
-      val lemma_lemma = \<^instantiate>\<open>
+      val helper_lemma = \<^instantiate>\<open>
         P and 'a=dom in lemma \<open>\<exists>x :: 'a. P x \<Longrightarrow> P (SOME x. P x)\<close> by (insert someI_ex)\<close>
       val th =
         prop
@@ -134,7 +148,7 @@ fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
         |> Goal.init
         |> (
           print_tac ctxt "BEFORE FAST"
-          THEN Method.insert_tac ctxt [lemma_lemma] 1
+          THEN Method.insert_tac ctxt [helper_lemma] 1
           THEN print_tac ctxt "AFTER_INSERT"
           THEN fast_tac ctxt 1
           THEN print_tac ctxt "AFTER FAST"
