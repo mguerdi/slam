@@ -1,6 +1,6 @@
 theory jeha_lemma
 
-imports Hilbert_Choice
+imports Hilbert_Choice Transfer
 
 begin
 
