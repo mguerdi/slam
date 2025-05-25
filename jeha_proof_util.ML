@@ -2,10 +2,8 @@ signature JEHA_PROOF_UTIL =
 sig
   val comp_no_flatten_no_incr: thm * int -> int -> thm -> thm
   val norm_negative_predicate_literals: Proof.context -> thm -> thm 
-  val instantiate : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
-  val instantiate_with_env : Proof.context -> Envir.env -> thm -> thm
-  val instantiate_norm : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
-  val instantiate_norm_with_env : Proof.context -> Envir.env -> thm -> thm
+  val envir_norm_thm : Proof.context -> Envir.env -> thm -> thm
+  val envir_subst_thm : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
   val with_fixed_vars : cterm list -> ctyp list -> Proof.context -> tactic -> tactic
   val with_all_vars_fixed : Proof.context -> tactic -> tactic
   (* 1-based *)
@@ -66,54 +64,52 @@ fun norm_negative_predicate_literals ctxt th =
     Seq.hd (ALLGOALS (TRY o tac) th)
   end
 
-fun instantiate ctxt (tyenv, tenv) thm =
-  (* see metis_reconstruct.ML, flexflex_first_order *)
+(* Compare: Envir.subst_\<dots> *)
+fun envir_subst_thm ctxt (tyenv, tenv) th =
   let
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
-      "instantiating\n\t" ^
-      Thm.string_of_thm ctxt thm ^
-      "\nwith substitution\n\t" ^
+      "envir_subst_thm: \n\t" ^
+      Thm.string_of_thm ctxt th ^
+      "\nwith environment\n\t" ^
       Jeha_Common.pretty_tenv ctxt (tenv) ^
       "\n\t" ^
       Jeha_Common.pretty_tyenv ctxt (tyenv))
 
-    fun mkT (v, (S, T)) = ((v, S), Thm.ctyp_of ctxt T)
-    fun mk (v, (T, t)) = ((v, Envir.subst_type tyenv T), Thm.cterm_of ctxt t)
+    fun mkT (v, (S, T)) = ((v, S), Thm.ctyp_of ctxt (Envir.subst_type tyenv T))
+    fun mk (v, (T, t)) =
+      (* FIXME: why only Envir.subst_term_types and not Envir.subst_term? (The latter didn't work) *)
+      ((v, Envir.subst_type tyenv T), Thm.cterm_of ctxt (Envir.subst_term_types tyenv t))
 
     val instsT = Vartab.fold (cons o mkT) tyenv []
     val insts = Vartab.fold (cons o mk) tenv []
   in
-    Thm.instantiate (TVars.make instsT, Vars.make insts) thm
+    Thm.instantiate (TVars.make instsT, Vars.make insts) th
   end
 
-fun instantiate_with_env ctxt env = instantiate ctxt (Envir.type_env env, Envir.term_env env)
-
-(* FIXME: see also Pure/ML/ml_instantiate.ML *)
-fun instantiate_norm ctxt (tyenv, tenv) thm =
+(* compare: Envir.norm_\<dots> *)
+fun envir_norm_thm ctxt env th =
   (* see metis_reconstruct.ML, flexflex_first_order *)
   let
-    (* val _ = Jeha_Common.trace_msg ctxt (fn () =>
-      "instantiating (norm)\n\t" ^
-      Thm.string_of_thm ctxt thm ^
-      "\nwith substitution\n\t" ^
+    val tyenv = Envir.type_env env
+    val tenv = Envir.term_env env 
+    val _ = Jeha_Common.trace_msg ctxt (fn () =>
+      "envir_norm_thm: \n\t" ^
+      Thm.string_of_thm ctxt th ^
+      "\nwith environment\n\t" ^
       Jeha_Common.pretty_tenv ctxt (tenv) ^
       "\n\t" ^
-      Jeha_Common.pretty_tyenv ctxt (tyenv)) *)
+      Jeha_Common.pretty_tyenv ctxt (tyenv))
 
-    (* FIXME: more chasing? look at thm.ML prep_insts, etc. *)
-    fun mkT (v, (S, T)) = ((v, S), Thm.ctyp_of ctxt T)
-    (* FIXME: there is no norm_term_types... *)
-    fun mk (v, (T, t)) = ((v, Envir.norm_type tyenv T), Thm.cterm_of ctxt (Envir.subst_term_types tyenv t))
+    fun mkT (v, (S, T)) = ((v, S), Thm.ctyp_of ctxt (Envir.norm_type tyenv T))
+    fun mk (v, (T, t)) = ((v, Envir.norm_type tyenv T), Thm.cterm_of ctxt (Envir.norm_term env t))
 
     val instsT = Vartab.fold (cons o mkT) tyenv []
     val insts = Vartab.fold (cons o mk) tenv []
   in
-    Thm.instantiate_beta (TVars.make instsT, Vars.make insts) thm
+    Thm.instantiate_beta (TVars.make instsT, Vars.make insts) th
     |> Drule.eta_contraction_rule
     |> norm_negative_predicate_literals ctxt
   end
-
-fun instantiate_norm_with_env ctxt env = instantiate_norm ctxt (Envir.type_env env, Envir.term_env env)
 
 fun with_fixed_vars vars tvars ctxt tac th =
   let
@@ -145,7 +141,7 @@ fun with_fixed_vars vars tvars ctxt tac th =
             (ListPair.zip (map Var new_vars, map Var old_vars))
             (Vartab.empty, Vartab.empty)
         
-        val proved_th_repaired = instantiate ctxt new_to_old_matcher proved_th
+        val proved_th_repaired = envir_subst_thm ctxt new_to_old_matcher proved_th
       in
         proved_th_repaired
       end

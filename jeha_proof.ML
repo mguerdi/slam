@@ -719,13 +719,13 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
     fun get_and_instantiate (substitution: Envir.env) (shift: int option) (id: int) =
       get_thm id 
       |> HClause.incr_indexes (the_default 0 shift)
-      |> HClause.map_hthm (Jeha_Proof_Util.instantiate_norm_with_env ctxt substitution)
+      |> HClause.map_hthm (Jeha_Proof_Util.envir_norm_thm ctxt substitution)
     val conclusion =
       case origin of
         Jeha_Log.Axiom { thm } =>
           thm
           |> hclause_of_axiom ctxt
-          |> HClause.map_hthm (Jeha_Proof_Util.instantiate_norm_with_env ctxt Envir.init)
+          |> HClause.map_hthm (Jeha_Proof_Util.envir_norm_thm ctxt Envir.init)
       | Jeha_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
           reconstruct_sup
             ctxt
@@ -801,7 +801,7 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
             val instantiated_subrule =
               subrule
               |> Jeha_Lemma.hclause_of_uninstantiated_bool_rw_rule ctxt
-              |> Jeha_Proof_Util.instantiate_with_env ctxt substitution
+              |> Jeha_Proof_Util.envir_norm_thm ctxt substitution
           in
             reconstruct_bool_rw
               ctxt
@@ -882,7 +882,7 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
             val instantiated_subrule =
               subrule
               |> Jeha_Lemma.hclause_of_uninstantiated_bool_rw_rule ctxt
-              |> Jeha_Proof_Util.instantiate_with_env ctxt substitution
+              |> Jeha_Proof_Util.envir_norm_thm ctxt substitution
           in
             reconstruct_bool_rw
               ctxt
