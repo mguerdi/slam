@@ -17,6 +17,7 @@ ML_file \<open>Tools/Jeha/jeha_index.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_unify.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_subsumption.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_simplify.ML\<close>
+ML_file \<open>Tools/Jeha/jeha_passive.ML\<close>
 ML_file \<open>Tools/Jeha/jeha.ML\<close>
 
 end

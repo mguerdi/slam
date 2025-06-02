@@ -62,15 +62,11 @@ sig
   val infer_clauses :
     Proof.context -> JClause.T list -> JClause.T -> (int * JClause.full_pos) Term_Index.T
     -> JClause.T list
-  (* *)
-  structure Passive_Set : HEAP
-  val init_passive_set : JClause.T list -> Passive_Set.T
-  val seq_of_passive_set : Passive_Set.T -> JClause.T Seq.seq
   datatype step_result = Unsat | MaybeSat | Next 
   type prover_state =
     { context: Proof.context
     , countdown: int
-    , passive: Passive_Set.T
+    , passive: Jeha_Passive_Set.T
     , active: JClause.T list
     , green_index: (int * JClause.full_pos) Term_Index.T
     , unit_index: (int * JLit.lpos) Term_Index.T
@@ -83,7 +79,6 @@ sig
   val given_clause_step : prover_state -> step_result * prover_state
   val try_saturate : Proof.context -> thm list -> step_result * prover_state
   val make_clause_db : prover_state -> int -> JClause.T
-  val select_given_clause : Passive_Set.T -> JClause.T * Passive_Set.T
   (* DEBUG *)
   val ml_bool_of : term -> bool
 end
@@ -1543,27 +1538,6 @@ fun infer_neg_ext ctxt c cpos =
 
 (** Saturation Loop **)
 
-(* Passive_Set *)
-
-fun size_of_clause c =
-  fold (fn (l, r, _) => fn acc => acc + size_of_term l + size_of_term r) (JClause.literals c) 0
-
-structure Passive_Set = Heap(type elem = int * JClause.T val ord = int_ord o apply2 fst)
-
-fun seq_of_passive_set passive =
-  if Passive_Set.is_empty passive
-    then Seq.empty
-    else Passive_Set.min_elem passive |>> snd ||> seq_of_passive_set |> uncurry Seq.cons
-
-(* initial clauses all have weight 0 so they are added to active set first *)
-fun init_passive_set clauses = fold Passive_Set.insert (map (pair 0) clauses) Passive_Set.empty
-
-fun add_new_clause clause = Passive_Set.insert (size_of_clause clause, clause)
-
-fun add_new_clauses passive clauses = fold add_new_clause clauses passive
-
-fun select_given_clause cs = Passive_Set.min_elem cs |>> snd
-
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
 fun forward_simplify
   ctxt
@@ -1858,7 +1832,7 @@ datatype step_result = Unsat | MaybeSat | Next
 type prover_state =
   { context: Proof.context
   , countdown: int
-  , passive: Passive_Set.T
+  , passive: Jeha_Passive_Set.T
   , active: JClause.T list
   , green_index: (int * JClause.full_pos) Term_Index.T
   , unit_index: (int * JLit.lpos) Term_Index.T
@@ -1878,7 +1852,7 @@ fun given_clause_step
       tracer context
         (fn () => msg ^ JClause.pretty_clauses context clauses)
     val _ =
-      let val passive_seq = passive |> seq_of_passive_set in
+      let val passive_seq = passive |> Jeha_Passive_Set.seq_of in
           trace_msg_clauses
             Jeha_Common.trace_msg_passive
             ("passive [10/" ^ (passive_seq |> Seq.list_of |> length |> @{make_string}) ^ "]")
@@ -1888,7 +1862,7 @@ fun given_clause_step
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
     inferences are possible and empty clause has not been derived). Later: no non-redundant
     inferences *)
-    val (given_clause, passive) = select_given_clause passive
+    val (given_clause, passive) = Jeha_Passive_Set.select_given_clause passive
 
     (* tracing *)
     val _ = trace_msg_clauses Jeha_Common.trace_msg "given_clause " [given_clause]
@@ -1937,7 +1911,7 @@ fun given_clause_step
             val archive = intermediate @ archive
             (* following zipperposition (src/prover/saturate.ml) add all simplifications except one
             (the current given_clause) to the passive set *)
-            val passive = add_new_clauses passive simplifications
+            val passive = Jeha_Passive_Set.add_new_clauses passive simplifications
             (* simplify actives with given clause *)
             (* FIXME: remove direct descendants of redundant_actives and simplified_actives from
             passive set, or: do what's described in the E 2.3 paper (deleting at activation time) *)
@@ -1997,7 +1971,7 @@ fun given_clause_step
             val _ = Jeha_Common.trace_msg_cheap_simp context (K "END CHEAP SIMPLIFICATION")
             val _ = trace_msg_clauses Jeha_Common.trace_msg_inferred "new_clauses: " new_clauses
             (* add inferred clauses to passive set *)
-            val passive = add_new_clauses passive new_clauses
+            val passive = Jeha_Passive_Set.add_new_clauses passive new_clauses
             (* tracing *)
             val _ = trace_msg_clauses Jeha_Common.trace_msg_active "active: " active
           in
@@ -2053,7 +2027,7 @@ fun try_saturate context prems =
           true
           { context = context
           , countdown = Config.get context Jeha_Common.max_number_of_steps
-          , passive = (init_passive_set clauses)
+          , passive = Jeha_Passive_Set.init clauses
           , active = []
           , green_index = Term_Index.empty
           , unit_index = Term_Index.empty
