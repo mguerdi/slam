@@ -13,6 +13,7 @@ sig
   val strip_comb_fun_types_args : term -> term * typ list * term list
   val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
   val is_variable_headed : term -> bool
+  val is_ground : term -> bool
   val can_have_green_args : term -> bool
   val is_position_of_fully_applied_logical_symbol : tpos -> term -> bool
   val tposs_of : term -> tpos list
@@ -269,6 +270,8 @@ fun is_not_ground t =
       t
       false
   end
+
+val is_ground = not o is_not_ground
 
 (* Overapproximation of fluid terms. Though not explicitely stated in the o\<lambda>Sup paper, Bound-headed
 applications are not considered fluid (as in \<lambda>Sup and zipperposition) *)

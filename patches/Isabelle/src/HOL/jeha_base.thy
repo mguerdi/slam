@@ -5,6 +5,7 @@ begin
 ML_file \<open>Tools/Jeha/jeha_common.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_id.ML\<close>
 ML_file \<open>Tools/Jeha/jterm.ML\<close>
+ML_file \<open>Tools/Jeha/jeha_symbol_table.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_order_reference.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_order.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_kbo.ML\<close>

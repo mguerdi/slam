@@ -77,7 +77,7 @@ sig
   exception JEHA_EXCEPTION of exn * prover_state
   val given_clause_loop : bool -> prover_state -> step_result * prover_state
   val given_clause_step : prover_state -> step_result * prover_state
-  val try_saturate : Proof.context -> thm list -> step_result * prover_state
+  val try_saturate : Proof.context -> term -> thm list -> step_result * prover_state
   val make_clause_db : prover_state -> int -> JClause.T
   (* DEBUG *)
   val ml_bool_of : term -> bool
@@ -1853,10 +1853,7 @@ fun given_clause_step
         (fn () => msg ^ JClause.pretty_clauses context clauses)
     val _ =
       let val passive_seq = passive |> Jeha_Passive_Set.seq_of in
-          trace_msg_clauses
-            Jeha_Common.trace_msg_passive
-            ("passive [10/" ^ (passive_seq |> Seq.list_of |> length |> @{make_string}) ^ "]")
-            (passive_seq |> Seq.take 10 |> Seq.list_of)
+        Jeha_Common.trace_msg_passive context (fn () => Jeha_Passive_Set.pretty context 10 passive)
       end
 
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
@@ -2000,7 +1997,7 @@ fun given_clause_loop dump state =
     (Unsat, state) => (Unsat, state)
   | (Next, state) => given_clause_loop dump state
 
-fun try_saturate context prems =
+fun try_saturate context goal prems =
   let
     val _ = Jeha_Common.trace_msg context (fn () =>
       "prems: "
@@ -2018,6 +2015,9 @@ fun try_saturate context prems =
       ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of context) (map JClause.term_of clauses))
     val _ = Jeha_Common.trace_msg context (fn () => "\n>>> start of given clause procedure <<<")
     val symbols = Subsumption_Index.collect_symbols clauses
+    val goal_symbols = Jeha_Symbol_Table.add_symbols goal Jeha_Symbol_Table.empty
+    val () = Jeha_Common.trace_msg context (fn () =>
+      "goal_symbols (for selection heuristic): " ^ @{make_string} goal_symbols)
     val () = Jeha_Common.trace_msg context (fn () =>
       "Symbols for feature vector index:" ^ "\n" ^
       Jeha_Common.pretty_terms (Jeha_Common.verbose_of context) symbols)
@@ -2027,7 +2027,7 @@ fun try_saturate context prems =
           true
           { context = context
           , countdown = Config.get context Jeha_Common.max_number_of_steps
-          , passive = Jeha_Passive_Set.init clauses
+          , passive = Jeha_Passive_Set.init goal_symbols clauses
           , active = []
           , green_index = Term_Index.empty
           , unit_index = Term_Index.empty

@@ -36,7 +36,9 @@ sig
   val of_term : Proof.context -> term * int -> T
   val term_of : T -> term
   val pretty_clause : Proof.context -> T -> string
+  val pretty_clause' : Proof.context -> T -> Pretty.T
   val pretty_clauses : Proof.context -> T list -> string
+  val pretty_clauses' : Proof.context -> T list -> Pretty.T
   val cposs_of : T -> cpos list
   val green_full_poss_of : T -> full_pos list
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
@@ -54,6 +56,7 @@ sig
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
   val is_false : T -> bool
   val is_unit : T -> bool
+  val is_positive_unit : T -> bool
   val maxidx_of_literal_list : JLit.T list -> int
   (* literal selection *)
   val selected : T -> int list
@@ -397,5 +400,8 @@ fun is_position_of_fully_applied_logical_symbol (tpos, lpos, cpos) c =
 val is_false = length #> curry (op =) 0
 
 val is_unit = length #> curry (op =) 1
+
+fun is_positive_unit { literals = [lit], ... } = JLit.is_positive lit
+  | is_positive_unit _ = false
 
 end;
