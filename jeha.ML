@@ -698,11 +698,14 @@ fun impl_infer_sup precheck ctxt (d, (lp, cp), (c, u_pos)) =
   end
 *)
 
+fun trace_concl ctxt (tracer: (unit -> string) -> unit) =
+  tap (fn concl => (tracer (fn () => ("concl: " ^ JClause.pretty_clause ctxt concl))))
 
 (* Sup inference *)
 fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
   let
-    val () = Jeha_Common.trace_msg_sup ctxt (K ("Sup start: "
+    fun tracer msg = Jeha_Common.trace_msg_sup ctxt (fn () => "Sup: " ^ msg ())
+    val () = tracer (fn () => ("start: "
       ^ JClause.pretty_clause ctxt d ^ " " ^ JClause.pretty_clause ctxt c))
     val left_premise_shift = JClause.maxidx c + 1
     val d = JClause.incr_indexes left_premise_shift d
@@ -712,21 +715,21 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     val u = JClause.subterm_at_full_pos c u_pos
   in
     if not is_pos_eq then
-      (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: not positive");
+      (tracer (fn () => "fail: not positive");
         []) else
     if JTerm.might_be_fluid u then
-      (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: might be fluid");
+      (tracer (fn () => "fail: might be fluid");
         []) else (* 1. *)
     if is_Var u andalso JClause.occurs_deeply u c then
-      (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: deeply occuring var");
+      (tracer (fn () => "fail: deeply occuring var");
         []) else (* 2. *)
     (* FIXME: 3. variable condition ... *)
     let
-      val _ = Jeha_Common.trace_msg_sup ctxt (fn () =>
-        "Sup: " ^ JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c)
+      val () = tracer (fn () =>
+        JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c)
       val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
-      val _ = Jeha_Common.trace_msg_sup ctxt (fn () =>
-        "Sup: " ^ Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u)
+      val () = tracer (fn () =>
+        Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u)
       val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
       fun build_conclusion unifier =
         let
@@ -752,16 +755,16 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
         in
           (* order restrictions *)
           if SOME LESS = t_comp_t' orelse SOME EQUAL = t_comp_t' then
-            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: t\<sigma> \<preceq> u\<sigma> ");
+            (tracer (fn () => "fail: t\<sigma> \<preceq> u\<sigma> ");
               NONE) else (* 5. *)
           if not u_eligible then
-            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: u not eligible");
+            (tracer (fn () => "fail: u not eligible");
               NONE) else (* 6. *)
           if SOME LESS = c_comp_d orelse SOME EQUAL = c_comp_d then
-            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: C\<sigma> \<preceq> D\<sigma>");
+            (tracer (fn () => "fail: C\<sigma> \<preceq> D\<sigma>");
               NONE) else (* 7. *)
           if not tt'_eligible then
-            (Jeha_Common.trace_msg_sup ctxt (K "Sup fail: t \<approx> t' not eligible");
+            (tracer (fn () => "fail: t \<approx> t' not eligible");
               NONE) else (* 8. *)
           (* FXIME 9. 10. *)
           JClause.combine ctxt d' ct'
@@ -776,8 +779,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
                 , literal = (lp, cp)
                 , subterm = u_pos
                 , substitution = unifier })
-          |> tap (fn concl =>
-            (Jeha_Common.trace_msg_sup ctxt (K ("Sup concl: " ^ JClause.pretty_clause ctxt concl))))
+          |> trace_concl ctxt tracer
           |> SOME
         end
     in
@@ -816,15 +818,21 @@ fun sup_given_into_active
 (* ERes inference *)
 fun infer_eres (ctxt : Proof.context) c cp =
   let
+    fun tracer msg = Jeha_Common.trace_msg_e_res ctxt (fn () => "ERes: " ^ msg ())
+    val () = tracer (fn () =>
+      "start: " ^ JClause.pretty_clause ctxt c ^ ", literal: " ^ @{make_string} cp)
     val (u, u', is_pos_eq) = JClause.lit_at cp c
     val unifiers =
       Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
+        val () = tracer (fn () => "build_conclusion")
         val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier |> JClause.recompute_selected ctxt
       in
-        if not (JClause.is_eligible_cpos c cp) then NONE else
+        if not (JClause.is_eligible_cpos c cp) then
+          (tracer (fn () => "fail: literal not eligible");
+            NONE) else
         c
         |> JClause.delete_lit_at ctxt cp
         |> JClause.norm_negative_predicate_literals ctxt
@@ -832,6 +840,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
         |> JClause.refresh_id ()
         |> JClause.set_origin
           (Jeha_Log.ERes { premise = JClause.id c, literal = cp, substitution = unifier })
+        |> trace_concl ctxt tracer
         |> SOME
       end
   in
@@ -843,19 +852,19 @@ fun infer_eres (ctxt : Proof.context) c cp =
 (* EFact inference *)
 fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
   let
-    val () = Jeha_Common.trace_msg_e_fact ctxt (fn () =>
-      "EFact start " ^ JClause.pretty_clause ctxt c)
+    fun tracer msg = Jeha_Common.trace_msg_e_fact ctxt (fn () => "EFact: " ^ msg ())
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c)
     val (u', v', is_pos') = JLit.orient lp' (JClause.lit_at cp' c)
     val (u, v, is_pos) = JLit.orient lp (JClause.lit_at cp c)
-    val () = Jeha_Common.trace_msg_e_fact ctxt (fn () =>
-      "EFact: " ^ Jeha_Common.pretty_term ctxt u ^ " ?= " ^ Jeha_Common.pretty_term ctxt u')
+    val () = tracer (fn () =>
+      Jeha_Common.pretty_term ctxt u ^ " ?= " ^ Jeha_Common.pretty_term ctxt u')
     val unifiers =
       Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     val nothing_selected_in_c = JClause.selected c = []
     fun build_conclusion unifier =
       let
-        val () = Jeha_Common.trace_msg_e_fact ctxt (fn () => "EFact build_conclusion")
+        val () = tracer (fn () => "build_conclusion")
         val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
         val (u', v', _) = JLit.orient lp' (JClause.lit_at cp' c)
         val uv_literal = JClause.lit_at cp c
@@ -864,13 +873,13 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         val uv_maximal = Jeha_Order.is_maximal JLit.kbo false uv_literal (JClause.literals c)
       in
         if SOME EQUAL = u_v_comp orelse SOME LESS = u_v_comp then
-          (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: u\<sigma> \<preceq> v\<sigma>");
+          (tracer (fn () => "fail: u\<sigma> \<preceq> v\<sigma>");
             NONE) else
         if not uv_maximal then
-          (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: (u=v) not maximal");
+          (tracer (fn () => "fail: (u=v) not maximal");
             NONE) else
         if not nothing_selected_in_c then
-          (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: something selected");
+          (tracer (fn () => "fail: something selected");
             NONE) else
         c
         |> JClause.delete_lit_at ctxt (Int.max (cp, cp'))
@@ -886,15 +895,15 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
               , left_literal = (lp', cp')
               , right_literal = (lp, cp)
               , substitution = unifier })
-        |> tap (fn concl => Jeha_Common.trace_msg_e_fact ctxt (K ("EFact concl: " ^ JClause.pretty_clause ctxt concl)))
+        |> trace_concl ctxt tracer
         |> SOME
       end
     in
       if not (is_pos andalso is_pos') then
-        (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: negative literal");
+        (tracer (fn () => "fail: negative literal");
           []) else
       if cp' = cp then
-        (Jeha_Common.trace_msg_e_fact ctxt (K "EFact fail: equal positions");
+        (tracer (fn () => "fail: equal positions");
           []) else
       map_filter build_conclusion unifiers
     end
@@ -918,8 +927,14 @@ type variable *)
 val ARG_CONG_EXTRA_CONCLUSIONS = 2
 
 fun infer_arg_cong ctxt c cpos =
-  let val (s, s', b) = JClause.lit_at cpos c in
-  if not b then [] else
+  let fun tracer msg = Jeha_Common.trace_msg_arg_cong ctxt (fn () => "ArgCong: " ^ msg ())
+      val () = tracer (fn () =>
+        "start: " ^ JClause.pretty_clause ctxt c ^ ", literal: " ^ @{make_string} cpos)
+      val (s, s', b) = JClause.lit_at cpos c
+  in
+  if not b then
+    (tracer (fn () => "fail: negative literal");
+      []) else
   let
     val s_num_of_args = length (Term.binder_types (fastype_of s))
 
@@ -936,6 +951,8 @@ fun infer_arg_cong ctxt c cpos =
 
     fun build_conclusion fresh_variables =
       let
+        val () = tracer (fn () => "build_conclusion")
+
         val function_type = (map fastype_of fresh_variables) ---> fresh_result_type
 
         val unifier =
@@ -964,8 +981,12 @@ fun infer_arg_cong ctxt c cpos =
                 , literal = cpos
                 , vars = map (JTerm.norm_beta_eta_qeta_env unifier) fresh_variables })
       in
-        if not (JClause.is_eligible_cpos new_clause cpos) then NONE else
-        SOME new_clause
+        if not (JClause.is_eligible_cpos new_clause cpos) then
+          (tracer (fn () => "fail: s\<sigma>\<approx>s'\<sigma> not strictly  eligible in C\<sigma>");
+            NONE) else
+        new_clause
+        |> trace_concl ctxt tracer
+        |> SOME
       end
   in
     prefixes1 fresh_variables
@@ -975,13 +996,17 @@ fun infer_arg_cong ctxt c cpos =
 
 fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
   let
+    fun tracer msg = Jeha_Common.trace_msg_bool_hoist ctxt (fn () => "BoolHoist: " ^ msg ())
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c)
     val u = JClause.subterm_at_full_pos c u_pos
+    val () = tracer (fn () => "u = " ^ Jeha_Common.pretty_term ctxt u)
     val u_in_positive_lit = JLit.is_positive (JClause.lit_at cpos c)
     val u_eligible = JClause.is_eligible_full_pos c u_pos
     val u_typ = fastype_of u
     (* raises TUNIFY (from Sign.typ_unify) *)
     fun build_conclusion _ =
       let
+        val () = tracer (fn () => "build_conclusion")
         val (unifier, maxidx) =
           Sign.typ_unify
             (Proof_Context.theory_of ctxt)
@@ -990,24 +1015,29 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
         val u_eq_true = JLit.mk_eq u (@{term "HOL.True"})
         val unifier = Envir.Envir { maxidx = maxidx, tenv = Vartab.empty, tyenv = unifier }
       in
-        if
-          JTerm.is_variable_headed u (* 2. *)
-          orelse JClause.is_position_of_fully_applied_logical_symbol u_pos c (* 2. *)
-          orelse not u_eligible (* 3. *)
-          orelse (u_in_positive_lit andalso [] = #1 u_pos) (* 4. *)
-        then
-          []
-        else
-          c
-          |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"})
-          |> JClause.add_literal ctxt u_eq_true
-          |> JClause.norm_beta_eta_qeta_env ctxt unifier
-          |> JClause.norm_negative_predicate_literals ctxt
-          |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ()
-          |> JClause.set_origin
-            (Jeha_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
-          |> single
+        if JTerm.is_variable_headed u (* 2. *) then
+          (tracer (fn () => "fail: u variable headed");
+            []) else
+        if JClause.is_position_of_fully_applied_logical_symbol u_pos c (* 2. *) then
+          (tracer (fn () => "fail: u is a fully applied logical symbol");
+            []) else
+        if not u_eligible (* 3. *) then
+          (tracer (fn () => "fail: u not eligible");
+            []) else
+        if (u_in_positive_lit andalso [] = #1 u_pos) (* 4. *) then
+          (tracer (fn () => "fail: u is at the top level of a positive literal");
+            []) else
+        c
+        |> JClause.map_at_full_pos u_pos (K @{term "HOL.False"})
+        |> JClause.add_literal ctxt u_eq_true
+        |> JClause.norm_beta_eta_qeta_env ctxt unifier
+        |> JClause.norm_negative_predicate_literals ctxt
+        |> JClause.recompute_selected ctxt
+        |> JClause.refresh_id ()
+        |> JClause.set_origin
+          (Jeha_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
+        |> trace_concl ctxt tracer
+        |> single
         end
   in
     (build_conclusion () handle Type.TUNIFY => [])
@@ -1016,15 +1046,22 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
 (* FIXME: apply as simplification if unifier is the identity *)
 fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
   let
+    fun tracer msg = Jeha_Common.trace_msg_false_elim ctxt (fn () =>
+      "FalseElim" ^ (if as_simplification then " (simplification)" else "") ^ ": " ^ msg ())
     (* val _ = writeln ("in False_elim with" ^ @{make_string} (lp, cp)) *)
+    val () = tracer (fn () =>
+      "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} (lp, cp))
     val (s, s', b) = JClause.lit_at cp c |> JLit.orient lp
     val unifiers =
-      if not b
-        then Seq.empty
-      else if as_simplification
+      if not b then
+        (tracer (fn () => "fail: not a positive literal");
+          Seq.empty) else
+      if as_simplification
         then if s aconv @{term "False"} andalso s' aconv @{term "True"}
           then Seq.single (Envir.empty (JClause.maxidx c))
-          else Seq.empty
+          else
+            (tracer (fn () => "fail: \<sigma> is not the identity");
+              Seq.empty)
       else
         Jeha_Unify.smash_unifiers
           (Context.Proof ctxt)
@@ -1033,6 +1070,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
+        val () = tracer (fn () => "build_conclusion")
         val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier |> JClause.recompute_selected ctxt
         val origin =
           if as_simplification
@@ -1050,6 +1088,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
         |> JClause.set_origin origin
+        |> trace_concl ctxt tracer
         |> SOME
       end
   in
@@ -1102,6 +1141,7 @@ changing of maxidx). Proof reconstruction for \<forall>- and \<exists>Hoist reli
 the variable x occuring in disjunct_with. *)
 fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   ctxt
+  (tracer : (unit -> string) -> unit)
   (c : JClause.T)
   (u_pos : JClause.full_pos)
   (pattern : term)
@@ -1110,8 +1150,12 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   (disjunct_with : JLit.T option) (* this is needed for the Hoist rules *)
   : (Envir.env * JClause.T) list
 =
-  let val u = JClause.subterm_at_full_pos c u_pos in
-  if (not u_var_allowed) andalso (is_Var u) then [] else (* BoolRw: 2. *)
+  let val u = JClause.subterm_at_full_pos c u_pos
+      val () = tracer (fn () => "u = " ^ Jeha_Common.pretty_term ctxt u)
+  in
+  if (not u_var_allowed) andalso (is_Var u) then (* BoolRw: 2. *)
+    (tracer (fn () => "fail: u is a variable");
+      []) else
   let
     val maxidx =
       Int.max
@@ -1140,6 +1184,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
+        val () = tracer (fn () => "build_conclusion")
         val c =
           c
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
@@ -1168,10 +1213,13 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
             , the_default ~1 (Jeha_Common.map_some JLit.maxidx_of new_literal) )
       in
         (* 3. the position of u is eligible in C w.r.t. \<sigma> *)
-        if not (JClause.is_eligible_full_pos c u_pos) then NONE else
+        if not (JClause.is_eligible_full_pos c u_pos) then
+          (tracer (fn () => "fail: the position of u is not eligible");
+            NONE) else
         (* 4. if the head of u is a variable ... *)
-        if not u_variable_headed_condition then NONE else
-
+        if not u_variable_headed_condition then
+          (tracer (fn () => "fail: u is variable headed but isn't applied or the affected literal is not of the form u\<approx>\<top>, u\<approx>\<bottom>, or u\<approx>v with v variable-headed");
+            NONE) else
         c
         |> JClause.map_at_full_pos u_pos (K insert_for_u) (* FIXME: recompute selected *)
         |> JClause.set_maxidx maxidx
@@ -1180,17 +1228,21 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
+        |> trace_concl ctxt tracer
         |> pair unifier
         |> SOME
       end
+    val result = map_filter build_conclusion unifiers
+    val () = tracer (fn () => "done")
   in
-    map_filter build_conclusion unifiers
+    result   
   end
   end
 
 (* FIXME: duplication with impl_infer_bool_rw_eq_neq_fa_ex_hoist *)
 fun impl_simp_bool_rw
   ctxt
+  (tracer : (unit -> string) -> unit)
   (c : JClause.T)
   (u_pos : JClause.full_pos)
   (pattern : term)
@@ -1199,8 +1251,12 @@ fun impl_simp_bool_rw
   (disjunct_with : JLit.T option) (* this is needed for the Hoist rules *)
   : (Envir.env * JClause.T) list
 =
-  let val u = JClause.subterm_at_full_pos c u_pos in
-  if (not u_var_allowed) andalso (is_Var u) then [] else (* BoolRw: 2. *)
+  let val u = JClause.subterm_at_full_pos c u_pos
+      val () = tracer (fn () => "u = " ^ Jeha_Common.pretty_term ctxt u)
+  in
+  if (not u_var_allowed) andalso (is_Var u) then (* BoolRw: 2. *)
+    (tracer (fn () => "fail: u is a variable");
+      []) else
   let
     val maxidx =
       Int.max
@@ -1225,6 +1281,7 @@ fun impl_simp_bool_rw
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
+        val () = tracer (fn () => "build_conclusion")
         val c =
           c
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
@@ -1259,7 +1316,9 @@ fun impl_simp_bool_rw
         if not (JClause.is_eligible_full_pos c u_pos) then NONE else *)
 
         (* 4. if the head of u is a variable ... *)
-        if not u_variable_headed_condition then NONE else
+        if not u_variable_headed_condition then
+          (tracer (fn () => "fail: u is variable headed but isn't applied or the affected literal is not of the form u\<approx>\<top>, u\<approx>\<bottom>, or u\<approx>v with v variable-headed");
+            NONE) else
 
         c
         |> JClause.map_at_full_pos u_pos (K insert_for_u)
@@ -1269,16 +1328,21 @@ fun impl_simp_bool_rw
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
+        |> trace_concl ctxt tracer
         |> pair unifier
         |> SOME
       end
+    val result = map_filter build_conclusion unifiers
+    val () = tracer (fn () => ("done"))
   in
-    map_filter build_conclusion unifiers
+    result  
   end
   end
 
 fun simp_bool_rw ctxt c u_pos =
   let
+    fun tracer msg = Jeha_Common.trace_msg_bool_rw ctxt (fn () => "BoolRw (simplification): " ^ msg ())
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
     val maxidx = JClause.maxidx c
     val rw_rules =
       (* [ (fresh_variable_eq_itself, @{term "True"})
@@ -1286,12 +1350,16 @@ fun simp_bool_rw ctxt c u_pos =
       @ *)
       bool_rw_non_var_rules true
     fun apply_rw_rule (t, t') =
-      impl_simp_bool_rw ctxt c u_pos t false t' NONE
-      |> map (fn (unifier, clause) =>
-        clause
-        |> JClause.set_origin
-          (Jeha_Log.SimpBoolRw
-            { premise = JClause.id c, subterm = u_pos, subrule = (t, t'), substitution = unifier }))
+      let val () = tracer (fn () =>
+        "rule " ^ Jeha_Common.pretty_term ctxt t ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt t')
+      in
+        impl_simp_bool_rw ctxt tracer c u_pos t false t' NONE
+        |> map (fn (unifier, clause) =>
+          clause
+          |> JClause.set_origin
+            (Jeha_Log.SimpBoolRw
+              { premise = JClause.id c, subterm = u_pos, subrule = (t, t'), substitution = unifier }))
+      end
   in
     maps apply_rw_rule rw_rules
   end
@@ -1299,6 +1367,8 @@ fun simp_bool_rw ctxt c u_pos =
 (* FIXME: Idea: have the rw rules as active clauses, then this is basically superposition *)
 fun infer_bool_rw ctxt c u_pos =
   let
+    fun tracer msg = Jeha_Common.trace_msg_bool_rw ctxt (fn () => "BoolRw: " ^ msg ())
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
     val maxidx = JClause.maxidx c
     val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
     val fresh_variable = Var (("y_brw", maxidx + 1), fresh_typ) (* y *)
@@ -1309,12 +1379,18 @@ fun infer_bool_rw ctxt c u_pos =
       @
       bool_rw_non_var_rules false
     fun apply_rw_rule (t, t') =
-      impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos t false t' NONE
-      |> map (fn (unifier, clause) =>
-        clause
-        |> JClause.set_origin
-          (Jeha_Log.BoolRw
-            { premise = JClause.id c, subterm = u_pos, subrule = (t, t'), substitution = unifier }))
+      let val () = tracer (fn () =>
+        "rule " ^ Jeha_Common.pretty_term ctxt t ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt t')
+      in
+        impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos t false t' NONE
+        |> map (fn (unifier, clause) =>
+          clause
+          |> JClause.set_origin
+            (Jeha_Log.BoolRw
+              { premise = JClause.id c, subterm = u_pos, subrule = (t, t'), substitution = unifier })
+          |> trace_concl ctxt tracer
+          )
+      end
   in
     maps apply_rw_rule rw_rules
   end
@@ -1323,6 +1399,12 @@ datatype HoistType = Eq | Neq | Forall | Exists
 
 fun impl_eq_neq_hoist positive ctxt c u_pos =
   let
+    fun tracer msg =
+      if positive
+        then Jeha_Common.trace_msg_eq_hoist ctxt (fn () => "EqHoist: " ^ msg ())
+        else Jeha_Common.trace_msg_neq_hoist ctxt (fn () => "NeqHoist: " ^ msg ())
+    val () = tracer (fn () =>
+      "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
     val maxidx = JClause.maxidx c
     val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
     val fresh_x = Var (("x", maxidx + 1), fresh_typ) (* x *)
@@ -1334,7 +1416,7 @@ fun impl_eq_neq_hoist positive ctxt c u_pos =
       |> not positive ? HOLogic.mk_not
     val insert_for_u = hol_bool_of (not positive)
   in
-    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos pattern true insert_for_u (SOME x_eq_y_lit)
+    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos pattern true insert_for_u (SOME x_eq_y_lit)
     |> map (fn (unifier, clause) => clause |> JClause.set_origin (
         (if positive then Jeha_Log.EqHoist else Jeha_Log.NeqHoist)
           { premise = JClause.id c, subterm = u_pos, substitution = unifier }))
@@ -1346,6 +1428,11 @@ val infer_neq_hoist = impl_eq_neq_hoist false
 
 fun impl_forall_exists_hoist is_forall ctxt c u_pos =
   let
+    fun tracer msg =
+      if is_forall
+        then Jeha_Common.trace_msg_forall_hoist ctxt (fn () => "ForallHoist: " ^ msg ())
+        else Jeha_Common.trace_msg_exists_hoist ctxt (fn () => "ExistsHoist: " ^ msg ())
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
     val maxidx = JClause.maxidx c
     val fresh_typ =
       TVar (("'fresh_x_typ", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt))
@@ -1362,7 +1449,7 @@ fun impl_forall_exists_hoist is_forall ctxt c u_pos =
     (* \<top> / \<bottom> *)
     val insert_for_u = hol_bool_of (not is_forall)
   in
-    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt c u_pos pattern true insert_for_u (SOME new_lit)
+    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos pattern true insert_for_u (SOME new_lit)
     |> map (fn (unifier, clause) => clause |> JClause.set_origin (
         (if is_forall then Jeha_Log.ForallHoist else Jeha_Log.ExistsHoist)
           { premise = JClause.id c, subterm = u_pos, substitution = unifier, fresh_x = fresh_x }))
@@ -1380,6 +1467,12 @@ fun impl_fa_ex_rw
   (u_pos : JClause.full_pos)
   : JClause.T list
 =
+  let fun tracer msg =
+        if is_forall
+          then Jeha_Common.trace_msg_forall_rw ctxt (fn () => "ForallRw: " ^ msg ())
+          else Jeha_Common.trace_msg_exists_rw ctxt (fn () => "ExistsRw: " ^ msg ())
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
+  in
   (* condition 5. *)
   if
     (case u_pos of
@@ -1395,9 +1488,15 @@ fun impl_fa_ex_rw
           else
             false 
         end
-      | _ => false) then [] else
-  let val u = JClause.subterm_at_full_pos c u_pos in
-  if is_Var u then [] else (* 2. *)
+      | _ => false) then
+                      (tracer (fn () => "fail: literal is of the form " ^ (if is_forall then "u\<approx>\<bottom>" else "u\<approx>\<top>"));
+                        []) else
+  let val u = JClause.subterm_at_full_pos c u_pos
+      val () = tracer (fn () => "u = " ^ Jeha_Common.pretty_term ctxt u)
+  in
+  if is_Var u then
+    (tracer (fn () => "fail: u is a variable");
+      []) else (* 2. *)
   let
     (* from outer *)
     val maxidx = JClause.maxidx c
@@ -1432,6 +1531,7 @@ fun impl_fa_ex_rw
     val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
     fun build_conclusion unifier =
       let
+        val () = tracer (fn () => "build_conclusion")
         val c =
           c
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
@@ -1455,9 +1555,13 @@ fun impl_fa_ex_rw
         val maxidx = Int.max (JClause.maxidx c, maxidx_of_term insert_for_u)
       in
         (* 3. the position of u is eligible in C w.r.t. \<sigma> *)
-        if not (JClause.is_eligible_full_pos c u_pos) then NONE else
+        if not (JClause.is_eligible_full_pos c u_pos) then
+          (tracer (fn () => "fail: u is not eligible");
+            NONE) else
         (* 4. if the head of u is a variable ... *)
-        if not u_variable_headed_condition then NONE else
+        if not u_variable_headed_condition then
+          (tracer (fn () => "fail: the head of us is a variable");
+            NONE) else
 
         c
         |> JClause.map_at_full_pos u_pos (K insert_for_u)
@@ -1473,19 +1577,15 @@ fun impl_fa_ex_rw
             , skolems =
                 [(skolem_constant, skolem_constant_with_args, skolem_constant_definition)]
             })
+        |> trace_concl ctxt tracer
         |> SOME
       end
   in
     map_filter build_conclusion unifiers
   end
   end
+  end
 
-(* We diverge from the o\<lambda>Sup paper to avoid skolemization. (FIXME: Experimental)
-Idea: Replace \<forall>x. y x by y (SOME z. \<not> (y z))
-If the universal statement holds then there is no z s.t. \<not> (y z) and the r.h.s
-is also true. If the universal statement does not hold, then there is such a z
-and the r.h.s. becomes false, because z witnesses \<not> (y z).
-Similarly replace \<exists>x. y x by y (SOME z. y z) *)
 fun impl_infer_forall_exists_rw is_forall ctxt clause u_pos =
   (let
 
@@ -1503,11 +1603,20 @@ val infer_exists_rw = impl_infer_forall_exists_rw false
 (* ------------------------------------------------------ NegExt *)
 (* C \<or> s (SOME x. s x \<noteq> s' x) \<noteq> s' (SOME x. s x \<noteq> s' x)        *)
 fun infer_neg_ext ctxt c cpos =
-  if not (JClause.is_eligible_cpos c cpos) then [] else
+  let fun tracer msg = Jeha_Common.trace_msg_neg_ext ctxt (fn () => "NegExt: " ^ msg ())
+      val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", literal: " ^ @{make_string} cpos)
+  in
+  if not (JClause.is_eligible_cpos c cpos) then
+    (tracer (fn () => "fail: literal not eligible");
+      []) else
   let val lit = JClause.lit_at cpos c in
-  if JLit.is_positive lit then [] else
+  if JLit.is_positive lit then
+    (tracer (fn () => "fail: not a negative literal");
+      []) else
   let val (s, s', false) = lit in
-  if null (Term.binder_types (fastype_of s)) then [] (* not of function type *) else
+  if null (Term.binder_types (fastype_of s)) then
+    (tracer (fn () => "fail: not of function type");
+      []) (* not of function type *) else
   let
     val x = Free ("x_neg_ext", domain_type (fastype_of s))
     val choice_body = HOLogic.mk_not (HOLogic.mk_eq (s $ x, s' $ x))
@@ -1532,9 +1641,10 @@ fun infer_neg_ext ctxt c cpos =
             , literal = cpos
             , skolems = [(skolem_constant, skolem_constant_with_args, skolem_constant_definition)]
             })
+      |> trace_concl ctxt tracer
   in
     [new_clause]
-  end end end
+  end end end end
 
 (** Saturation Loop **)
 
@@ -1794,37 +1904,56 @@ fun infer_clauses ctxt active given_clause green_index =
     (* val _ = if all_disabled then writeln "ALL DISABLED!!!!" else () *)
     (* a bit contrived to make it lazy *)
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else []
-  in
-    []
-    @ (if_cfg Jeha_Common.rule_sup (fn _ => sup_given_into_active ctxt given_clause active green_index))
-    @ (if_cfg Jeha_Common.rule_sup (fn _ => (maps (uncurry (infer_sup ctxt)) eq_target_pairs)))
+    val rules =
+    [ ( Jeha_Common.rule_sup
+      , (fn _ => sup_given_into_active ctxt given_clause active green_index)
+      )
+    , ( Jeha_Common.rule_sup
+      , (fn _ => (maps (uncurry (infer_sup ctxt)) eq_target_pairs))
+      )
     (* ERes, EFact have already been performed for the active clauses *)
-    @ (if_cfg Jeha_Common.rule_e_res (fn _ =>
-        (maps (infer_eres ctxt given_clause) given_clause_cposs)))
-    @ (if_cfg Jeha_Common.rule_e_fact (fn _ =>
-        (maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs)))
-    @ (if_cfg Jeha_Common.rule_arg_cong (fn _ =>
-        (maps (infer_arg_cong ctxt given_clause) given_clause_cposs)))
-    @ (if_cfg Jeha_Common.rule_neg_ext (fn _ =>
-        (maps (infer_neg_ext ctxt given_clause) given_clause_cposs)))
-    @ (if_cfg Jeha_Common.rule_bool_hoist (fn _ =>
-        (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
-    @ (if_cfg Jeha_Common.rule_false_elim (fn _ =>
-        (maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs)))
-    @ (if_cfg Jeha_Common.rule_bool_rw (fn _ =>
-        (maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause))))
-    @ (if_cfg Jeha_Common.rule_eq_hoist (fn _ =>
-        (maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
-    @ (if_cfg Jeha_Common.rule_neq_hoist (fn _ =>
-        (maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
-    @ (if_cfg Jeha_Common.rule_forall_hoist (fn _ =>
-        (maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
-    @ (if_cfg Jeha_Common.rule_exists_hoist (fn _ =>
-        (maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause))))
-    @ (if_cfg Jeha_Common.rule_forall_rw (fn _ =>
-        (maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause))))
-    @ (if_cfg Jeha_Common.rule_exists_rw (fn _ =>
-        (maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause))))
+    , ( Jeha_Common.rule_e_res
+      , (fn _ => (maps (infer_eres ctxt given_clause) given_clause_cposs))
+      )
+    , ( Jeha_Common.rule_e_fact
+      , (fn _ => (maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs))
+      )
+    , ( Jeha_Common.rule_arg_cong
+      , (fn _ => (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
+      )
+    , ( Jeha_Common.rule_neg_ext
+      , (fn _ => (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
+      )
+    , ( Jeha_Common.rule_bool_hoist
+      , (fn _ => (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    , ( Jeha_Common.rule_false_elim
+      , (fn _ => (maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs))
+      )
+    , ( Jeha_Common.rule_bool_rw
+      , (fn _ => (maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    , ( Jeha_Common.rule_eq_hoist
+      , (fn _ => (maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    , ( Jeha_Common.rule_neq_hoist
+      , (fn _ => (maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    , ( Jeha_Common.rule_forall_hoist
+      , (fn _ => (maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    , ( Jeha_Common.rule_exists_hoist
+      , (fn _ => (maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    , ( Jeha_Common.rule_forall_rw
+      , (fn _ => (maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    , ( Jeha_Common.rule_exists_rw
+      , (fn _ => (maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      )
+    ]
+  in
+    maps (fn (cfg, rule) => if_cfg cfg (Jeha_Common.time_rule ctxt rule)) rules
   end
 
 datatype step_result = Unsat | MaybeSat | Next 

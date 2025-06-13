@@ -19,14 +19,31 @@ sig
   val trace_archive : bool Config.T
   (* output inferred / new clauses *)
   val trace_inferred : bool Config.T
+
   (* trace rules *)
   val trace_sup : bool Config.T
+  val trace_e_res : bool Config.T
   val trace_e_fact : bool Config.T
+  val trace_arg_cong : bool Config.T
+  val trace_bool_hoist : bool Config.T
+  val trace_false_elim : bool Config.T
+  val trace_eq_hoist : bool Config.T
+  val trace_neq_hoist : bool Config.T
+  val trace_forall_hoist : bool Config.T
+  val trace_exists_hoist : bool Config.T
+  val trace_bool_rw : bool Config.T
+  val trace_forall_rw : bool Config.T
+  val trace_exists_rw : bool Config.T
+  val trace_neg_ext : bool Config.T
   (* internal *)
   val trace_simp_results : bool Config.T
   
   (* report how many milliseconds the given clause procedure took to find a contradiction *)
   val report_main_loop_timing : bool Config.T
+  
+  val report_rule_timing : bool Config.T
+  
+  val time_rule : Proof.context -> ('a -> 'b) -> 'a -> 'b
 
   val trace_msg : Proof.context -> (unit -> string) -> unit
   val trace_msg_active : Proof.context -> (unit -> string) -> unit
@@ -37,8 +54,22 @@ sig
   val trace_msg_cheap_simp : Proof.context -> (unit -> string) -> unit
   val trace_msg_archive : Proof.context -> (unit -> string) -> unit
   val trace_msg_inferred : Proof.context -> (unit -> string) -> unit
+
   val trace_msg_sup : Proof.context -> (unit -> string) -> unit
   val trace_msg_e_fact : Proof.context -> (unit -> string) -> unit
+  val trace_msg_e_res : Proof.context -> (unit -> string) -> unit
+  val trace_msg_arg_cong : Proof.context -> (unit -> string) -> unit
+  val trace_msg_bool_hoist : Proof.context -> (unit -> string) -> unit
+  val trace_msg_false_elim : Proof.context -> (unit -> string) -> unit
+  val trace_msg_eq_hoist : Proof.context -> (unit -> string) -> unit
+  val trace_msg_neq_hoist : Proof.context -> (unit -> string) -> unit
+  val trace_msg_forall_hoist : Proof.context -> (unit -> string) -> unit
+  val trace_msg_exists_hoist : Proof.context -> (unit -> string) -> unit
+  val trace_msg_bool_rw : Proof.context -> (unit -> string) -> unit
+  val trace_msg_forall_rw : Proof.context -> (unit -> string) -> unit
+  val trace_msg_exists_rw : Proof.context -> (unit -> string) -> unit
+  val trace_msg_neg_ext : Proof.context -> (unit -> string) -> unit
+
   (* internal *)
   val trace_msg_simp_results : Proof.context -> (unit -> string) -> unit
 
@@ -137,13 +168,30 @@ val trace_backward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_
 val trace_cheap_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_cheap_simp\<close> (K false)
 val trace_archive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_archive\<close> (K false)
 val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_inferred\<close> (K false)
+
+(* individual rules *)
 val trace_sup = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_sup\<close> (K false)
+val trace_e_res = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_e_res\<close> (K false)
 val trace_e_fact = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_e_fact\<close> (K false)
+val trace_arg_cong = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_arg_cong\<close> (K false)
+val trace_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_bool_hoist\<close> (K false)
+val trace_false_elim = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_false_elim\<close> (K false)
+val trace_eq_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_eq_hoist\<close> (K false)
+val trace_neq_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_neq_hoist\<close> (K false)
+val trace_forall_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_forall_hoist\<close> (K false)
+val trace_exists_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_exists_hoist\<close> (K false)
+val trace_bool_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_bool_rw\<close> (K false)
+val trace_forall_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_forall_rw\<close> (K false)
+val trace_exists_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_exists_rw\<close> (K false)
+val trace_neg_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_neg_ext\<close> (K false)
+
 (* internal *)
 val trace_simp_results = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_results\<close> (K false)
 
 (* FIXME: actually use this config option *)
 val report_main_loop_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_report_main_loop_timing\<close> (K false)
+
+val report_rule_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_report_rule_timing\<close> (K false) 
 
 (* only output if trace would *)
 fun trace_msg_active ctxt msg = if Config.get ctxt trace_active then trace_msg ctxt msg else ();
@@ -154,8 +202,23 @@ fun trace_msg_backward_simp ctxt msg = if Config.get ctxt trace_backward_simp th
 fun trace_msg_cheap_simp ctxt msg = if Config.get ctxt trace_cheap_simp then trace_msg ctxt msg else ();
 fun trace_msg_archive ctxt msg = if Config.get ctxt trace_archive then trace_msg ctxt msg else ();
 fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_msg ctxt msg else ();
+
+(* individual rules *)
 fun trace_msg_sup ctxt msg = if Config.get ctxt trace_sup then trace_msg ctxt msg else ();
+fun trace_msg_e_res ctxt msg = if Config.get ctxt trace_e_res then trace_msg ctxt msg else (); 
 fun trace_msg_e_fact ctxt msg = if Config.get ctxt trace_e_fact then trace_msg ctxt msg else ();
+fun trace_msg_arg_cong ctxt msg = if Config.get ctxt trace_arg_cong then trace_msg ctxt msg else (); 
+fun trace_msg_bool_hoist ctxt msg = if Config.get ctxt trace_bool_hoist then trace_msg ctxt msg else (); 
+fun trace_msg_false_elim ctxt msg = if Config.get ctxt trace_false_elim then trace_msg ctxt msg else (); 
+fun trace_msg_eq_hoist ctxt msg = if Config.get ctxt trace_eq_hoist then trace_msg ctxt msg else (); 
+fun trace_msg_neq_hoist ctxt msg = if Config.get ctxt trace_neq_hoist then trace_msg ctxt msg else (); 
+fun trace_msg_forall_hoist ctxt msg = if Config.get ctxt trace_forall_hoist then trace_msg ctxt msg else (); 
+fun trace_msg_exists_hoist ctxt msg = if Config.get ctxt trace_exists_hoist then trace_msg ctxt msg else (); 
+fun trace_msg_bool_rw ctxt msg = if Config.get ctxt trace_bool_rw then trace_msg ctxt msg else (); 
+fun trace_msg_forall_rw ctxt msg = if Config.get ctxt trace_forall_rw then trace_msg ctxt msg else (); 
+fun trace_msg_exists_rw ctxt msg = if Config.get ctxt trace_exists_rw then trace_msg ctxt msg else (); 
+fun trace_msg_neg_ext ctxt msg = if Config.get ctxt trace_neg_ext then trace_msg ctxt msg else (); 
+
 (* internal *)
 fun trace_msg_simp_results ctxt msg = if Config.get ctxt trace_simp_results then trace_msg ctxt msg else ();
 
@@ -370,6 +433,18 @@ fun cpu_time_milliseconds f x =
   (* CPU time is problematics with multithreading as it refers to the per-process CPU time. *)
   let val ({elapsed, ...}, y) = Timing.timing f x
   in (y, Time.toMilliseconds elapsed) end;
+
+fun time_rule ctxt f x =
+  if Config.get ctxt report_rule_timing
+    then
+      let
+        val (res, elapsed) = cpu_time_milliseconds f x
+        val () = trace_msg ctxt (fn () => "elapsed: " ^ @{make_string} elapsed)
+      in
+        res
+      end
+    else
+      f x
 
 fun map_some _ NONE = NONE
   | map_some f (SOME x) = SOME (f x)
