@@ -91,6 +91,7 @@ sig
   val raw_pp_term : term -> Pretty.T
   val I : 'a -> 'a
   val map_some : ('a -> 'b) -> 'a option -> 'b option
+  val some_is : ('a -> bool) -> 'a option -> bool
   val seq_cartesian_product : 'a Seq.seq -> 'b Seq.seq -> ('a * 'b) Seq.seq
   val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
   (* Config option to turn smashing unifiers off. The incomplete unifiers are
@@ -448,6 +449,9 @@ fun time_rule ctxt f x =
 
 fun map_some _ NONE = NONE
   | map_some f (SOME x) = SOME (f x)
+
+fun some_is p NONE = false
+  | some_is p (SOME x) = p x
 
 fun seq_cartesian_product xs ys =
   case Seq.pull xs of
