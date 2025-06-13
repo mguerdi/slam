@@ -25,6 +25,10 @@ def analyse_file(filename):
     # print("\n".join(lines[:20]))
     results = []
     for line in lines:
+        # 0.sledgehammer_replay goal.using 3492ms Sort_Encodings.T 393:13132 some Preplay: (metis intT_def protFw) (34 ms)
+        # 0.sledgehammer_replay goal.using 3492ms Sort_Encodings.T 393:13132 some Preplay: (jeha intT_def protFw) (failed)
+        #                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^               ^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^
+        #                                                  path                                     call           result
         path = " ".join(line.split(" ")[3:5])
         tail = " ".join(line.split(" ")[7:])
         call = "(".join(tail.split("(")[:-1])
@@ -54,8 +58,10 @@ def analyse_file(filename):
     print(f"{len(failed)} calls failed")
     print(f"{len(timed_out)} calls timed out")
     print(f"{len(success)} calls succeeded")
+    all_paths = set(goal["path"] for goal in results)
     success_paths = set(goal["path"] for goal in success)
     failed_or_timed_out_paths = set(goal["path"] for goal in failed + timed_out) - success_paths
+    print(f"{len(all_paths)} goals in total")
     print(f"{len(failed_or_timed_out_paths)} goals failed or timed out (all calls)")
     print(f"{len(success_paths)} goals succeeded")
     jeha_fails_or_timeouts = [
