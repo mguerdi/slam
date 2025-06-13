@@ -9,6 +9,7 @@ sig
   val reconstruct : Proof.context -> (int -> JClause.T) -> int -> thm
 
   (* for testing and debugging *)
+  val hclause_of_axiom : Proof.context -> thm -> HClause.hthm
   val prepare_forall_exists_hoist_log:
     Proof.context
     -> (int -> JClause.T)
@@ -111,7 +112,7 @@ struct
 (* Needs to match (HClause.hol_of_clause o JClause.of_term) *)
 fun hclause_of_axiom ctxt axiom =
   let
-    val axiom_not = axiom COMP @{thm cnf.clause2raw_notE}
+    val axiom_not = Jeha_Proof_Util.thm_to_not_imp_false axiom
     fun REPEAT_DETERM_ALL tac = REPEAT_DETERM (SOMEGOAL (REPEAT_DETERM o tac));
     val eq_to_eq_tac = resolve_tac ctxt [@{lemma "x = y \<Longrightarrow> x = y" by auto}]
     val neq_to_neq_tac = resolve_tac ctxt [@{lemma "x \<noteq> y \<Longrightarrow> x \<noteq> y" by auto}]

@@ -6,6 +6,7 @@ sig
   val envir_subst_thm : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
   val with_fixed_vars : cterm list -> ctyp list -> Proof.context -> tactic -> tactic
   val with_all_vars_fixed : Proof.context -> tactic -> tactic
+  val thm_to_not_imp_false : thm -> thm
   (* 1-based *)
   val make_prem_last : int -> thm -> thm
   val move_last_prem_to : int -> thm -> thm
@@ -163,6 +164,28 @@ fun with_all_vars_fixed ctxt (tac: tactic) th =
     val tvars = map #2 (TVars.dest (Thm.add_tvars th TVars.empty))
   in
     with_fixed_vars vars tvars ctxt tac th
+  end
+
+(* Turn P into \<not>P \<Longrightarrow> False *)
+fun thm_to_not_imp_false th =
+  let
+    val result = th COMP_INCR @{thm cnf.clause2raw_notE}
+    (* Extract P from \<not>P \<Longrightarrow> False *)
+    val t =
+      result 
+      |> Thm.prems_of
+      |> the_single
+      |> HOLogic.dest_Trueprop 
+      |> HOLogic.dest_not 
+    val t' =
+      th
+      |> Thm.prop_of
+      |> HOLogic.dest_Trueprop
+  in
+    (* check if COMP_INCR broke any schematic variables *)
+    if t aconv t'
+      then result
+      else error ("thm_to_not_imp_false")
   end
 
 (* With index 1 turn A \<Longrightarrow> B \<Longrightarrow> C \<Longrightarrow> False into B \<Longrightarrow> C \<Longrightarrow> A \<Longrightarrow> False *)

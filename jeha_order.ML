@@ -22,12 +22,35 @@ fun (w --- w') = w +++ negate w'
 
 end;
 
+signature PARTIAL_ORD =
+sig
+  type partial_order = order option
+  val is_equal: partial_order -> bool
+  val is_less: partial_order -> bool
+  val is_less_equal: partial_order -> bool
+  val is_greater: partial_order -> bool
+  val is_greater_equal: partial_order -> bool
+end
+
+structure Partial_Ord: PARTIAL_ORD =
+struct
+
+type partial_order = order option
+
+val is_equal = Jeha_Common.some_is is_equal
+val is_less = Jeha_Common.some_is is_less
+val is_less_equal = Jeha_Common.some_is is_less_equal
+val is_greater = Jeha_Common.some_is is_greater
+val is_greater_equal = Jeha_Common.some_is is_greater_equal
+
+end
+
 (* Transfinite Higher Order Knuth Bendix Ordering *)
 
 signature JEHA_ORDER =
 sig
   include JEHA_WEIGHT
-  type partial_order = order option
+  include PARTIAL_ORD
   val weight_ord : weight ord
   val zero_weight : weight
   val var_weight : weight
@@ -45,8 +68,7 @@ structure Jeha_Order: JEHA_ORDER =
 struct
 
 open Jeha_Weight
-
-type partial_order = order option
+open Partial_Ord
 
 val zero_weight = (0, 0)
 

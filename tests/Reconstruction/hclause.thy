@@ -11,6 +11,12 @@ ML \<open>
     Thm.eq_thm (th1, th2)
 \<close>
 
+declare [[show_types]]
+
+ML_val \<open>
+  val _ = Jeha_Proof.hclause_of_axiom @{context} @{thm mem_Collect_eq}
+\<close>
+
 ML_val \<open>
   val C = mk @{prop "A \<Longrightarrow> B \<Longrightarrow> C \<Longrightarrow> False"}
   (* HClause.make_last *)
