@@ -1,6 +1,15 @@
 theory jeha_base
-  imports HOL.Transfer HOL.Argo jeha_lemma
+  imports HOL.Transfer HOL.Argo
 begin
+
+datatype 'a type_arg_wrapper = Skolem_Type_Arg (inner: "'a itself")
+
+term "Skolem_Type_Arg TYPE(bool)"
+
+ML_val \<open>
+  val t = @{term "Skolem_Type_Arg"}
+  val c = @{const Skolem_Type_Arg(bool)}
+\<close>
 
 ML_file \<open>jeha_common.ML\<close>
 ML_file \<open>jeha_id.ML\<close>
