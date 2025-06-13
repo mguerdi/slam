@@ -78,7 +78,12 @@ fun envir_subst_thm ctxt (tyenv, tenv) th =
     fun mkT (v, (S, T)) = ((v, S), Thm.ctyp_of ctxt (Envir.subst_type tyenv T))
     fun mk (v, (T, t)) =
       (* FIXME: why only Envir.subst_term_types and not Envir.subst_term? (The latter didn't work) *)
-      ((v, Envir.subst_type tyenv T), Thm.cterm_of ctxt (Envir.subst_term_types tyenv t))
+      (* Envir.subst_term_types on the r.h.s. applies the tyenv only to the types occuring in t.
+      Reason: (tyenv, tenv) are substitutions where chasing is not necessary (or correct). The code
+      below mimics what subst_term2 from envir.ML does.
+      (FIXME: this last claim is not true. Looking at flexflex_first_order again, perhaps I should
+      just leave t alone. ) *)
+      ((v, Envir.subst_type tyenv T), Thm.cterm_of ctxt ((* Envir.subst_term_types tyenv *) t))
 
     val instsT = Vartab.fold (cons o mkT) tyenv []
     val insts = Vartab.fold (cons o mk) tenv []

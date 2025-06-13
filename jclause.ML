@@ -183,7 +183,16 @@ fun literal_selection_function_from_name name = case name of
   | "select_all_neg_lit" => select_all_neg_lit
   | "select_first_neg_lit" => select_first_neg_lit
   | "select_first_maximal_neg_lit" => select_first_maximal_neg_lit
-  | _ => error ("literal_selection_function_from_name: unknown selection function \"" ^ name ^ "\"")
+  | name =>
+    if member (op=) literal_selection_functions name
+      then error ("BUG: JClause.literal_selection_functions and " ^
+       "JClause.literal_selection_function_from_name are out-of-sync.")
+      else
+        error (
+          "literal_selection_function_from_name: unknown selection function \"" ^ name ^ "\"\n" ^
+          "possible values:\n" ^
+          " * " ^ space_implode "\n * " literal_selection_functions
+        )
 
 fun get_literal_selection_function ctxt =
   Config.get ctxt Jeha_Common.literal_selection_function

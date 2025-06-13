@@ -9,6 +9,7 @@ session "JEHA" = HOL +
     jeha_lemma
     jeha_tactic
     jeha
+    (* jeha_sledgehammer *)
     (* jeha_debug *)
 
 session "JEHA_MIRABELLE" in Mirabelle = JEHA +
