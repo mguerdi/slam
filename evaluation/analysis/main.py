@@ -1,3 +1,5 @@
+from enum import Enum, auto
+from functools import total_ordering
 import os
 
 
@@ -16,79 +18,195 @@ def is_replay_line(line):
     )
 
 
-def analyse_file(filename):
+# Terminology
+#   call:    0.sledgehammer_replay goal.using 3492ms Sort_Encodings.T 393:13132 some Preplay: (metis intT_def protFw) (34 ms)
+#   goal:                                            Sort_Encodings.T 393:13132
+#   command:                                                                                  (metis intT_def protFw)
+#   method:                                                                                    metis
+#   result:                                                                                                           (34 ms)
+
+
+@total_ordering
+class ResultKind(Enum):
+    # don't change: smaller is better
+    SUCCESS = 0
+    TIMEOUT = 1
+    FAILED = 2
+
+    @classmethod
+    def from_string(cls, as_string):
+        if "(failed)" == as_string:
+            return cls.FAILED
+        elif "timed out)" in as_string:
+            return cls.TIMEOUT
+        elif "s)" in as_string or "ms)" in as_string:
+            return cls.SUCCESS
+        else:
+            raise ValueError(f'Can\'t turn "{as_string}" into ResultKind')
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        raise NotImplementedError("Can only compare ResultKind with itself.")
+
+
+def parse_time_ms(result_as_string):
+    [time, unit] = result_as_string[1:-1].split(" ")
+    time = float(time)
+    if unit == "s":
+        time_ms = time * 1000
+    elif unit == "ms":
+        time_ms = time
+    else:
+        raise ValueError(f"Can't parse {result_as_string} as time.")
+    return time_ms
+
+
+@total_ordering
+class Result:
+    def __init__(self, as_string):
+        self.as_string = as_string
+        self.kind = ResultKind.from_string(as_string)
+        if self.kind == ResultKind.SUCCESS:
+            self.time_ms = parse_time_ms(as_string)
+
+    def is_failed(self):
+        return self.kind == ResultKind.FAILED
+
+    def is_timeout(self):
+        return self.kind == ResultKind.TIMEOUT
+
+    def is_success(self):
+        return self.kind == ResultKind.SUCCESS
+
+    def __eq__(self, other):
+        if self.__class__ == other.__class__:
+            return self.kind == other.kind and self.time_ms == other.time_ms
+        raise NotImplementedError("Can only compare Result to itself.")
+
+    def __lt__(self, other):
+        if self.__class__ == other.__class__:
+            if self.kind == ResultKind.SUCCESS and other.kind == ResultKind.SUCCESS:
+                return self.time_ms < other.time_ms
+            return self.kind < other.kind
+
+
+def parse_file(filename):
     with open(filename) as f:
         s = f.read()
     lines = [
         squeezed for line in s.strip().split("\n") if is_replay_line(squeezed := squeeze(line))
     ]
     # print("\n".join(lines[:20]))
-    results = []
+    calls = []
     for line in lines:
-        # 0.sledgehammer_replay goal.using 3492ms Sort_Encodings.T 393:13132 some Preplay: (metis intT_def protFw) (34 ms)
-        # 0.sledgehammer_replay goal.using 3492ms Sort_Encodings.T 393:13132 some Preplay: (jeha intT_def protFw) (failed)
-        #                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^               ^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^
-        #                                                  path                                     call           result
-        path = " ".join(line.split(" ")[3:5])
+        # See "Terminology" above.
+        goal = " ".join(line.split(" ")[3:5])
         tail = " ".join(line.split(" ")[7:])
-        call = "(".join(tail.split("(")[:-1])
-        if "jeha" in call and "metis" in call:
+        command = "(".join(tail.split("(")[:-1])
+        if "jeha" in command and "metis" in command:
             raise RuntimeError("Line has both jeha and metis:\n" + line)
-        if "jeha" in call:
+        if "jeha" in command:
             method = "jeha"
-        elif "metis" in call:
+        elif "metis" in command:
             method = "metis"
         else:
             raise RuntimeError("Line has neither jeha nor metis:\n" + line)
-        result = "(" + (tail.split("(")[-1])
-        results.append({"path": path, "method": method, "call": call, "result": result})
+        result = Result("(" + (tail.split("(")[-1]))
+        calls.append({"goal": goal, "method": method, "command": command, "result": result})
+    return calls
 
-    def is_failed(goal):
-        return "failed" in goal["result"]
 
-    def is_timeout(goal):
-        return "timed out" in goal["result"]
+def best(calls):
+    if len(calls) == 0:
+        raise RuntimeError("Empty list of calls.")
+    goal = calls[0]["goal"]
+    best_call = calls[0]
+    for call in calls:
+        if call["goal"] != goal:
+            raise RuntimeError("Calls don't all have the same goal.")
+        if call["result"] < best_call["result"]:
+            best_call = call
+    return best_call
 
-    def is_success(goal):
-        return not is_failed(goal) and not is_timeout(goal)
 
-    failed = [goal for goal in results if is_failed(goal)]
-    timed_out = [goal for goal in results if is_timeout(goal)]
-    success = [goal for goal in results if is_success(goal)]
+def group_by(dictionaries, key):
+    grouped = {}
+    for d in dictionaries:
+        if d[key] in grouped:
+            grouped[d[key]].append(d)
+        else:
+            grouped[d[key]] = [d]
+    return grouped
+
+
+def analyse_file(filename):
+    calls = parse_file(filename)
+
+    failed = [call for call in calls if call["result"].is_failed()]
+    timed_out = [call for call in calls if call["result"].is_timeout()]
+    success = [call for call in calls if call["result"].is_success()]
+
     print(f"{len(failed)} calls failed")
     print(f"{len(timed_out)} calls timed out")
     print(f"{len(success)} calls succeeded")
-    all_paths = set(goal["path"] for goal in results)
-    success_paths = set(goal["path"] for goal in success)
-    failed_or_timed_out_paths = set(goal["path"] for goal in failed + timed_out) - success_paths
-    print(f"{len(all_paths)} goals in total")
-    print(f"{len(failed_or_timed_out_paths)} goals failed or timed out (all calls)")
-    print(f"{len(success_paths)} goals succeeded")
+
+    all_goals = set(call["goal"] for call in calls)
+    success_goals = set(call["goal"] for call in success)
+    failed_or_timed_out_goals = set(call["goal"] for call in failed + timed_out) - success_goals
+
+    print(f"{len(all_goals)} goals in total")
+    print(f"{len(failed_or_timed_out_goals)} goals failed or timed out (all calls)")
+    print(f"{len(success_goals)} goals succeeded")
+
     jeha_fails_or_timeouts = [
-        goal["path"] for goal in failed + timed_out if goal["method"] == "jeha"
+        call["goal"] for call in failed + timed_out if call["method"] == "jeha"
     ]
-    jeha_success = [goal["path"] for goal in success if goal["method"] == "jeha"]
+    jeha_success = [goal["goal"] for goal in success if goal["method"] == "jeha"]
+
     # print(jeha_success[0])
     # print(jeha_fails)
-    metis_grouped = {}
-    for goal in results:
-        if goal["method"] == "metis":
-            path = goal["path"]
-            if path in metis_grouped:
-                metis_grouped[path].append(goal)
-            else:
-                metis_grouped[path] = [goal]
+
+    calls_by_goal = group_by(calls, "goal")
+
+    metis_calls_by_goal = {
+        goal: [call for call in calls if call["method"] == "metis"]
+        for goal, calls in calls_by_goal.items()
+    }
+
+    for goal, calls in metis_calls_by_goal.items():
+        if len(calls) == 0:
+            raise RuntimeError(f"No metis calls for {goal=}.")
+
+    # metis or jeha
+    best_by_goal = {goal: best(calls) for goal, calls in calls_by_goal.items()}
+
+    # only metis
+    best_metis_by_goal = {
+        goal: best([call for call in calls if call["method"] == "metis"])
+        for goal, calls in calls_by_goal.items()
+    }
+
+    # metis_calls_grouped = {}
+    # for call in calls:
+    #     if call["method"] == "metis":
+    #         goal = call["goal"]
+    #         if goal in metis_calls_grouped:
+    #             metis_calls_grouped[goal].append(call)
+    #         else:
+    #             metis_calls_grouped[goal] = [call]
     metis_all_fails_or_timeouts = [
-        path for path, goals in metis_grouped.items() if all(not is_success(goal) for goal in goals)
+        goal for goal, call in best_metis_by_goal.items() if not call["result"].is_success()
     ]
     metis_any_success = [
-        path for path, goals in metis_grouped.items() if any(is_success(goal) for goal in goals)
+        goal for goal, call in best_metis_by_goal.items() if call["result"].is_success()
     ]
+
     # print(metis_any_success[0])
     print(f"jeha fails or timeouts: {len(jeha_fails_or_timeouts)}")
     print(f"jeha success: {len(jeha_success)}")
     print(f"metis fails (no variant worked): {len(metis_all_fails_or_timeouts)}")
-    print(f"metis success (any variant workd): {len(metis_any_success)}")
+    print(f"metis success (any variant worked): {len(metis_any_success)}")
     # jeha_success_metis_fail_or_timeout = set(metis_all_fails_or_timeouts) - set(jeha_fails_or_timeouts)
     jeha_success_metis_fail_or_timeout = set(jeha_success) - set(metis_any_success)
     print(f"jeha success, metis fail: {str(len(jeha_success_metis_fail_or_timeout))}")
