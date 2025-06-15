@@ -140,80 +140,74 @@ def group_by(dictionaries, key):
     return grouped
 
 
-def analyse_file(filename):
-    calls = parse_file(filename)
-
-    failed = [call for call in calls if call["result"].is_failed()]
-    timed_out = [call for call in calls if call["result"].is_timeout()]
-    success = [call for call in calls if call["result"].is_success()]
-
-    print(f"{len(failed)} calls failed")
-    print(f"{len(timed_out)} calls timed out")
-    print(f"{len(success)} calls succeeded")
-
-    all_goals = set(call["goal"] for call in calls)
-    success_goals = set(call["goal"] for call in success)
-    failed_or_timed_out_goals = set(call["goal"] for call in failed + timed_out) - success_goals
-
-    print(f"{len(all_goals)} goals in total")
-    print(f"{len(failed_or_timed_out_goals)} goals failed or timed out (all calls)")
-    print(f"{len(success_goals)} goals succeeded")
-
-    jeha_fails_or_timeouts = [
-        call["goal"] for call in failed + timed_out if call["method"] == "jeha"
-    ]
-    jeha_success = [goal["goal"] for goal in success if goal["method"] == "jeha"]
-
-    # print(jeha_success[0])
-    # print(jeha_fails)
-
+def get_best_metis_by_goal(calls):
     calls_by_goal = group_by(calls, "goal")
-
     metis_calls_by_goal = {
         goal: [call for call in calls if call["method"] == "metis"]
         for goal, calls in calls_by_goal.items()
     }
-
-    for goal, calls in metis_calls_by_goal.items():
-        if len(calls) == 0:
-            raise RuntimeError(f"No metis calls for {goal=}.")
-
-    # metis or jeha
-    best_by_goal = {goal: best(calls) for goal, calls in calls_by_goal.items()}
-
-    # only metis
     best_metis_by_goal = {
-        goal: best([call for call in calls if call["method"] == "metis"])
-        for goal, calls in calls_by_goal.items()
+        goal: best(metis_calls) for goal, metis_calls in metis_calls_by_goal.items()
     }
+    return best_metis_by_goal
 
-    # metis_calls_grouped = {}
-    # for call in calls:
-    #     if call["method"] == "metis":
-    #         goal = call["goal"]
-    #         if goal in metis_calls_grouped:
-    #             metis_calls_grouped[goal].append(call)
-    #         else:
-    #             metis_calls_grouped[goal] = [call]
-    metis_all_fails_or_timeouts = [
-        goal for goal, call in best_metis_by_goal.items() if not call["result"].is_success()
-    ]
-    metis_any_success = [
-        goal for goal, call in best_metis_by_goal.items() if call["result"].is_success()
-    ]
+
+def get_best_metis(calls):
+    return list(get_best_metis_by_goal(calls).values())
+
+
+def summarize(calls):
+    failed = [call for call in calls if call["result"].is_failed()]
+    timed_out = [call for call in calls if call["result"].is_timeout()]
+    success = [call for call in calls if call["result"].is_success()]
+
+    # print(f"{len(failed)} calls failed")
+    # print(f"{len(timed_out)} calls timed out")
+    # print(f"{len(success)} calls succeeded")
+
+    all_goals = set(call["goal"] for call in calls)
+    success_goals = set(call["goal"] for call in success)
+    always_failed_or_timed_out_goals = all_goals - success_goals
+
+    print(f"{len(all_goals)} goals in total")
+    print(f"{len(always_failed_or_timed_out_goals)} goals failed or timed out (all calls)")
+    print(f"{len(success_goals)} goals succeeded")
+
+    jeha_calls = [call for call in calls if call["method"] == "jeha"]
+
+    jeha_fails = [call["goal"] for call in jeha_calls if call["result"].is_failed()]
+    jeha_timeouts = [call["goal"] for call in jeha_calls if call["result"].is_timeout()]
+    jeha_success = [call["goal"] for call in jeha_calls if call["result"].is_success()]
+
+    jeha_fails_or_timeouts = jeha_fails + jeha_timeouts
+
+    # print(jeha_success[0])
+    # print(jeha_fails)
+
+    # From now on "metis" means the best-performing metis variant for any particular goal.
+    metis_calls = get_best_metis(calls)
+
+    metis_fails = [call["goal"] for call in metis_calls if call["result"].is_failed()]
+    metis_timeouts = [call["goal"] for call in metis_calls if call["result"].is_timeout()]
+    metis_success = [call["goal"] for call in metis_calls if call["result"].is_success()]
+
+    metis_fails_or_timeouts = metis_fails + metis_timeouts
 
     # print(metis_any_success[0])
-    print(f"jeha fails or timeouts: {len(jeha_fails_or_timeouts)}")
+    print(f"jeha fails: {len(jeha_fails)}")
+    print(f"jeha timeouts: {len(jeha_timeouts)}")
     print(f"jeha success: {len(jeha_success)}")
-    print(f"metis fails (no variant worked): {len(metis_all_fails_or_timeouts)}")
-    print(f"metis success (any variant worked): {len(metis_any_success)}")
-    # jeha_success_metis_fail_or_timeout = set(metis_all_fails_or_timeouts) - set(jeha_fails_or_timeouts)
-    jeha_success_metis_fail_or_timeout = set(jeha_success) - set(metis_any_success)
-    print(f"jeha success, metis fail: {str(len(jeha_success_metis_fail_or_timeout))}")
+    print(f"metis fails (no variant worked): {len(metis_fails)}")
+    print(f"metis timeouts (no variant worked): {len(metis_timeouts)}")
+    print(f"metis success (any variant worked): {len(metis_success)}")
+
+    jeha_success_metis_fail_or_timeout = set(jeha_success) - set(metis_success)
+
+    print(f"jeha success, metis fail or timeout: {str(len(jeha_success_metis_fail_or_timeout))}")
     print(jeha_success_metis_fail_or_timeout)
     # print(sorted(list(jeha_success_metis_fail_or_timeout))[:10])
     print(
-        f"metis success, jeha fail: {str(len(set(jeha_fails_or_timeouts) - set(metis_all_fails_or_timeouts)))}"
+        f"metis success, jeha fail or timeout: {str(len(set(jeha_fails_or_timeouts) - set(metis_fails_or_timeouts)))}"
     )
 
 
@@ -227,7 +221,8 @@ if __name__ == "__main__":
             commit = c.read()
         print(filename, commit)
         try:
-            analyse_file(filename)
+            calls = parse_file(filename)
+            summarize(calls)
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
         print()
