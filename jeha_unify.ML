@@ -28,6 +28,7 @@ fun give_to_undefined t =
   end
 
 fun silence_context ctxt =
+    if not (Config.get_generic ctxt Jeha_Common.supress_unify_trace) then ctxt else
     (* val _ = Jeha_Common.trace_msg (Context.the_proof ctxt) (fn () => "unifying: " ^ fold (curry (op ^)) (map ((fn (l, r) => l ^ " = " ^ r ^ ", ") o apply2 (Jeha_Common.pretty_term (Context.the_proof ctxt))) tus) "") *)
     (* disable very long Enter MATCH tracing messages when unification bound is exceeded *)
     (* based on slience_methods from try0.ML *)
