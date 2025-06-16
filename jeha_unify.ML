@@ -15,6 +15,21 @@ end
 structure Jeha_Unify : JEHA_UNIFY =
 struct
 
+fun with_timeout ctxt (xq : 'a Seq.seq) : 'a Seq.seq =
+  let
+    val timeout = Time.fromMilliseconds (Config.get_generic ctxt Jeha_Common.unify_timeout_ms)
+  in
+    if timeout = Time.zeroTime
+      then xq
+      else
+        Seq.make (fn () =>
+          (case (Timeout.apply timeout Seq.pull) xq of
+            NONE => NONE
+          | SOME (x, xq') => SOME (x, xq'))
+          handle Timeout.TIMEOUT _ => NONE
+        )
+  end
+
 (* Needed because of the following remark in unify.ML:
 "The outermost functions assume the terms to be unified already have the same type." *)
 fun give_to_undefined t =
@@ -55,6 +70,7 @@ fun smash_unifiers ctxt tus env =
     val tus = map (apply2 give_to_undefined) tus
   in
     Unify.smash_unifiers ctxt tus env
+    |> with_timeout ctxt
   end
 
 fun matchers ctxt maxidx pairs =
@@ -66,6 +82,7 @@ fun matchers ctxt maxidx pairs =
     val pairs = map (apply2 give_to_undefined) ((v, Term.dummy) :: pairs)
   in
     Unify.matchers ctxt pairs
+    |> with_timeout ctxt
   end
 
 fun literal_smash_unifiers ctxt ((s, t, b), (s', t', b')) env =

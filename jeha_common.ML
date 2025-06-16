@@ -137,6 +137,7 @@ sig
   val literal_selection_function : string Config.T
 
   val unify_search_bound : int Config.T
+  val unify_timeout_ms : int Config.T
   val supress_unify_trace : bool Config.T
 
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
@@ -295,6 +296,7 @@ val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>jeha_select_f
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_maximal_neg_lit")
 
 val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)
+val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 0)
 val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>jeha_supress_unify_trace\<close> (K true)
 
 (** term parsing antiquotations **)
