@@ -94,9 +94,6 @@ sig
   val some_is : ('a -> bool) -> 'a option -> bool
   val seq_cartesian_product : 'a Seq.seq -> 'b Seq.seq -> ('a * 'b) Seq.seq
   val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
-  (* Config option to turn smashing unifiers off. The incomplete unifiers are
-  discarded! *)
-  val disable_smash_unifiers : bool Config.T
   val max_number_of_steps : int Config.T
   (* Config options to turn rules on and off. *)
   val disable_all : bool Config.T
@@ -250,7 +247,6 @@ val proof_reconstruction =
 
 fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)
 
-val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_smash_unifiers\<close> (K false)
 (* FIXME: remove or better default *)
 val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>jeha_max_number_of_steps\<close> (K 300)
 

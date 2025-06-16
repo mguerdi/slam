@@ -24,12 +24,10 @@ fun give_to_undefined t =
     (* FIXME: there might be a better approach *)
     (* use dummyT instead of unit to depend on less of HOL *)
     Const (@{const_name undefined}, T --> dummyT) $ t
-
   end
 
 fun silence_context ctxt =
     if not (Config.get_generic ctxt Jeha_Common.supress_unify_trace) then ctxt else
-    (* val _ = Jeha_Common.trace_msg (Context.the_proof ctxt) (fn () => "unifying: " ^ fold (curry (op ^)) (map ((fn (l, r) => l ^ " = " ^ r ^ ", ") o apply2 (Jeha_Common.pretty_term (Context.the_proof ctxt))) tus) "") *)
     (* disable very long Enter MATCH tracing messages when unification bound is exceeded *)
     (* based on slience_methods from try0.ML *)
     ctxt
@@ -55,29 +53,8 @@ fun smash_unifiers ctxt tus env =
         ~1
     val env = Envir.merge (Envir.empty maxidx, env)
     val tus = map (apply2 give_to_undefined) tus
-    (* like map_filter, but stops as soon as a NONE is encountered *)
-    fun map_filter_while f xq =
-      Seq.make (fn () =>
-          (case Seq.pull xq of
-            NONE => NONE (* seq exhausted *)
-          | SOME (x, xq') =>
-            (case f x of
-              NONE => NONE (* early abort *)
-            | SOME y => SOME (y, map_filter_while f xq')
-            )
-          )
-        )
   in
-    if Config.get_generic ctxt Jeha_Common.disable_smash_unifiers
-      then
-        (Seq.single (fold (Pattern.unify ctxt) tus env)
-          handle Pattern.Unif => Seq.empty)
-          handle Pattern.Pattern => Seq.empty (* Not a pattern. *)
-        (* Unify.unifiers (ctxt, env, tus)
-        |> map_filter_while
-            (fn (partial_unifier, ff_pairs) =>
-              if null ff_pairs then SOME partial_unifier else NONE) *)
-      else Unify.smash_unifiers ctxt tus env
+    Unify.smash_unifiers ctxt tus env
   end
 
 fun matchers ctxt maxidx pairs =
@@ -87,22 +64,8 @@ fun matchers ctxt maxidx pairs =
     Unify.matchers below) are greater than maxidx *)
     val v = Var (("maxidxforcer", maxidx), dummyT)
     val pairs = map (apply2 give_to_undefined) ((v, Term.dummy) :: pairs)
-    val env = Envir.empty maxidx
-    val tenv = Envir.term_env env
-    val tyenv = Envir.type_env env
   in
-    if Config.get_generic ctxt Jeha_Common.disable_smash_unifiers
-      then
-        (fold (Pattern.match (Context.theory_of ctxt)) pairs (tyenv, tenv)
-          (* FIXME: turning a pair of tyenv, tenv pair into an Envir is dangerous, because the
-          former needs to be applied using subst_\<dots>, wherea the latter is applied using
-          norm_\<dots>. This shows up as an infinite loop (Interrupt_Breakdown) in
-          Jeha_Proof_Util.envir_norm_thm when the envir contains an assignment [?x := ?x] *)
-          |> (fn (tyenv', tenv') => Envir.Envir {tyenv = tyenv', tenv = tenv', maxidx = maxidx}))
-          |> Seq.single
-          handle Pattern.MATCH => Seq.empty
-
-      else Unify.matchers ctxt pairs
+    Unify.matchers ctxt pairs
   end
 
 fun literal_smash_unifiers ctxt ((s, t, b), (s', t', b')) env =
@@ -121,75 +84,3 @@ fun literal_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
     |> Seq.interleave
 
 end
-
-
-(* Plan
-
-       s = t      u = v \<or> R
-(RP) ------------------------  u|\<^sub>p = s\<sigma>
-     s = t     u\<langle>t\<sigma>\<rangle>\<^sub>p = v \<or> R
-
-call unit_clause = (s = t), target_clause (u = v \<or> R)
-
-suppose p is given.
- 1. Match pattern s against u|\<^sub>p, making sure any newly introduced variables are
-    fresh in the target clause. Result is \<sigma> which assigns subterms of u to vars
-    of s.
- 2. Rename the variables of t which are not present in \<sigma> to avoid clashes
-    between vars of t\<sigma> and vars of the target clause. Note: the new variables
-    need to be distinct from the ones of the target_clause and the r.h.s. of \<sigma>
- 3. Apply \<sigma> to the renamed t and insert into u.
-
-in pseudo code:
-
-\<sigma> = Jeha_Unify.matchers (maxidx target_clause) [(s, u|\<^sub>p)]
-
-(* Assumption: Envir.maxidx_of \<sigma> >= maxidx target_clause *)
-
-for var in Vars(t)
-  if var in \<sigma>
-    then continue
-    else
-      var' = genvar \<sigma> var (??)
-      \<sigma> = (var = var') :: \<sigma>
-
-u = u\<langle>t\<sigma>\<rangle>\<^sub>p
-
-fun refresh_unaffected_vars env t =
-  let
-    val TVars = TVars.build (TVars.add_tvars t)
-    val Vars = Vars.build (Vars.add_vars t)
-
-    fun maps_var env var = is_some (Envir.lookup1 (Envir.term_env env) var)
-    fun maps_tvar env tvar_sort = is_some (Type.lookup (Envir.type_env env) tvar_sort)
-
-    fun refresh_tvars T env =
-      fold_atyps_sorts
-        (fn aT =>
-          case aT of
-            TVar (tvar, sort) ->
-              if maps_tvar env tvar
-                then env
-                else
-                  let
-                    val maxidx = Term.maxidx
-
-          )
-
-    fun refresh t T env =
-      let
-        val env = refresh_tvars env
-
-    fold_term_types
-    val fold_term_types: (term -> typ -> 'a -> 'a) -> term -> 'a -> 'a
-
-
-val matcher = Jeha_Unify.matchers (JClause.maxidx target_clause) [(from, target_term)]
-val matcher = refresh_unaffected_vars matcher ()
-
-
-simpler solution:
-
-
-
-*)

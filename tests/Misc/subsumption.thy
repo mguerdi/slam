@@ -56,22 +56,11 @@ ML_val \<open>
   )
 \<close>
 
-declare [[jeha_disable_smash_unifiers = false]]
-
+(* higher-order matcher *)
 ML_val \<open>
   val c = JClause.of_term @{context} (@{term_pat "(?f :: bool \<Rightarrow> bool) c"}, 0);
   val d = JClause.of_term @{context} (@{term_pat "c :: bool"}, 1);
   \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
-\<close>
-
-declare [[jeha_disable_smash_unifiers]]
-
-ML_val \<open>
-  val c = JClause.of_term @{context} (@{term_pat "(?f :: bool \<Rightarrow> bool) c"}, 0);
-  val d = JClause.of_term @{context} (@{term_pat "c :: bool"}, 1);
-  \<^assert> (not
-    (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
-  )
 \<close>
 
 end
