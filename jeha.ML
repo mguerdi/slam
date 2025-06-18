@@ -706,8 +706,8 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
   let
     fun tracer msg = Jeha_Common.trace_msg_sup ctxt (fn () => "Sup: " ^ msg ())
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
-    val () = tracer (fn () => ("start: "
-      ^ JClause.pretty_clause ctxt d ^ " " ^ JClause.pretty_clause ctxt c))
+    val () = tracer (fn () =>
+      JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_subterm ctxt c u_pos)
     val left_premise_shift = JClause.maxidx c + 1
     val d = JClause.incr_indexes left_premise_shift d
     val env = Envir.empty (JClause.maxidx_of2 (c, d))
@@ -720,8 +720,6 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     if is_Var u andalso JClause.occurs_deeply u c then fail [] (K "deeply occuring var") else (* 2 *)
     (* FIXME: 3. variable condition ... *)
     let
-      val () = tracer (fn () =>
-        JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_clause ctxt c)
       val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
       val () = tracer (fn () =>
         Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u)

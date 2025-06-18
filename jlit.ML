@@ -25,6 +25,7 @@ sig
   val norm_negative_pred : Proof.context -> T -> T
   val norm_beta_eta_qeta_env : Envir.env -> T -> T
   val term_of : T -> term
+  val as_tpos : bool -> lpos -> JTerm.tpos
   val term_at_lpos : T -> lpos -> term
   val orient : lpos -> T -> term * term * bool
   val map_at_lpos : lpos -> (term -> term) -> T -> T
@@ -37,6 +38,8 @@ sig
     Jeha_Order.partial_order
   val pretty_lit' : Proof.context -> T -> Pretty.T
   val pretty_lit : Proof.context -> T -> string
+  val pretty_subterm' : Proof.context -> T -> lpos * JTerm.tpos -> Pretty.T
+  val pretty_subterm : Proof.context -> T -> lpos * JTerm.tpos -> string
 end;
 
 structure JLit : JLIT =
@@ -145,6 +148,12 @@ fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 
 fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 
+(* law: term_at_lpos lp (s, t, b) = JTerm.subterm_at (as_tpos b lp) (term_of (s, t, b)) *)
+fun as_tpos true Left = [1]
+  | as_tpos true Right = [2]
+  | as_tpos false Left = [1, 1]
+  | as_tpos false Right = [1, 2]
+
 fun term_at_lpos (l, _, _) Left = l
   | term_at_lpos (_, r, _) Right = r
 
@@ -187,5 +196,15 @@ val kbo = kbo_generic Jeha_KBO.ord
 fun pretty_lit' ctxt = Jeha_Common.pretty_term' ctxt o term_of
 
 val pretty_lit = Pretty.string_of oo pretty_lit'
+
+fun pretty_subterm' ctxt ((s, t, positive) : T) (lp, tp) =
+  let
+    val as_term = term_of (s, t, positive)
+    val lp_as_tp = as_tpos positive lp @ tp
+  in
+    JTerm.pretty_subterm' ctxt as_term lp_as_tp
+  end
+
+val pretty_subterm = Pretty.string_of ooo pretty_subterm'
 
 end;

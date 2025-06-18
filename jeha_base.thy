@@ -11,6 +11,20 @@ ML_val \<open>
   val c = @{const Skolem_Type_Arg(bool)}
 \<close>
 
+(* Used for pretty printing expression with a highlighted subterm. *)
+
+definition highlight :: "'a \<Rightarrow> 'a" where
+  "highlight subterm = subterm"
+
+syntax
+  "_highlight" :: "'a \<Rightarrow> 'a" (\<open><_>\<close>)
+
+syntax_consts
+  "_highlight" \<rightleftharpoons> highlight
+
+translations
+  "<t>" \<rightleftharpoons> "CONST highlight t"
+
 ML_file \<open>jeha_common.ML\<close>
 ML_file \<open>jeha_id.ML\<close>
 ML_file \<open>jterm.ML\<close>

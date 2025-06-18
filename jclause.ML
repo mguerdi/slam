@@ -25,6 +25,8 @@ sig
   val set_origin : int Jeha_Log.inference -> T -> T
   val origin : T -> int Jeha_Log.inference
   val lit_at : cpos -> T -> JLit.T
+  (* law: JLit.term_of (lit_at cp c) = JTerm.subterm_at (as_tpos c) (term_of c) *)
+  val as_tpos : int -> cpos -> JTerm.tpos
   val dummy : JLit.T list -> T
   val refresh_id : unit -> T -> T
   val add_literal : Proof.context -> JLit.T -> T -> T
@@ -39,12 +41,17 @@ sig
   val pretty_clause' : Proof.context -> T -> Pretty.T
   val pretty_clauses : Proof.context -> T list -> string
   val pretty_clauses' : Proof.context -> T list -> Pretty.T
+  val pretty_subterm : Proof.context -> T -> full_pos -> string
+  val pretty_subterm' : Proof.context -> T -> full_pos -> Pretty.T
   val cposs_of : T -> cpos list
   val green_full_poss_of : T -> full_pos list
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_literals : (JLit.T list -> JLit.T list) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val subterm_at_full_pos : T -> full_pos -> term
+  (* law: subterm_at_full_pos fp [\<dots>, (s, t, b), \<dots>]
+            = JTerm.subterm_at (full_pos_as_tpos b fp) (term_of [\<dots>, (s, t, b), \<dots>]) *)
+  val full_pos_as_tpos : int -> bool -> full_pos -> JTerm.tpos
   val occurs_deeply : term -> T -> bool
   val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
   val norm_beta_eta_qeta : Proof.context -> T -> T
@@ -268,6 +275,44 @@ fun pretty_clauses' ctxt cs =
   |> Pretty.block
 
 val pretty_clauses = Pretty.string_of oo pretty_clauses'
+
+(* Dependeing on clause length:
+Length 0: error (the empty clause has no literals)
+Length 1: [] (the root is the literal)
+Length 2:
+     /\
+    0  1
+  which have subterm positions [1] and [2].
+Recursion via this invariant:
+  * add another /\ on the top left
+  * increment indices by 1
+  * prefix term positions by 2
+    /\
+   0 /\
+    1  2  (formerly 0, 1, with subterm positions [1], [2], now [2, 1], [2, 2])
+*)
+fun as_tpos 1 0 = []
+  | as_tpos 2 0 = [1]
+  | as_tpos 2 1 = [2]
+  | as_tpos len cp =
+      if cp >= len then
+        error ("as_tpos: cp " ^ @{make_string} cp ^ " is not a valid index into a clause of length "
+          ^ @{make_string} len)
+      else
+        2::as_tpos (len - 1) (cp - 1)
+
+fun full_pos_as_tpos clause_len positive_lit (tp, lp, cp) =
+  as_tpos clause_len cp @ JLit.as_tpos positive_lit lp @ tp
+
+fun pretty_subterm' ctxt c (tp, lp, cp) =
+  let
+    val as_term = term_of c
+    val fp_as_tp = full_pos_as_tpos (length c) (JLit.is_positive (lit_at cp c)) (tp, lp, cp)
+  in
+    JTerm.pretty_subterm' ctxt as_term fp_as_tp
+  end
+
+val pretty_subterm = Pretty.string_of ooo pretty_subterm'
 
 fun cposs_of c = 0 upto (length c - 1)
 
