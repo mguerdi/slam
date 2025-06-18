@@ -1855,54 +1855,69 @@ fun infer_clauses ctxt active given_clause green_index =
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else []
     val rules =
     [ ( Jeha_Common.rule_sup
+      , Jeha_Common.trace_sup
       , (fn _ => sup_given_into_active ctxt given_clause active green_index)
       )
     , ( Jeha_Common.rule_sup
+      , Jeha_Common.trace_sup
       , (fn _ => (maps (uncurry (infer_sup ctxt)) eq_target_pairs))
       )
     (* ERes, EFact have already been performed for the active clauses *)
     , ( Jeha_Common.rule_e_res
+      , Jeha_Common.trace_e_res
       , (fn _ => (maps (infer_eres ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_e_fact
+      , Jeha_Common.trace_e_fact
       , (fn _ => (maps (infer_efact ctxt given_clause) given_clause_lpos_cpos_pairs_pairs))
       )
     , ( Jeha_Common.rule_arg_cong
+      , Jeha_Common.trace_arg_cong
       , (fn _ => (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_neg_ext
+      , Jeha_Common.trace_neg_ext
       , (fn _ => (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_bool_hoist
+      , Jeha_Common.trace_bool_hoist
       , (fn _ => (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     , ( Jeha_Common.rule_false_elim
+      , Jeha_Common.trace_false_elim
       , (fn _ => (maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs))
       )
     , ( Jeha_Common.rule_bool_rw
+      , Jeha_Common.trace_bool_rw
       , (fn _ => (maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     , ( Jeha_Common.rule_eq_hoist
+      , Jeha_Common.trace_eq_hoist
       , (fn _ => (maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     , ( Jeha_Common.rule_neq_hoist
+      , Jeha_Common.trace_neq_hoist
       , (fn _ => (maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     , ( Jeha_Common.rule_forall_hoist
+      , Jeha_Common.trace_forall_hoist
       , (fn _ => (maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     , ( Jeha_Common.rule_exists_hoist
+      , Jeha_Common.trace_exists_hoist
       , (fn _ => (maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     , ( Jeha_Common.rule_forall_rw
+      , Jeha_Common.trace_forall_rw
       , (fn _ => (maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     , ( Jeha_Common.rule_exists_rw
+      , Jeha_Common.trace_exists_rw
       , (fn _ => (maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
       )
     ]
   in
-    maps (fn (cfg, rule) => if_cfg cfg (Jeha_Common.time_rule ctxt rule)) rules
+    maps (fn (cfg, trace, rule) => if_cfg cfg (Jeha_Common.time_rule ctxt trace rule)) rules
   end
 
 datatype step_result = Unsat | MaybeSat | Next

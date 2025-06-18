@@ -43,7 +43,7 @@ sig
   
   val report_rule_timing : bool Config.T
   
-  val time_rule : Proof.context -> ('a -> 'b) -> 'a -> 'b
+  val time_rule : Proof.context -> bool Config.T -> ('a -> 'b) -> 'a -> 'b
 
   val trace_msg : Proof.context -> (unit -> string) -> unit
   val trace_msg_active : Proof.context -> (unit -> string) -> unit
@@ -435,8 +435,8 @@ fun cpu_time_milliseconds f x =
   let val ({elapsed, ...}, y) = Timing.timing f x
   in (y, Time.toMilliseconds elapsed) end;
 
-fun time_rule ctxt f x =
-  if Config.get ctxt report_rule_timing
+fun time_rule ctxt trace_rule f x =
+  if Config.get ctxt trace_rule andalso Config.get ctxt report_rule_timing
     then
       let
         val (res, elapsed) = cpu_time_milliseconds f x
