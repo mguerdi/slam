@@ -40,6 +40,9 @@ sig
   val pretty_lit : Proof.context -> T -> string
   val pretty_subterm' : Proof.context -> T -> lpos * JTerm.tpos -> Pretty.T
   val pretty_subterm : Proof.context -> T -> lpos * JTerm.tpos -> string
+  val as_oriented_for_pretty : T -> lpos -> term
+  val pretty_oriented' : Proof.context -> T -> lpos -> Pretty.T
+  val pretty_oriented : Proof.context -> T -> lpos -> string
 end;
 
 structure JLit : JLIT =
@@ -206,5 +209,18 @@ fun pretty_subterm' ctxt ((s, t, positive) : T) (lp, tp) =
   end
 
 val pretty_subterm = Pretty.string_of ooo pretty_subterm'
+
+fun as_oriented_for_pretty lit lp =
+  let
+    val (s, t, b) = orient lp lit
+    val a = fastype_of s
+  in
+    \<^instantiate>\<open>'a=a and s and t in term \<open><s \<approx>> t>\<close>\<close>
+  end
+
+(* lp points to the lhs of the rewrite rule *)
+fun pretty_oriented' ctxt lit lp = Jeha_Common.pretty_term' ctxt (as_oriented_for_pretty lit lp)
+
+val pretty_oriented = Pretty.string_of ooo pretty_oriented'
 
 end;

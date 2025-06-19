@@ -43,6 +43,8 @@ sig
   val pretty_clauses' : Proof.context -> T list -> Pretty.T
   val pretty_subterm : Proof.context -> T -> full_pos -> string
   val pretty_subterm' : Proof.context -> T -> full_pos -> Pretty.T
+  val pretty_oriented : Proof.context -> T -> JLit.lpos * cpos -> string
+  val pretty_oriented' : Proof.context -> T -> JLit.lpos * cpos -> Pretty.T
   val cposs_of : T -> cpos list
   val green_full_poss_of : T -> full_pos list
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
@@ -108,6 +110,9 @@ val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid, se
 (* NOTE: invalidates maxidx and selection *)
 fun map_literals f { literals, id, maxidx, origin, selected } =
   { literals = f literals, id = id, maxidx = ~1, origin = origin, selected = [~1] }
+
+fun unsafe_map_literals f { literals, id, maxidx, origin, selected } =
+  { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected }
 
 fun lit_at cp clause = nth (literals clause) cp
 
@@ -313,6 +318,28 @@ fun pretty_subterm' ctxt c (tp, lp, cp) =
   end
 
 val pretty_subterm = Pretty.string_of ooo pretty_subterm'
+
+(* lp points to the lhs of the conditional rewrite rules conclusion *)
+fun pretty_oriented' ctxt c (lp, cp) =
+  let
+    fun term_of_lit (cp', lit) =
+      if cp = cp' then JLit.as_oriented_for_pretty lit lp else JLit.term_of lit
+    fun term_of_lits [] = @{term False}
+      | term_of_lits lits =
+          let
+            val (x :: xs) = rev lits
+          in
+            fold
+              (curry HOLogic.mk_disj)
+              (map_index term_of_lit xs)
+              (term_of_lit (List.length lits - 1, x))
+          end
+    val t = term_of_lits (literals c)
+  in
+    Jeha_Common.pretty_term' ctxt (term_of_lits (literals c))
+  end
+
+val pretty_oriented = Pretty.string_of ooo pretty_oriented'
 
 fun cposs_of c = 0 upto (length c - 1)
 

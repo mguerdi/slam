@@ -2,6 +2,8 @@ theory jeha_base
   imports HOL.Transfer HOL.Argo
 begin
 
+(* Simple wrapper around 'a itself (think: newtype) *)
+
 datatype 'a type_arg_wrapper = Skolem_Type_Arg (inner: "'a itself")
 
 term "Skolem_Type_Arg TYPE(bool)"
@@ -24,6 +26,21 @@ syntax_consts
 
 translations
   "<t>" \<rightleftharpoons> "CONST highlight t"
+
+(* Used for pretty printing oriented literals. *)
+
+definition orient :: "'a \<Rightarrow> 'a \<Rightarrow> bool" where
+  "orient l r = (l = r)"
+
+syntax orient :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
+
+syntax "_orient" :: "'a \<Rightarrow> 'a \<Rightarrow> bool" (\<open><_ \<approx>> _>\<close>)
+
+syntax_consts
+  "_orient" \<rightleftharpoons> orient
+
+translations
+  "<l \<approx>> r>" \<rightleftharpoons> "CONST orient l r"
 
 ML_file \<open>jeha_common.ML\<close>
 ML_file \<open>jeha_id.ML\<close>

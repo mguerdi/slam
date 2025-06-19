@@ -707,7 +707,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     fun tracer msg = Jeha_Common.trace_msg_sup ctxt (fn () => "Sup: " ^ msg ())
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () =>
-      JClause.pretty_clause ctxt d ^ " into " ^ JClause.pretty_subterm ctxt c u_pos)
+      JClause.pretty_oriented ctxt d (lp, cp) ^ " into " ^ JClause.pretty_subterm ctxt c u_pos)
     val left_premise_shift = JClause.maxidx c + 1
     val d = JClause.incr_indexes left_premise_shift d
     val env = Envir.empty (JClause.maxidx_of2 (c, d))
