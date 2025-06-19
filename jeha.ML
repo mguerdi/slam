@@ -10,7 +10,6 @@ general procedure:
 
 signature JEHA =
 sig
-  val is_pos_unit : JClause.T -> bool
   val impl_simp_rewrite_lits : bool -> Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val find_single_green_disagreement : Proof.context -> term * term -> JTerm.tpos option
   val literal_can_match_single_disagreement : Proof.context -> int * JLit.T -> int * JLit.T -> (int * (JTerm.tpos * (JLit.lpos * Envir.env))) option
@@ -198,9 +197,6 @@ fun simp_delete_resolved_lits ctxt c =
   end
   (* ) *)
 
-fun is_pos_unit { literals = [(_, _, true)], ... } = true
-  | is_pos_unit _ = false
-
 (* Rewriting of positive (RP) or negative literals (RN) simplification (Schulz) *)
 (* FIXME: Implement side conditions following
   https://github.com/leanprover-community/duper/blob/aab52219c72cb52951832c8e985e1dc3e9497af9/Duper/Rules/Demodulation.lean#L51
@@ -208,7 +204,7 @@ fun is_pos_unit { literals = [(_, _, true)], ... } = true
 fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as (_, _, target_cp)) =
   (* (writeln (if positive then "RP" else "RN"); *)
   (* check unit_clause *)
-  if not (is_pos_unit unit_clause) then NONE else
+  if not (JClause.is_positive_unit unit_clause) then NONE else
   (* check that to be rewritten literal is indeed positive / negative *)
   if not (positive = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
@@ -357,7 +353,7 @@ fun backward_rewrite ctxt active green_index given_clause
 (* Negative simplify-reflect (NS) simplification (Schulz) *)
 fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, target_cp) =
   (* (writeln "NS"; *)
-  if is_pos_unit unit_clause then NONE else
+  if JClause.is_positive_unit unit_clause then NONE else
   (* check that to be deleted literal is indeed positive *)
   if not (true = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
@@ -471,7 +467,7 @@ fun literal_can_match_single_disagreement
 *)
 fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   (* (writeln "PS"; *)
-  if not (is_pos_unit unit_clause) then NONE else
+  if not (JClause.is_positive_unit unit_clause) then NONE else
   (* check that to be deleted literal is indeed negative *)
   if not (false = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
@@ -512,7 +508,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
 
 (* Equality subsumption (ES) redundancy check (Schulz) *)
 fun equality_subsumes ctxt (unit_clause, target_clause) =
-  if not (is_pos_unit unit_clause) then false else
+  if not (JClause.is_positive_unit unit_clause) then false else
   let
     (* Schulz: s, t *)
     val unit_lit = (JClause.maxidx unit_clause, the_single (JClause.literals unit_clause))
