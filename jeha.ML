@@ -202,73 +202,76 @@ fun simp_delete_resolved_lits ctxt c =
   https://github.com/leanprover-community/duper/blob/aab52219c72cb52951832c8e985e1dc3e9497af9/Duper/Rules/Demodulation.lean#L51
 *)
 fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as (_, _, target_cp)) =
-  (* (writeln (if positive then "RP" else "RN"); *)
-  (* check unit_clause *)
-  if not (JClause.is_positive_unit unit_clause) then NONE else
-  (* check that to be rewritten literal is indeed positive / negative *)
-  if not (positive = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
-    (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
-    val unit_shift = JClause.maxidx target_clause + 1
-    val unit_clause = JClause.incr_indexes unit_shift unit_clause
-    val (from, to, true) = JClause.orient_unit lp unit_clause (* Schulz: (s, t) *)
-    val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
-    val matchers =
-      Jeha_Unify.matchers
-        (Context.Proof ctxt)
-        (JClause.maxidx_of2 (unit_clause, target_clause))
-        [(from, target_term)]
-    fun build_conclusion matcher =
+    fun tracer msg =
+      Jeha_Common.trace_msg_sup ctxt (fn () => if positive then "(RP)" else "(RN)" ^ ": " ^ msg ())
+    fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+  in
+  if not (JClause.is_positive_unit unit_clause) then fail NONE (K "not a positive unit") else
+  if not (positive = #3 (JClause.lit_at target_cp target_clause)) then
+    fail NONE (K "wrong polarity") else
+  let
+  (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
+  val unit_shift = JClause.maxidx target_clause + 1
+  val unit_clause = JClause.incr_indexes unit_shift unit_clause
+  val (from, to, true) = JClause.orient_unit lp unit_clause (* Schulz: (s, t) *)
+
+  val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
+  val matchers =
+    Jeha_Unify.matchers
+      (Context.Proof ctxt)
+      (JClause.maxidx_of2 (unit_clause, target_clause))
+      [(from, target_term)]
+
+  fun build_conclusion matcher =
+    let
+      val () = tracer (K "build_conclusion")
+      val msg = (fn () => "   " ^ (if positive then "(RP)" else "(RN)")
+        ^ " rewriting in " ^ JClause.pretty_subterm ctxt target_clause j
+        ^ " with " ^ JClause.pretty_oriented ctxt unit_clause (lp, 0))
+      val (from, to) = apply2 (JTerm.norm_beta_eta_qeta_env matcher) (from, to)
+    in
+      (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
+      (* Schulz: \<sigma>(s) > \<sigma>(t) *)
+      if SOME GREATER <> Jeha_KBO.ord (from, to)
+        then NONE
+      else
       let
-        val msg = (fn () => "   " ^ (if positive then "(RP)" else "(RN)")
-          ^ " rewriting " ^ Jeha_Common.pretty_term ctxt target_term
-          ^ " in " ^ JClause.pretty_clause ctxt target_clause
-          ^ " with " ^ Jeha_Common.pretty_term ctxt from
-          ^ " \<mapsto> " ^ Jeha_Common.pretty_term ctxt to)
-        val (from, to) = apply2 (JTerm.norm_beta_eta_qeta_env matcher) (from, to)
+        val rewritten_clause =
+          target_clause
+          |> JClause.map_at_full_pos j (K to)
+          |> JClause.norm_beta_eta_qeta ctxt
+          |> JClause.set_maxidx (Envir.maxidx_of matcher)
+        val rewriting_clause = JClause.dummy [(from, to, true)]
+        val rewriting_smaller_than_rewritten = (fn () =>
+          SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
       in
-        (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
-        (* Schulz: \<sigma>(s) > \<sigma>(t) *)
-        if SOME GREATER <> Jeha_KBO.ord (from, to)
-          then NONE
-        else
-        let
-          val rewritten_clause =
-            target_clause
-            |> JClause.map_at_full_pos j (K to)
-            |> JClause.norm_beta_eta_qeta ctxt
-            |> JClause.set_maxidx (Envir.maxidx_of matcher)
-          val rewriting_clause = JClause.dummy [(from, to, true)]
-          val rewriting_smaller_than_rewritten = (fn () =>
-            SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
-        in
-          if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
-          (Jeha_Common.trace_msg_simp_steps ctxt msg;
-          (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
-          (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
-          |> JClause.norm_negative_predicate_literals ctxt
-          |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ()
-          |> JClause.set_origin (
-              (if positive then Jeha_Log.RewritePositiveLits else Jeha_Log.RewriteNegativeLits)
-                { unit = JClause.id unit_clause
-                , unit_shift = unit_shift
-                , unit_orientation = lp
-                , right_premise = JClause.id target_clause
-                , subterm = j
-                , substitution = matcher}
-             )
-          |> SOME)
-        end
+        if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
+        (Jeha_Common.trace_msg_simp_steps ctxt msg;
+        (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
+        (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
+        |> JClause.norm_negative_predicate_literals ctxt
+        |> JClause.recompute_selected ctxt
+        |> JClause.refresh_id ()
+        |> JClause.set_origin (
+            (if positive then Jeha_Log.RewritePositiveLits else Jeha_Log.RewriteNegativeLits)
+              { unit = JClause.id unit_clause
+              , unit_shift = unit_shift
+              , unit_orientation = lp
+              , right_premise = JClause.id target_clause
+              , subterm = j
+              , substitution = matcher}
+           )
+        |> SOME)
       end
+    end
   in
     matchers
     |> Seq.take UNIFIER_CUTOFF
     |> Seq.map_filter build_conclusion
     |> Seq.pull
     |> Jeha_Common.map_some #1
-  end
-  (* ) *)
+  end end
 
 (* Rewriting of positive literals (RP) simplification (Schulz) *)
 val simp_rewrite_positive_lits = impl_simp_rewrite_lits true
@@ -713,10 +716,11 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     if is_Var u andalso JClause.occurs_deeply u c then fail [] (K "deeply occuring var") else (* 2 *)
     (* FIXME: 3. variable condition ... *)
     let
-      val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
       val () = tracer (fn () =>
         Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u)
+      val unifiers = Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
       val (unifiers, _) = Seq.chop UNIFIER_CUTOFF unifiers
+      val () = if 0 = length unifiers then fail () (K "no unifiers") else ()
       fun build_conclusion unifier =
         let
           val (c, d) =
