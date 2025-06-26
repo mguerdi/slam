@@ -211,10 +211,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
     val unit_shift = JClause.maxidx target_clause + 1
     val unit_clause = JClause.incr_indexes unit_shift unit_clause
-    val (from, to) =
-      apply2
-        (JLit.term_at_lpos (the_single (JClause.literals unit_clause)))
-        (lp, JLit.swap_lpos lp) (* Schulz: (s, t) *)
+    val (from, to, true) = JClause.orient_unit lp unit_clause (* Schulz: (s, t) *)
     val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
     val matchers =
       Jeha_Unify.matchers
