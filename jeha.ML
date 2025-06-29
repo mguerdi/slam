@@ -1793,7 +1793,8 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
     val simplifications = rewrite_simplifications @ simplifications
     (* remove archived clauses from active set *)
     (* FIXME: remove deactivated clauses from indices? *)
-    val active = filter_out (member (op= o apply2 JClause.id) rewrite_archive) active
+    val active =
+      filter_out (member (op= o apply2 JClause.id) (simplifications @ rewrite_archive)) active
     val (archive, simplified_actives, unsimplifiable_actives) =
       map_filter_partition
         ctxt
