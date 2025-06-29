@@ -66,7 +66,7 @@ sig
     { context: Proof.context
     , countdown: int
     , passive: Jeha_Passive_Set.T
-    , active: JClause.T list
+    , active: Jeha_Clause_Set.T
     , green_index: (int * JClause.full_pos) Term_Index.T
     , unit_index: (int * JLit.lpos) Term_Index.T
     , subsumption_index: Subsumption_Index.index
@@ -1727,24 +1727,23 @@ fun forward_simplify
     { simplifications = flat (map discard_trivial simplifications), archive = archive }
   end
 
-fun map_filter_partition _ _ [] acc = acc
-    (* archive includes in particular deleted actives! *)
-  | map_filter_partition ctxt f (x :: xs) (archive, changed, unchanged) =
+(* archive includes in particular deleted actives! *)
+fun map_filter_partition ctxt f x (archive, changed) =
         case f x of
           (* NOTE: Discarding new_archive, since the active clause was deleted, and we don't need
           the simplification steps that led to deletion for proof reconstruction. *)
           { simplifications = [], archive = new_archive } =>
-            map_filter_partition ctxt f xs (x :: archive, changed, unchanged)
+            (x :: archive, changed)
         | { simplifications = [y], archive = new_archive } =>
             (* One simplification, check the id to see if it is actually the original clause and no
             simplification was performed. *)
             if JClause.id y <> JClause.id x
               (* id changed, clause was simplified *)
-              then map_filter_partition ctxt f xs (new_archive @ archive, y :: changed, unchanged)
+              then (new_archive @ archive, y :: changed)
               (* clause was not simplified *)
               else
                 if null new_archive
-                  then map_filter_partition ctxt f xs (archive, changed, y :: unchanged)
+                  then (archive, changed)
                   (* error *)
                   else (
                     let
@@ -1795,18 +1794,26 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
     (* FIXME: remove deactivated clauses from indices? *)
     val active =
       filter_out (member (op= o apply2 JClause.id) (simplifications @ rewrite_archive)) active
-    val (archive, simplified_actives, unsimplifiable_actives) =
-      map_filter_partition
-        ctxt
-        (forward_simplify
-          simp_ctxt
-          { forward = false, cheap = false }
-          [given_clause]
-          unit_index
-          green_index
-          subsumption_index)
-        active
-        (archive, simplifications, [])
+    val active = Jeha_Clause_Set.make active (* FIXME: TODO remove *)
+    val (new_archive, simplified_actives) =
+      Jeha_Clause_Set.fold
+        (
+          map_filter_partition
+            ctxt
+            (forward_simplify
+              simp_ctxt
+              { forward = false, cheap = false }
+              [given_clause]
+              unit_index
+              green_index
+              subsumption_index)
+        )
+      active
+      ([], [])
+    val simplified_actives = simplified_actives @ simplifications
+    val unsimplifiable_actives = fold Jeha_Clause_Set.delete (new_archive @ simplified_actives) active
+    val unsimplifiable_actives = Jeha_Clause_Set.dest unsimplifiable_actives (* FIXME: TODO remove *)
+    val archive = new_archive @ archive
     (* FIXME: at this point the active set and its indices are in an unusual state *)
     val subsumed_unsimplifiable_active_ids =
       get_backward_subsumed ctxt given_clause unsimplifiable_actives subsumption_index
@@ -1924,7 +1931,7 @@ type prover_state =
   { context: Proof.context
   , countdown: int
   , passive: Jeha_Passive_Set.T
-  , active: JClause.T list
+  , active: Jeha_Clause_Set.T
   , green_index: (int * JClause.full_pos) Term_Index.T
   , unit_index: (int * JLit.lpos) Term_Index.T
   , subsumption_index: Subsumption_Index.index
@@ -1937,6 +1944,7 @@ fun given_clause_step
   if countdown <= 0 then error "TIMEOUT" else
   (Runtime.exn_trace (fn () =>
   let
+    val active = Jeha_Clause_Set.dest active (* FIXME: TODO remove *)
     (* tracing *)
     val _ = Jeha_Common.trace_msg context (fn () => "countdown = " ^ @{make_string} countdown)
     fun trace_msg_clauses tracer msg clauses =
@@ -1975,7 +1983,7 @@ fun given_clause_step
         , { context = context
           , countdown = countdown - 1
           , passive = passive
-          , active = active
+          , active = Jeha_Clause_Set.make active
           , green_index = green_index
           , unit_index = unit_index
           , subsumption_index = subsumption_index
@@ -1989,7 +1997,7 @@ fun given_clause_step
           , { context = context
             , countdown = countdown - 1
             , passive = passive
-            , active = empty_clause :: active
+            , active = Jeha_Clause_Set.make (empty_clause :: active)
             , green_index = green_index
             , unit_index = unit_index
             , subsumption_index = subsumption_index
@@ -2067,7 +2075,7 @@ fun given_clause_step
             , { context = context
               , countdown = countdown - 1
               , passive = passive
-              , active = active
+              , active = Jeha_Clause_Set.make active
               , green_index = green_index
               , unit_index = unit_index
               , subsumption_index = subsumption_index
@@ -2119,7 +2127,7 @@ fun try_saturate context goal prems =
           { context = context
           , countdown = Config.get context Jeha_Common.max_number_of_steps
           , passive = Jeha_Passive_Set.init goal_symbols clauses
-          , active = []
+          , active = Jeha_Clause_Set.empty
           , green_index = Term_Index.empty
           , unit_index = Term_Index.empty
           , subsumption_index =
@@ -2131,7 +2139,7 @@ fun try_saturate context goal prems =
 
 fun make_clause_db state clause_id =
   case
-    find_first (fn c => JClause.id c = clause_id) ((#active state) @ (#archive state))
+    find_first (fn c => JClause.id c = clause_id) (Jeha_Clause_Set.dest (#active state) @ (#archive state))
   of
     SOME clause => clause
   | NONE => error ("No clause with id " ^ @{make_string} clause_id ^ " in active set or archive.")
