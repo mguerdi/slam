@@ -30,12 +30,13 @@ fun reconstruct_proof
           passive = passive,
           active = active,
           archive = archive,
-          ... })
+          ... }: Jeha.prover_state)
       _
     =
   let
     val SOME false_id =
       active
+      |> Jeha_Clause_Set.dest
       |> find_first (curry (op =) 0 o length o JClause.literals)
       |> Jeha_Common.map_some JClause.id
     val clause_db = Jeha.make_clause_db state

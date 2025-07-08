@@ -18,7 +18,7 @@ sig
   (* outer clausification *)
   val outer_clausify : Proof.context -> bool -> term -> JClause.T -> JClause.T list
   val is_trivial : JClause.T -> bool
-  val is_equality_subsumed : Proof.context -> JClause.T list -> JClause.T -> bool
+  val is_equality_subsumed : Proof.context -> Jeha_Clause_Set.T -> JClause.T -> bool
   val simp_bool_outer_claus : Proof.context -> JClause.T * JClause.cpos -> JClause.T list
   val simp_rewrite_positive_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
   val simp_rewrite_negative_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
@@ -44,7 +44,7 @@ sig
   val forward_simplify :
     Proof.context
     -> { forward: bool, cheap: bool }
-    -> JClause.T list
+    -> Jeha_Clause_Set.T
     -> (int * JLit.lpos) Term_Index.T
     -> (int * JClause.full_pos) Term_Index.T
     -> Subsumption_Index.index
@@ -52,14 +52,14 @@ sig
     -> { simplifications: JClause.T list, archive: JClause.T list }
   val backward_simplify :
     Proof.context
-    -> JClause.T list
+    -> Jeha_Clause_Set.T
     -> (int * JLit.lpos) Term_Index.T
     -> (int * JClause.full_pos) Term_Index.T
     -> Subsumption_Index.index
     -> JClause.T
-    -> JClause.T list * JClause.T list * JClause.T list
+    -> JClause.T list * JClause.T list * Jeha_Clause_Set.T
   val infer_clauses :
-    Proof.context -> JClause.T list -> JClause.T -> (int * JClause.full_pos) Term_Index.T
+    Proof.context -> Jeha_Clause_Set.T -> JClause.T -> (int * JClause.full_pos) Term_Index.T
     -> JClause.T list
   datatype step_result = Unsat | MaybeSat | Next
   type prover_state =
@@ -293,7 +293,7 @@ fun forward_rewrite ctxt active unit_index given_clause =
       Term_Index.get_generalizations t unit_index
       (* FIXME: replace this by `map`, once we delete from the index. *)
       |> map_filter (fn (id, lp) =>
-        case find_first (curry op= id o JClause.id) active of
+        case Jeha_Clause_Set.lookup active id of
           SOME active_clause => SOME (active_clause, lp)
         | NONE => NONE)
   in
@@ -331,7 +331,7 @@ fun backward_rewrite ctxt active green_index given_clause
             Conceptually: up-to-date active set = old active set - archive. *)
           (case find_first (curry op= id o JClause.id) archive of
             SOME _ => acc (* skip *)
-          | NONE => (case find_first (curry op= id o JClause.id) active of
+          | NONE => (case Jeha_Clause_Set.lookup active id of
               SOME active_clause => (case if cfg_rp then (simp_rewrite_positive_lits ctxt (given_clause, lp) (active_clause, fp)) else NONE of
                   SOME result => { simplifications = result::simplifications, archive = active_clause::archive }
                 | NONE => (case if cfg_rn then (simp_rewrite_negative_lits ctxt (given_clause, lp) (active_clause, fp)) else NONE of
@@ -547,7 +547,7 @@ fun is_forward_subsumed ctxt clause active subsumption_index : bool =
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
 
     fun clause_subsumed_by active_clause_id =
-      (case find_first (curry op= active_clause_id o JClause.id) active of
+      (case Jeha_Clause_Set.lookup active active_clause_id of
         SOME active_clause =>
           if_cfg
             Jeha_Common.rule_clause_subsumption
@@ -564,7 +564,7 @@ fun is_forward_subsumed ctxt clause active subsumption_index : bool =
     subsumed
   end
 
-fun get_backward_subsumed ctxt given_clause active subsumption_index : int list =
+fun get_backward_subsumed ctxt given_clause active subsumption_index =
   let
     fun trace_subsumer subsuming_clause subsumed =
       (Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
@@ -574,19 +574,21 @@ fun get_backward_subsumed ctxt given_clause active subsumption_index : int list 
     val all_disabled = Config.get ctxt Jeha_Common.disable_all
     fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
 
-    fun is_subsumed_by_given_clause active_clause_id =
-      (case find_first (curry op= active_clause_id o JClause.id) active of
+    fun fetch_if_subsumed_by_given_clause active_clause_id =
+      (case Jeha_Clause_Set.lookup active active_clause_id of
         SOME active_clause =>
-          if_cfg
-            Jeha_Common.rule_clause_subsumption
-            (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (given_clause, active_clause)
-              |> trace_subsumer given_clause)
-      | NONE => false)
+          if (
+            if_cfg
+              Jeha_Common.rule_clause_subsumption
+              (fn _ => Jeha_Subsumption.subsumes (Context.Proof ctxt) (given_clause, active_clause)
+                |> trace_subsumer given_clause)
+          ) then SOME active_clause else NONE
+      | NONE => NONE)
 
     val subsumed_candidates =
       Subsumption_Index.fold_subsumed given_clause (curry op::) subsumption_index []
 
-    val subsumed_actives = filter is_subsumed_by_given_clause subsumed_candidates
+    val subsumed_actives = map_filter fetch_if_subsumed_by_given_clause subsumed_candidates
   in
     subsumed_actives
   end
@@ -602,9 +604,7 @@ fun is_equality_subsumed ctxt active c =
         Jeha_Common.rule_equality_subsumption
         (fn _ => equality_subsumes ctxt (active_clause, c))
   in
-    exists
-      (fn active_clause => equality_subsumed_by active_clause)
-      active
+    Jeha_Clause_Set.exists equality_subsumed_by active
   end
 
 (** Clausification **)
@@ -773,7 +773,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
 fun sup_given_into_active
   (ctxt : Proof.context)
   (given_clause : JClause.T)
-  (active : JClause.T list)
+  (active : Jeha_Clause_Set.T)
   (green_index: (int * JClause.full_pos) Term_Index.T)
   : JClause.T list
 =
@@ -786,7 +786,7 @@ fun sup_given_into_active
       Term_Index.get_unifiables t green_index
       (* FIXME: replace this by `map`, once we delete from the index. *)
       |> map_filter (fn (id, fp) =>
-        case find_first (curry op= id o JClause.id) active of
+        case Jeha_Clause_Set.lookup active id of
           SOME active_clause => SOME (active_clause, fp)
         | NONE => NONE)
   in
@@ -1779,7 +1779,7 @@ fun map_filter_partition ctxt f x (archive, changed) =
 *)
 fun backward_simplify ctxt active unit_index green_index subsumption_index given_clause =
   let
-    val active_ids = map JClause.id active
+    val active_ids = map JClause.id (Jeha_Clause_Set.dest active) (* FIXME: remove together with assertion below *)
     val simp_ctxt =
       ctxt
       |> Config.map Jeha_Common.trace
@@ -1793,8 +1793,9 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
     (* remove archived clauses from active set *)
     (* FIXME: remove deactivated clauses from indices? *)
     val active =
-      filter_out (member (op= o apply2 JClause.id) (simplifications @ rewrite_archive)) active
-    val active = Jeha_Clause_Set.make active (* FIXME: TODO remove *)
+      active
+      |> Jeha_Clause_Set.delete_clauses simplifications
+      |> Jeha_Clause_Set.delete_clauses rewrite_archive
     val (new_archive, simplified_actives) =
       Jeha_Clause_Set.fold
         (
@@ -1803,7 +1804,7 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
             (forward_simplify
               simp_ctxt
               { forward = false, cheap = false }
-              [given_clause]
+              (Jeha_Clause_Set.make [given_clause])
               unit_index
               green_index
               subsumption_index)
@@ -1811,25 +1812,22 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
       active
       ([], [])
     val simplified_actives = simplified_actives @ simplifications
-    val unsimplifiable_actives = fold Jeha_Clause_Set.delete (new_archive @ simplified_actives) active
-    val unsimplifiable_actives = Jeha_Clause_Set.dest unsimplifiable_actives (* FIXME: TODO remove *)
+    val unsimplifiable_actives = Jeha_Clause_Set.delete_clauses (new_archive @ simplified_actives) active
     val archive = new_archive @ archive
     (* FIXME: at this point the active set and its indices are in an unusual state *)
-    val subsumed_unsimplifiable_active_ids =
+    val subsumed_unsimplifiable_actives =
       get_backward_subsumed ctxt given_clause unsimplifiable_actives subsumption_index
-    val (subsumed_unsimplifiable_actives, unsimplifiable_actives) =
-      List.partition
-        (member (op=) subsumed_unsimplifiable_active_ids o JClause.id)
-        unsimplifiable_actives
+    val unsimplifiable_actives = Jeha_Clause_Set.delete_clauses subsumed_unsimplifiable_actives unsimplifiable_actives
     val archive = subsumed_unsimplifiable_actives @ archive
-    val () = \<^assert>
-      (subset (op=) (active_ids, map JClause.id archive @ map JClause.id unsimplifiable_actives))
+    val () = \<^assert> (* FIXME remove *)
+      (subset (op=) (active_ids, map JClause.id archive @ map JClause.id (Jeha_Clause_Set.dest unsimplifiable_actives)))
   in
     (archive, simplified_actives, unsimplifiable_actives)
   end
 
 fun infer_clauses ctxt active given_clause green_index =
   let
+    val active_list = Jeha_Clause_Set.dest active
     (* the equality literals that are being eliminated *)
     val eqs_given : (JClause.T * (JLit.lpos * JClause.cpos)) list =
       map
@@ -1838,12 +1836,12 @@ fun infer_clauses ctxt active given_clause green_index =
     val eqs_active : (JClause.T * (JLit.lpos * JClause.cpos)) list =
       maps (fn c =>
           map (pair c) (Jeha_Common.cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of c)))
-        active
+        active_list
     (* what we're superposing into *)
     val targets_given : (JClause.T * JClause.full_pos) list =
       map (pair given_clause) (JClause.green_full_poss_of given_clause)
     val targets_active : (JClause.T * JClause.full_pos) list =
-      maps (fn c => map (pair c) (JClause.green_full_poss_of c)) active
+      maps (fn c => map (pair c) (JClause.green_full_poss_of c)) active_list
     val eq_target_pairs =
       Jeha_Common.cartesian_product eqs_active targets_given
     (* for ERes, EFact *)
@@ -1944,7 +1942,6 @@ fun given_clause_step
   if countdown <= 0 then error "TIMEOUT" else
   (Runtime.exn_trace (fn () =>
   let
-    val active = Jeha_Clause_Set.dest active (* FIXME: TODO remove *)
     (* tracing *)
     val _ = Jeha_Common.trace_msg context (fn () => "countdown = " ^ @{make_string} countdown)
     fun trace_msg_clauses tracer msg clauses =
@@ -1983,7 +1980,7 @@ fun given_clause_step
         , { context = context
           , countdown = countdown - 1
           , passive = passive
-          , active = Jeha_Clause_Set.make active
+          , active = active
           , green_index = green_index
           , unit_index = unit_index
           , subsumption_index = subsumption_index
@@ -1997,7 +1994,7 @@ fun given_clause_step
           , { context = context
             , countdown = countdown - 1
             , passive = passive
-            , active = Jeha_Clause_Set.make (empty_clause :: active)
+            , active = Jeha_Clause_Set.add_new_clause empty_clause active
             , green_index = green_index
             , unit_index = unit_index
             , subsumption_index = subsumption_index
@@ -2020,7 +2017,7 @@ fun given_clause_step
               backward_simplify context active unit_index green_index subsumption_index given_clause
             val archive = redundant_active_and_intermediate_simplifications @ archive
             (* remove simplified and redundant actives, add given_clause to active set *)
-            val active = given_clause :: unsimplifiable_active
+            val active = Jeha_Clause_Set.add_new_clause given_clause unsimplifiable_active
             val green_index = Term_Index.insert_clause given_clause green_index
             val unit_index =
               if JClause.is_unit given_clause
@@ -2069,13 +2066,13 @@ fun given_clause_step
             (* add inferred clauses to passive set *)
             val passive = Jeha_Passive_Set.add_new_clauses passive new_clauses
             (* tracing *)
-            val _ = trace_msg_clauses Jeha_Common.trace_msg_active "active: " active
+            val _ = trace_msg_clauses Jeha_Common.trace_msg_active "active: " (Jeha_Clause_Set.dest active)
           in
             ( Next
             , { context = context
               , countdown = countdown - 1
               , passive = passive
-              , active = Jeha_Clause_Set.make active
+              , active = active
               , green_index = green_index
               , unit_index = unit_index
               , subsumption_index = subsumption_index
