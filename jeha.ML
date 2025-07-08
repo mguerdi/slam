@@ -208,7 +208,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
   in
   if not (JClause.is_positive_unit unit_clause) then fail NONE (K "not a positive unit") else
-  if not (positive = #3 (JClause.lit_at target_cp target_clause)) then
+  if not (positive = JLit.is_positive (JClause.lit_at target_cp target_clause)) then
     fail NONE (K "wrong polarity") else
   let
   (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
@@ -360,19 +360,16 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
     val unit_shift = (JClause.maxidx target_clause + 1)
     val unit_clause = JClause.incr_indexes unit_shift unit_clause
     val maxidx = JClause.maxidx_of2 (unit_clause, target_clause)
-    val unit_lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
-    val (s, t, false) = JLit.orient unit_lp unit_lit
-    val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
-    val (u, v, true) = target_lit
+    val (s, t, false) = JClause.orient_unit unit_lp unit_clause (* Schulz: s, t *)
+    val (u, v, true) = JClause.lit_at target_cp target_clause (* Schulz: \<sigma>(s), \<sigma>(t) *)
     val matcher =
       [(s, u), (t, v)]
       |> Jeha_Unify.matchers (Context.Proof ctxt) maxidx
       |> Seq.pull
     (* tracing *)
     val msg = (fn () => "   " ^ "(NS)"
-      ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
-      ^ " in " ^ JClause.pretty_clause ctxt target_clause
-      ^ " with " ^ JClause.pretty_clause ctxt (JClause.dummy [unit_lit]))
+      ^ " deleting highlighted literal of " ^ JClause.pretty_lit ctxt target_clause target_cp
+      ^ " with " ^ JClause.pretty_clause ctxt unit_clause)
   in
     if is_some matcher
       then let val _ = Jeha_Common.trace_msg_simp_steps ctxt msg in
@@ -471,16 +468,18 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
   (* check that to be deleted literal is indeed negative *)
   if not (false = #3 (JClause.lit_at target_cp target_clause)) then NONE else
   let
-    val lit = the_single (JClause.literals unit_clause) (* Schulz: s, t *)
+    val lit = JClause.the_unit_lit unit_clause (* Schulz: s, t *)
     val target_lit = JClause.lit_at target_cp target_clause (* Schulz: u[], u[]*)
     val matcher =
       literal_can_match_single_disagreement
-        ctxt (JClause.maxidx unit_clause, lit) (JClause.maxidx target_clause, target_lit)
+        ctxt
+        (JClause.maxidx unit_clause, lit)
+        (JClause.maxidx target_clause, target_lit)
     (* tracing *)
     val msg = (fn () => "   " ^ "(PS)"
-      ^ " deleting " ^ JClause.pretty_clause ctxt (JClause.dummy [target_lit])
-      ^ " in " ^ JClause.pretty_clause ctxt target_clause
-      ^ " with " ^ JClause.pretty_clause ctxt (unit_clause))
+      (* FIXME: implement pretty_subterms to highlight both subterms *)
+      ^ " deleting highlighted lit in " ^ JClause.pretty_lit ctxt target_clause target_cp
+      ^ " with " ^ JClause.pretty_clause ctxt unit_clause)
   in
     case matcher of
       SOME (unit_shift, (disagreement, (unit_orientation, matcher))) =>
@@ -511,11 +510,14 @@ fun equality_subsumes ctxt (unit_clause, target_clause) =
   if not (JClause.is_positive_unit unit_clause) then false else
   let
     (* Schulz: s, t *)
-    val unit_lit = (JClause.maxidx unit_clause, the_single (JClause.literals unit_clause))
+    val unit_lit = (JClause.maxidx unit_clause, JClause.the_unit_lit unit_clause)
     val positive_lits =
-      map (pair (JClause.maxidx target_clause)) (filter #3 (JClause.literals target_clause))
+      JClause.literals target_clause
+      |> filter JLit.is_positive
+      |> map (pair (JClause.maxidx target_clause))
     val exists_matcher =
       exists (is_some o literal_can_match_single_disagreement ctxt unit_lit) positive_lits
+    (* FIXME: better tracing, pretty_subterms *)
     val _ = if exists_matcher then Jeha_Common.trace_msg_simp_steps ctxt (fn () =>
       "equality subsumed by " ^ JClause.pretty_clause ctxt unit_clause) else ()
   in
@@ -1609,7 +1611,7 @@ fun forward_simplify
     val ctxt = ctxt |> Config.map Jeha_Common.trace (fn s =>
       s andalso (not cheap orelse Config.get ctxt Jeha_Common.trace_cheap_simp))
 
-    val active_units = Seq.filter (fn c => JClause.length c = 1) (Seq.of_list active)
+    val active_units = Seq.filter JClause.is_unit (Seq.of_list (Jeha_Clause_Set.dest active))
     val all_orientations : JClause.T Seq.seq -> (JClause.T * JLit.lpos) Seq.seq =
       fn cs => Jeha_Common.seq_cartesian_product cs (Seq.of_list [JLit.Left, JLit.Right])
 

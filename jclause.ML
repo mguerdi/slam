@@ -43,6 +43,8 @@ sig
   val pretty_clauses' : Proof.context -> T list -> Pretty.T
   val pretty_subterm : Proof.context -> T -> full_pos -> string
   val pretty_subterm' : Proof.context -> T -> full_pos -> Pretty.T
+  val pretty_lit : Proof.context -> T -> cpos -> string
+  val pretty_lit' : Proof.context -> T -> cpos -> Pretty.T
   val pretty_oriented : Proof.context -> T -> JLit.lpos * cpos -> string
   val pretty_oriented' : Proof.context -> T -> JLit.lpos * cpos -> Pretty.T
   val cposs_of : T -> cpos list
@@ -66,6 +68,7 @@ sig
   val is_false : T -> bool
   val is_unit : T -> bool
   val is_positive_unit : T -> bool
+  val the_unit_lit : T -> JLit.T
   val orient_unit : JLit.lpos -> T -> term * term * bool
   val maxidx_of_literal_list : JLit.T list -> int
   (* literal selection *)
@@ -310,15 +313,25 @@ fun as_tpos 1 0 = []
 fun full_pos_as_tpos clause_len positive_lit (tp, lp, cp) =
   as_tpos clause_len cp @ JLit.as_tpos positive_lit lp @ tp
 
-fun pretty_subterm' ctxt c (tp, lp, cp) =
+fun impl_pretty_subterm' ctxt c as_tp =
   let
     val as_term = term_of c
+  in
+    JTerm.pretty_subterm' ctxt as_term as_tp
+  end
+
+fun pretty_subterm' ctxt c (tp, lp, cp) =
+  let
     val fp_as_tp = full_pos_as_tpos (length c) (JLit.is_positive (lit_at cp c)) (tp, lp, cp)
   in
-    JTerm.pretty_subterm' ctxt as_term fp_as_tp
+    impl_pretty_subterm' ctxt c fp_as_tp
   end
 
 val pretty_subterm = Pretty.string_of ooo pretty_subterm'
+
+fun pretty_lit' ctxt c cp = impl_pretty_subterm' ctxt c (as_tpos (length c) cp)
+
+val pretty_lit = Pretty.string_of ooo pretty_lit'
 
 (* lp points to the lhs of the conditional rewrite rules conclusion *)
 fun pretty_oriented' ctxt c (lp, cp) =
@@ -486,8 +499,11 @@ val is_unit = length #> curry (op =) 1
 fun is_positive_unit { literals = [lit], ... } = JLit.is_positive lit
   | is_positive_unit _ = false
 
-fun orient_unit lp c =
- if not (is_unit c) then error ("orient_unit: not a unit" ^ @{make_string} c) else
- (JLit.orient lp o the_single o literals) c
+fun the_unit_lit c =
+  if not (is_unit c)
+    then error ("the_unit_lit: not a unit" ^ @{make_string} c)
+    else the_single (literals c)
+
+fun orient_unit lp = JLit.orient lp o the_unit_lit
 
 end;

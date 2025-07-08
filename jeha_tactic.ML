@@ -37,7 +37,7 @@ fun reconstruct_proof
     val SOME false_id =
       active
       |> Jeha_Clause_Set.dest
-      |> find_first (curry (op =) 0 o length o JClause.literals)
+      |> find_first JClause.is_false
       |> Jeha_Common.map_some JClause.id
     val clause_db = Jeha.make_clause_db state
     val false_proved =
