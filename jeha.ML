@@ -2101,12 +2101,18 @@ fun try_saturate context goal prems =
       "prems: "
       ^ Jeha_Common.pretty_terms context
           (map (Object_Logic.drop_judgment context o Thm.prop_of) prems))
+    fun is_negated_conjecture prem =
+      goal aconv (HOLogic.dest_not o HOLogic.dest_Trueprop o Thm.prop_of) prem
+    val () = \<^assert> (exists is_negated_conjecture prems)
     fun clause_of_prem prem =
       prem
       |> Thm.prop_of
-      |> Object_Logic.drop_judgment context (* remove Trueprop *)
+      |> HOLogic.dest_Trueprop
       |> (fn t => JClause.of_term context (t, JClause_Id.new ()))
-      |> JClause.set_origin (Jeha_Log.Axiom { thm = prem })
+      |> JClause.set_origin
+        (if is_negated_conjecture prem
+          then Jeha_Log.NegatedConjecture { thm = prem }
+          else Jeha_Log.Axiom { thm = prem })
     val clauses = map clause_of_prem prems
     val _ = Jeha_Common.trace_msg context (fn () =>
       "clauses: "

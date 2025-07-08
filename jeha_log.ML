@@ -5,6 +5,7 @@ sig
   datatype 'a inference =
   (* part of the input problem or auxilliary like lem, boolean tautologies *)
     Axiom of { thm: thm }
+  | NegatedConjecture of { thm: thm }
   (* proper inferences *)
   | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidSup
@@ -62,6 +63,7 @@ struct
 datatype 'a inference =
   (* part of the input problem or auxilliary like lem, boolean tautologies *)
     Axiom of { thm: thm }
+  | NegatedConjecture of { thm: thm }
   (* proper inferences *)
   (** general **)
   | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -103,7 +105,8 @@ datatype 'a inference =
   (* essentially a NONE value for temporary use *)
   | Invalid
 
-fun premises (Axiom { thm: thm }) = []
+fun premises (Axiom _) = []
+  | premises (NegatedConjecture _) = []
   | premises (Sup { left_premise, right_premise, ... }) = [left_premise, right_premise]
   | premises FluidSup = error "FluidSup undefined"
   | premises (ERes { premise, ... }) = [premise]
@@ -236,6 +239,7 @@ z\<sigma> t = z\<sigma> t' => C<z\<sigma> t> = C<z\<sigma> t'>
 
 
 fun name_of (Axiom _) = "Axiom"
+  | name_of (NegatedConjecture _) = "NegatedConjecture"
   | name_of (Sup _) = "Sup" 
   | name_of FluidSup = "FluidSup"
   | name_of (ERes _) = "ERes" 
@@ -272,6 +276,8 @@ fun name_of (Axiom _) = "Axiom"
 
 fun pretty ctxt inference = case inference of
     Axiom { thm = thm } => "Axiom:" ^ Thm.string_of_thm ctxt thm (* shows hyps *)
+  | NegatedConjecture { thm = thm } =>
+      "NegatedConjecture:" ^ Thm.string_of_thm ctxt thm (* shows hyps *)
   | _ => @{make_string} inference
 
 end;

@@ -99,7 +99,9 @@ fun jeha_tac options ctxt ths i st0 =
           into
             A \<Longrightarrow> ... \<Longrightarrow> \<not> B \<Longrightarrow> False *)
           THEN resolve_tac ctxt @{thms ccontr} 1
-          THEN_WITH_PREVIOUS (fn th => tac ctxt (Thm.concl_of th) 1))
+          THEN_WITH_PREVIOUS (fn th =>
+            (* th is the old A \<Longrightarrow> \<dots> \<Longrightarrow> B *)
+            tac ctxt (Thm.concl_of th) 1))
         i
         st0
   in
