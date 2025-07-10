@@ -76,7 +76,7 @@ sig
   exception JEHA_EXCEPTION of exn * prover_state
   val given_clause_loop : bool -> prover_state -> step_result * prover_state
   val given_clause_step : prover_state -> step_result * prover_state
-  val try_saturate : Proof.context -> term -> thm list -> step_result * prover_state
+  val try_saturate : Proof.context -> thm list -> step_result * prover_state
   val make_clause_db : prover_state -> int -> JClause.T
   (* DEBUG *)
   val ml_bool_of : term -> bool
@@ -2095,36 +2095,46 @@ fun given_clause_loop dump state =
     (Unsat, state) => (Unsat, state)
   | (Next, state) => given_clause_loop dump state
 
-fun try_saturate context goal prems =
+fun try_saturate context prems =
   let
     val _ = Jeha_Common.trace_msg context (fn () =>
       "prems: "
       ^ Jeha_Common.pretty_terms context
           (map (Object_Logic.drop_judgment context o Thm.prop_of) prems))
-    fun is_negated_conjecture prem =
-      goal aconv (HOLogic.dest_not o HOLogic.dest_Trueprop o Thm.prop_of) prem
-    val () = \<^assert> (exists is_negated_conjecture prems)
-    fun clause_of_prem prem =
+
+    (* "clausify" *)
+    (* brittle, relies on Subgoal.FOCUS preserving order of prems *)
+    val (axioms, negated_conjecture) = split_last prems
+    fun clause_of_prem is_negated_conjecture prem =
       prem
       |> Thm.prop_of
       |> HOLogic.dest_Trueprop
       |> (fn t => JClause.of_term context (t, JClause_Id.new ()))
       |> JClause.set_origin
-        (if is_negated_conjecture prem
+        (if is_negated_conjecture
           then Jeha_Log.NegatedConjecture { thm = prem }
           else Jeha_Log.Axiom { thm = prem })
-    val clauses = map clause_of_prem prems
+    val clauses = (map (clause_of_prem false) axioms) @ [clause_of_prem true negated_conjecture]
     val _ = Jeha_Common.trace_msg context (fn () =>
       "clauses: "
       ^ Jeha_Common.pretty_terms (Jeha_Common.verbose_of context) (map JClause.term_of clauses))
-    val _ = Jeha_Common.trace_msg context (fn () => "\n>>> start of given clause procedure <<<")
+
+    (* feature vector index *)
     val symbols = Subsumption_Index.collect_symbols clauses
-    val goal_symbols = Jeha_Symbol_Table.add_symbols goal Jeha_Symbol_Table.empty
-    val () = Jeha_Common.trace_msg context (fn () =>
-      "goal_symbols (for selection heuristic): " ^ @{make_string} goal_symbols)
     val () = Jeha_Common.trace_msg context (fn () =>
       "Symbols for feature vector index:" ^ "\n" ^
       Jeha_Common.pretty_terms (Jeha_Common.verbose_of context) symbols)
+
+    (* goal-oriented given-clause selection heuristic *)
+    val goal_symbols =
+      Jeha_Symbol_Table.add_symbols (Thm.prop_of negated_conjecture) Jeha_Symbol_Table.empty
+    val () = Jeha_Common.trace_msg context (fn () => "goal_symbols (for selection heuristic): "
+        ^ Jeha_Common.pretty_terms
+            (Jeha_Common.verbose_of context)
+            (Jeha_Symbol_Table.keys goal_symbols))
+
+    (* given clause loop *)
+    val _ = Jeha_Common.trace_msg context (fn () => "\n>>> start of given clause procedure <<<")
     val (result, final_state) =
       Runtime.exn_trace (fn () =>
         given_clause_loop

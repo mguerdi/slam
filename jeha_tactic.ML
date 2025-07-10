@@ -69,7 +69,7 @@ fun jeha_tac options ctxt ths i st0 =
       Subgoal.FOCUS (fn { context, prems, ...} => (fn st =>
         (* FIXME: make sure that we really don't need asms (only use is in
         HOL/Tools/Quotient/quotient_tacs.ML) *)
-        case ((Jeha_Common.cpu_time_milliseconds (Jeha.try_saturate context goal) (prems @ atomized_ths)
+        case ((Jeha_Common.cpu_time_milliseconds (Jeha.try_saturate context) (atomized_ths @ prems)
             handle Jeha.JEHA_EXCEPTION (e, state) => handle_exception (e, state))
             handle Exn.Interrupt_Breakdown => error "caught Interrupt_Breakdown") of
           ((Jeha.Unsat, final_state), time) =>
