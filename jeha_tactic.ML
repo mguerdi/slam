@@ -13,9 +13,6 @@ structure Jeha_Tactic : JEHA_TACTIC =
 struct
 open Jeha_Common
 
-infix 1 THEN_WITH_PREVIOUS
-fun (tac1 THEN_WITH_PREVIOUS tac2) th = (tac1 THEN (tac2 th)) th
-
 exception JEHA_UNIMPLEMENTED
 
 (* METIS: type jeha_options (string list option * string option) * thm list *)
@@ -64,7 +61,7 @@ fun jeha_tac options ctxt ths i st0 =
           end)
         else raise e
     val atomized_ths = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) ths
-    fun tac ctxt' goal i' =
+    fun tac ctxt' i' =
       (* FIXME: why are we doing this??? *)
       Subgoal.FOCUS (fn { context, prems, ...} => (fn st =>
         (* FIXME: make sure that we really don't need asms (only use is in
@@ -94,14 +91,10 @@ fun jeha_tac options ctxt ths i st0 =
           ... *)
       SELECT_GOAL
         (Object_Logic.atomize_prems_tac ctxt 1
-          (* turn the goal
-            A \<Longrightarrow> ... \<Longrightarrow> B
-          into
-            A \<Longrightarrow> ... \<Longrightarrow> \<not> B \<Longrightarrow> False *)
+          (* goal: A \<Longrightarrow> ... \<Longrightarrow> B *)
           THEN resolve_tac ctxt @{thms ccontr} 1
-          THEN_WITH_PREVIOUS (fn th =>
-            (* th is the old A \<Longrightarrow> \<dots> \<Longrightarrow> B *)
-            tac ctxt (Thm.concl_of th) 1))
+          (* goal: A \<Longrightarrow> ... \<Longrightarrow> \<not> B \<Longrightarrow> False *)
+          THEN tac ctxt 1)
         i
         st0
   in
