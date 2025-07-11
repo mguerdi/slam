@@ -124,7 +124,7 @@ fun swap { weight = weight, swapped = swapped } = { weight = weight, swapped = n
 
 end;
 
-signature BALANCE =
+signature VAR_BALANCE =
 sig
   type key
   type table
@@ -140,7 +140,7 @@ sig
   val no_neg : T -> bool
 end;
 
-functor Balance(Tab : TABLE) : BALANCE =
+functor Var_Balance(Tab : TABLE) : VAR_BALANCE =
 struct
 
 type key = Tab.key
@@ -250,10 +250,10 @@ end
 
 structure KBOTermTab = Table(KBOTermKey)
 
-structure Term_Balance = Balance(KBOTermTab);
+structure Term_Balance = Var_Balance(KBOTermTab);
 (* FIXME: Consider an indexname * sort key (the argument of TVar) so it becomes more similar to
 Term_Balance *)
-structure Typ_Balance = Balance(Typtab);
+structure Typ_Balance = Var_Balance(Typtab);
 
 signature JEHA_KBO =
 sig
