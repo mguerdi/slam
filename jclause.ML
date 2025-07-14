@@ -22,7 +22,7 @@ sig
   val maxidx : T -> int
   val maxidx_of2 : T * T -> int
   val set_maxidx : int -> T -> T
-  val set_origin : int Jeha_Log.inference -> T -> T
+  val set_origin : Proof.context -> int Jeha_Log.inference -> T -> T
   val origin : T -> int Jeha_Log.inference
   val lit_at : cpos -> T -> JLit.T
   (* law: JLit.term_of (lit_at cp c) = JTerm.subterm_at (as_tpos c) (term_of c) *)
@@ -136,8 +136,29 @@ fun map_maxidx f { literals, id, maxidx, origin, selected } =
 
 fun set_maxidx maxidx = map_maxidx (K maxidx)
 
-fun set_origin origin { literals, id, maxidx, selected, ... } =
-  { literals = literals, id = id, maxidx = maxidx, selected = selected, origin = origin }
+fun check_clause ctxt clause =
+  if not (Config.get ctxt Jeha_Common.debug_check_clauses) then () else
+  let
+    val computed_maxidx = maxidx_of_literal_list (literals clause)
+    val stored_maxidx = maxidx clause
+  in
+    if computed_maxidx > stored_maxidx
+      then error (
+        "check_clause: computed_maxidx greater than stored_maxidx in clause"
+        ^ @{make_string} clause
+      )
+    else
+      ()
+  end
+
+fun set_origin ctxt origin { literals, id, maxidx, selected, ... } =
+  let
+    val clause =
+      { literals = literals, id = id, maxidx = maxidx, selected = selected, origin = origin }
+  in
+    check_clause ctxt clause;
+    clause
+  end
 
 fun origin { origin, ... } = origin
 

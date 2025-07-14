@@ -140,6 +140,8 @@ sig
   val unify_timeout_ms : int Config.T
   val supress_unify_trace : bool Config.T
 
+  val debug_check_clauses : bool Config.T
+
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
 
   datatype ('a, 'b) either = Left of 'a | Right of 'b
@@ -298,6 +300,8 @@ val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>je
 val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)
 val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 0)
 val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>jeha_supress_unify_trace\<close> (K true)
+
+val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>jeha_debug_check_clauses\<close> (K false)
 
 (** term parsing antiquotations **)
 

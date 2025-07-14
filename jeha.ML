@@ -161,7 +161,7 @@ fun simp_delete_duplicated_lits ctxt c =
           c'
           |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
-          |> JClause.set_origin
+          |> JClause.set_origin ctxt
             (Jeha_Log.DeleteDuplicatedLits
               { premise = JClause.id c, duplicate_cposs = cposs_of_dups })
         ))
@@ -191,7 +191,7 @@ fun simp_delete_resolved_lits ctxt c =
           c'
           |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
-          |> JClause.set_origin
+          |> JClause.set_origin ctxt
             (Jeha_Log.DeleteResolvedLits { premise = JClause.id c, cposs = cposs })
         ))
   end
@@ -253,7 +253,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin (
+        |> JClause.set_origin ctxt (
             (if positive then Jeha_Log.RewritePositiveLits else Jeha_Log.RewriteNegativeLits)
               { unit = JClause.id unit_clause
               , unit_shift = unit_shift
@@ -377,7 +377,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin (Jeha_Log.NegativeSimplifyReflect
+        |> JClause.set_origin ctxt (Jeha_Log.NegativeSimplifyReflect
             { literal = target_cp
             , right_premise = JClause.id target_clause
             , unit = JClause.id unit_clause
@@ -488,7 +488,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin (
+        |> JClause.set_origin ctxt (
             Jeha_Log.PositiveSimplifyReflect
             { unit = JClause.id unit_clause
             , unit_shift = unit_shift
@@ -637,7 +637,7 @@ fun simp_bool_outer_claus ctxt (c, i) =
         clause
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.set_origin (
+        |> JClause.set_origin ctxt (
           Jeha_Log.SimpPosNegOuterClaus
             { premise = JClause.id c, literal = i, conclusion_index = index }
         )
@@ -755,7 +755,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
-          |> JClause.set_origin
+          |> JClause.set_origin ctxt
               (Jeha_Log.Sup
                 { left_premise = JClause.id d
                 , left_premise_shift = left_premise_shift
@@ -821,7 +821,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin
+        |> JClause.set_origin ctxt
           (Jeha_Log.ERes { premise = JClause.id c, literal = cp, substitution = unifier })
         |> trace_concl ctxt tracer
         |> SOME
@@ -867,7 +867,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin
+        |> JClause.set_origin ctxt
             (Jeha_Log.EFact
               { premise = JClause.id c
               , left_literal = (lp', cp')
@@ -948,7 +948,7 @@ fun infer_arg_cong ctxt c cpos =
           |> JClause.recompute_selected ctxt
           |> JClause.set_maxidx new_maxidx
           |> JClause.refresh_id ()
-          |> JClause.set_origin
+          |> JClause.set_origin ctxt
               (Jeha_Log.ArgCong
                 { premise = JClause.id c
                 , substitution = unifier
@@ -1002,7 +1002,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin
+        |> JClause.set_origin ctxt
           (Jeha_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
         |> trace_concl ctxt tracer
         |> single
@@ -1053,7 +1053,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin origin
+        |> JClause.set_origin ctxt origin
         |> trace_concl ctxt tracer
         |> SOME
       end
@@ -1320,7 +1320,7 @@ fun simp_bool_rw ctxt c u_pos =
         impl_simp_bool_rw ctxt tracer c u_pos t false t' NONE
         |> map (fn (unifier, clause) =>
           clause
-          |> JClause.set_origin
+          |> JClause.set_origin ctxt
             (Jeha_Log.SimpBoolRw
               { premise = JClause.id c, subterm = u_pos, subrule = (t, t'), substitution = unifier }))
       end
@@ -1349,7 +1349,7 @@ fun infer_bool_rw ctxt c u_pos =
         impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos t false t' NONE
         |> map (fn (unifier, clause) =>
           clause
-          |> JClause.set_origin
+          |> JClause.set_origin ctxt
             (Jeha_Log.BoolRw
               { premise = JClause.id c, subterm = u_pos, subrule = (t, t'), substitution = unifier })
           |> trace_concl ctxt tracer
@@ -1381,7 +1381,7 @@ fun impl_eq_neq_hoist positive ctxt c u_pos =
     val insert_for_u = hol_bool_of (not positive)
   in
     impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos pattern true insert_for_u (SOME x_eq_y_lit)
-    |> map (fn (unifier, clause) => clause |> JClause.set_origin (
+    |> map (fn (unifier, clause) => clause |> JClause.set_origin ctxt (
         (if positive then Jeha_Log.EqHoist else Jeha_Log.NeqHoist)
           { premise = JClause.id c, subterm = u_pos, substitution = unifier }))
   end
@@ -1414,7 +1414,7 @@ fun impl_forall_exists_hoist is_forall ctxt c u_pos =
     val insert_for_u = hol_bool_of (not is_forall)
   in
     impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos pattern true insert_for_u (SOME new_lit)
-    |> map (fn (unifier, clause) => clause |> JClause.set_origin (
+    |> map (fn (unifier, clause) => clause |> JClause.set_origin ctxt (
         (if is_forall then Jeha_Log.ForallHoist else Jeha_Log.ExistsHoist)
           { premise = JClause.id c, subterm = u_pos, substitution = unifier, fresh_x = fresh_x }))
   end
@@ -1521,7 +1521,7 @@ fun impl_fa_ex_rw
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> JClause.set_origin (
+        |> JClause.set_origin ctxt (
           (if is_forall then Jeha_Log.ForallRw else Jeha_Log.ExistsRw)
             { premise = JClause.id c
             , subterm = u_pos
@@ -1583,7 +1583,7 @@ fun infer_neg_ext ctxt c cpos =
       |> JClause.recompute_selected ctxt
       |> JClause.set_maxidx (JClause.maxidx c)
       |> JClause.refresh_id ()
-      |> JClause.set_origin
+      |> JClause.set_origin ctxt
           (Jeha_Log.NegExt
             { premise = JClause.id c
             , literal = cpos
@@ -2110,7 +2110,7 @@ fun try_saturate context prems =
       |> Thm.prop_of
       |> HOLogic.dest_Trueprop
       |> (fn t => JClause.of_term context (t, JClause_Id.new ()))
-      |> JClause.set_origin
+      |> JClause.set_origin context
         (if is_negated_conjecture
           then Jeha_Log.NegatedConjecture { thm = prem }
           else Jeha_Log.Axiom { thm = prem })
