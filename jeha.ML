@@ -241,7 +241,10 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           target_clause
           |> JClause.map_at_full_pos j (K to)
           |> JClause.norm_beta_eta_qeta ctxt
+          (* FIXME: Envir.maxidx_of does not always return the correct maxidx of the instantiated
+          terms. Why? Need a TVar maxidxforcer? *)
           |> JClause.set_maxidx (Envir.maxidx_of matcher)
+          |> JClause.recalculate_maxidx
         val rewriting_clause = JClause.dummy [(from, to, true)]
         val rewriting_smaller_than_rewritten = (fn () =>
           SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))

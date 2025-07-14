@@ -22,6 +22,7 @@ sig
   val maxidx : T -> int
   val maxidx_of2 : T * T -> int
   val set_maxidx : int -> T -> T
+  val recalculate_maxidx : T -> T
   val set_origin : Proof.context -> int Jeha_Log.inference -> T -> T
   val origin : T -> int Jeha_Log.inference
   val lit_at : cpos -> T -> JLit.T
