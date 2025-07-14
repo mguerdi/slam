@@ -9,12 +9,12 @@ sig
   val trace_passive : bool Config.T
   (* output single simplification steps *)
   val trace_simp_steps : bool Config.T
-  (* output during forward simplification (overrides) *)
+
+  (* override jeha_trace during the respective phases *)
   val trace_forward_simp : bool Config.T
-  (* output during backward simplification (overrides) *)
   val trace_backward_simp : bool Config.T
-  (* output during cheap simplification *)
   val trace_cheap_simp : bool Config.T
+
   (* output archive *)
   val trace_archive : bool Config.T
   (* output inferred / new clauses *)
@@ -165,9 +165,12 @@ val trace_active = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_active\
 (* FIXME change to int and show only that many *)
 val trace_passive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_passive\<close> (K true)
 val trace_simp_steps = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_steps\<close> (K true)
+
+(* override jeha_trace during the respective phases *)
 val trace_forward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_forward_simp\<close> (K true)
 val trace_backward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_backward_simp\<close> (K false)
 val trace_cheap_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_cheap_simp\<close> (K false)
+
 val trace_archive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_archive\<close> (K false)
 val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_inferred\<close> (K false)
 

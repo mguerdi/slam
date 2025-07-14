@@ -1609,9 +1609,16 @@ fun forward_simplify
   given_clause
 =
   let
+    val () = \<^assert> (not (forward andalso cheap))
     (* tracing *)
-    val ctxt = ctxt |> Config.map Jeha_Common.trace (fn s =>
-      s andalso (not cheap orelse Config.get ctxt Jeha_Common.trace_cheap_simp))
+    val do_trace =
+      if forward then
+        Config.get ctxt Jeha_Common.trace_forward_simp
+      else if cheap then
+        Config.get ctxt Jeha_Common.trace_cheap_simp
+      else
+        Config.get ctxt Jeha_Common.trace_backward_simp
+    val ctxt = Config.map Jeha_Common.trace (fn s => s andalso do_trace) ctxt
 
     val active_units = Seq.filter JClause.is_unit (Seq.of_list (Jeha_Clause_Set.dest active))
     val all_orientations : JClause.T Seq.seq -> (JClause.T * JLit.lpos) Seq.seq =
@@ -1754,7 +1761,11 @@ fun map_filter_partition ctxt f x (archive, changed) =
                       fun trace_msg_clauses tracer msg clauses =
                         tracer ctxt
                           (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-                      val () = trace_msg_clauses Jeha_Common.trace_msg_backward_simp "active clause, single simplified active" [x,y]
+                      val () =
+                        trace_msg_clauses
+                          Jeha_Common.trace_msg_backward_simp
+                          "active clause, single simplified active"
+                          [x,y]
                       val () = Jeha_Common.trace_msg_backward_simp ctxt (fn () =>
                         "with ids: "
                         ^ @{make_string} (JClause.id x)
@@ -1784,14 +1795,15 @@ fun map_filter_partition ctxt f x (archive, changed) =
 fun backward_simplify ctxt active unit_index green_index subsumption_index given_clause =
   let
     val active_ids = map JClause.id (Jeha_Clause_Set.dest active) (* FIXME: remove together with assertion below *)
-    val simp_ctxt =
-      ctxt
-      |> Config.map Jeha_Common.trace
-        (fn s => s andalso Config.get ctxt Jeha_Common.trace_backward_simp)
+
+    (* tracing *)
+    val do_trace = Config.get ctxt Jeha_Common.trace_backward_simp
+    val ctxt = Config.map Jeha_Common.trace (fn s => s andalso do_trace) ctxt
+
     val archive = []
     val simplifications = []
     val { simplifications = rewrite_simplifications, archive = rewrite_archive } =
-      backward_rewrite simp_ctxt active green_index given_clause
+      backward_rewrite ctxt active green_index given_clause
     val archive = rewrite_archive @ archive
     val simplifications = rewrite_simplifications @ simplifications
     (* remove archived clauses from active set *)
@@ -1806,7 +1818,7 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
           map_filter_partition
             ctxt
             (forward_simplify
-              simp_ctxt
+              ctxt
               { forward = false, cheap = false }
               (Jeha_Clause_Set.make [given_clause])
               unit_index
@@ -1963,14 +1975,12 @@ fun given_clause_step
 
     (* tracing *)
     val _ = trace_msg_clauses Jeha_Common.trace_msg "given_clause " [given_clause]
-    val forward_simp_ctxt = context |> (Config.map Jeha_Common.trace (fn s =>
-      s andalso Config.get context Jeha_Common.trace_forward_simp))
   in
     (* simplify given_clause with active set *)
     (* FIXME TODO add simplification steps to archive *)
     case
       forward_simplify
-        forward_simp_ctxt
+        context
         { forward = true, cheap = false }
         active
         unit_index
