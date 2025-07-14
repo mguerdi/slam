@@ -204,7 +204,7 @@ fun simp_delete_resolved_lits ctxt c =
 fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as (_, _, target_cp)) =
   let
     fun tracer msg =
-      Jeha_Common.trace_msg_sup ctxt (fn () => if positive then "(RP)" else "(RN)" ^ ": " ^ msg ())
+      Jeha_Common.trace_msg_sup ctxt (fn () => (if positive then "(RP)" else "(RN)") ^ ": " ^ msg ())
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
   in
   if not (JClause.is_positive_unit unit_clause) then fail NONE (K "not a positive unit") else
@@ -226,8 +226,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
   fun build_conclusion matcher =
     let
       val () = tracer (K "build_conclusion")
-      val msg = (fn () => "   " ^ (if positive then "(RP)" else "(RN)")
-        ^ " rewriting in " ^ JClause.pretty_subterm ctxt target_clause j
+      val msg = (fn () => "rewriting in " ^ JClause.pretty_subterm ctxt target_clause j
         ^ " with " ^ JClause.pretty_oriented ctxt unit_clause (lp, 0))
       val (from, to) = apply2 (JTerm.norm_beta_eta_qeta_env matcher) (from, to)
     in
@@ -249,9 +248,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
         val rewriting_smaller_than_rewritten = (fn () =>
           SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
       in
-        if positive andalso not (rewriting_smaller_than_rewritten ()) then NONE else
-        (Jeha_Common.trace_msg_simp_steps ctxt msg;
-        (* writeln ("      " ^ (Jeha_Common.pretty_tenv ctxt (Envir.term_env matcher))); *)
+        if positive andalso not (rewriting_smaller_than_rewritten ()) then
+          fail NONE (K "rewriting not smaller than rewritten") else
+        (tracer msg;
         (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
