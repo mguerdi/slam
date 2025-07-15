@@ -69,6 +69,7 @@ sig
   val is_false : T -> bool
   val is_unit : T -> bool
   val is_positive_unit : T -> bool
+  val is_negative_unit : T -> bool
   val the_unit_lit : T -> JLit.T
   val orient_unit : JLit.lpos -> T -> term * term * bool
   val maxidx_of_literal_list : JLit.T list -> int
@@ -520,6 +521,9 @@ val is_unit = length #> curry (op =) 1
 
 fun is_positive_unit { literals = [lit], ... } = JLit.is_positive lit
   | is_positive_unit _ = false
+
+fun is_negative_unit { literals = [lit], ... } = JLit.is_negative lit
+  | is_negative_unit _ = false
 
 fun the_unit_lit c =
   if not (is_unit c)
