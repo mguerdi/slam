@@ -163,6 +163,7 @@ sig
   val debug_check_clauses : bool Config.T
 
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
+  val time_and_trace : ((unit -> string) -> unit) -> ('a -> 'b) -> 'a -> 'b
 
   datatype ('a, 'b) either = Left of 'a | Right of 'b
   val get_left : ('a, 'b) either -> 'a option
@@ -340,8 +341,8 @@ val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>jeha_select_n
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>jeha_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_maximal_neg_lit")
 
-val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)
-val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 0)
+val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 50)
+val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 10)
 val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>jeha_supress_unify_trace\<close> (K true)
 
 val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>jeha_debug_check_clauses\<close> (K false)
@@ -482,15 +483,18 @@ fun cpu_time_milliseconds f x =
   let val ({elapsed, ...}, y) = Timing.timing f x
   in (y, Time.toMilliseconds elapsed) end;
 
+fun time_and_trace channel f x =
+  let
+    val (res, elapsed) = cpu_time_milliseconds f x
+    val () = channel (fn () => "elapsed: " ^ @{make_string} elapsed ^ " ms")
+  in
+    res
+  end
+
 fun time_rule ctxt trace_rule f x =
   if Config.get ctxt trace_rule andalso Config.get ctxt trace_rule_timing
     then
-      let
-        val (res, elapsed) = cpu_time_milliseconds f x
-        val () = trace_msg ctxt (fn () => "elapsed: " ^ @{make_string} elapsed)
-      in
-        res
-      end
+      time_and_trace (trace_msg ctxt) f x
     else
       f x
 
