@@ -1,5 +1,5 @@
 theory jeha_base
-  imports ATP Metis
+  imports Transfer Argo
 begin
 
 (* Simple wrapper around 'a itself (think: newtype) *)
