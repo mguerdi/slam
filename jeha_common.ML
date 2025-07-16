@@ -340,8 +340,8 @@ val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>jeha_select_n
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>jeha_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_maximal_neg_lit")
 
-val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)
-val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 0)
+val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 50)
+val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 10)
 val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>jeha_supress_unify_trace\<close> (K true)
 
 val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>jeha_debug_check_clauses\<close> (K false)
