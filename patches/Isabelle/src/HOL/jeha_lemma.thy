@@ -4,7 +4,7 @@ imports Hilbert_Choice Transfer jeha_base
 
 begin
 
-ML_file \<open>jeha_proof_util.ML\<close>
+ML_file \<open>HOL/Tools/jeha_proof_util.ML\<close>
 
 (* from SMT.thy *)
 lemma verit_sko_forall: \<open>(\<forall>x. P x) \<longleftrightarrow> P (SOME x. \<not>P x)\<close>
