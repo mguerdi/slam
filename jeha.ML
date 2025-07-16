@@ -2218,7 +2218,7 @@ fun try_saturate context prems =
     val () = Jeha_Common.trace_msg context (fn () => "goal_symbols (for selection heuristic): "
         ^ Jeha_Common.pretty_terms
             (Jeha_Common.verbose_of context)
-            (Jeha_Symbol_Table.keys goal_symbols))
+            (Jeha_Symbol_Table.symbols goal_symbols))
 
     (* given clause loop *)
     val _ = Jeha_Common.trace_msg context (fn () => "\n>>> start of given clause procedure <<<")
