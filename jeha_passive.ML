@@ -11,9 +11,9 @@ sig
   val favor_small_num_vars: weight_fun
   val favor_all_ground_and_neg: weight_fun
 
-  val default_fun: weight_fun
-  
   val favor_goal_symbols: Jeha_Symbol_Table.set -> weight_fun
+
+  val default_fun: Jeha_Symbol_Table.set -> weight_fun
 end
 
 (* see zipperposition's clauseQueue.ml *)
@@ -60,22 +60,33 @@ struct
   
   fun favor_positive_unit c = if JClause.is_positive_unit c then 0 else PENALTY_COEFF
 
-  val default_fun = combine
+  (* basic goal-oriented selection heuristic *)
+  fun favor_goal_symbols goal_symbols c =
+    let
+      fun aterm_weight t =
+        if Jeha_Symbol_Table.aterm_defined goal_symbols t then 0 else PENALTY_COEFF
+      val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
+      val weight = fold (fn (l, r, _) => add_term_weight l #> add_term_weight r) (JClause.literals c) 0
+    in
+      weight
+    end
+
+  fun favor_initial c =
+    case JClause.origin c of
+      Jeha_Log.NegatedConjecture _ => 0
+    | Jeha_Log.Axiom _ => 0
+    | _ => PENALTY_COEFF
+
+  (* tries to imitate zip's default_fun *)
+  fun default_fun goal_symbols = combine
     [ (size_of_clause, 3)
     , (favor_all_ground_and_neg, 1)
-    , (favor_small_num_vars, 2)
-    (* FIXME: missing favor_goal, see above *)
+    , (favor_small_num_vars, 1)
     , (favor_positive_unit, 1)
+    (* FIXME: not the favor_goal from zip, which requires tracking distance to negated conjecture *)
+    , (favor_goal_symbols goal_symbols, 1)
+    , (favor_initial, 3)
     ]
-   
-  (* basic goal-oriented selection heuristic *)
-  fun favor_goal_symbols goal_symbols c = 
-    let
-      fun aterm_weight t = if Jeha_Symbol_Table.defined goal_symbols t then 0 else PENALTY_COEFF
-      val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
-    in
-      fold (fn (l, r, _) => add_term_weight l #> add_term_weight r) (JClause.literals c) 0
-    end
 end
 
 signature JEHA_PASSIVE_SET =
@@ -131,7 +142,7 @@ fun pretty ctxt n passive =
 (* initial clauses all have weight 0 so they are added to active set first *)
 fun init goal_symbols clauses =
   let
-    val weight = Weight_Functions.default_fun
+    val weight = Weight_Functions.default_fun goal_symbols
   in
     { heap = fold Passive_Set.insert (map (op` weight) clauses) Passive_Set.empty
     , weight = weight

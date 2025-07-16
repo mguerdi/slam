@@ -727,6 +727,10 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
           thm
           |> hclause_of_axiom ctxt
           |> HClause.map_hthm (Jeha_Proof_Util.envir_norm_thm ctxt Envir.init)
+      | Jeha_Log.NegatedConjecture { thm } =>
+          thm
+          |> hclause_of_axiom ctxt
+          |> HClause.map_hthm (Jeha_Proof_Util.envir_norm_thm ctxt Envir.init)
       | Jeha_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
           reconstruct_sup
             ctxt

@@ -22,9 +22,12 @@ sig
   val maxidx : T -> int
   val maxidx_of2 : T * T -> int
   val set_maxidx : int -> T -> T
-  val set_origin : int Jeha_Log.inference -> T -> T
+  val recalculate_maxidx : T -> T
+  val set_origin : Proof.context -> int Jeha_Log.inference -> T -> T
   val origin : T -> int Jeha_Log.inference
   val lit_at : cpos -> T -> JLit.T
+  (* law: JLit.term_of (lit_at cp c) = JTerm.subterm_at (as_tpos c) (term_of c) *)
+  val as_tpos : int -> cpos -> JTerm.tpos
   val dummy : JLit.T list -> T
   val refresh_id : unit -> T -> T
   val add_literal : Proof.context -> JLit.T -> T -> T
@@ -39,12 +42,21 @@ sig
   val pretty_clause' : Proof.context -> T -> Pretty.T
   val pretty_clauses : Proof.context -> T list -> string
   val pretty_clauses' : Proof.context -> T list -> Pretty.T
+  val pretty_subterm : Proof.context -> T -> full_pos -> string
+  val pretty_subterm' : Proof.context -> T -> full_pos -> Pretty.T
+  val pretty_lit : Proof.context -> T -> cpos -> string
+  val pretty_lit' : Proof.context -> T -> cpos -> Pretty.T
+  val pretty_oriented : Proof.context -> T -> JLit.lpos * cpos -> string
+  val pretty_oriented' : Proof.context -> T -> JLit.lpos * cpos -> Pretty.T
   val cposs_of : T -> cpos list
   val green_full_poss_of : T -> full_pos list
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_literals : (JLit.T list -> JLit.T list) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val subterm_at_full_pos : T -> full_pos -> term
+  (* law: subterm_at_full_pos fp [\<dots>, (s, t, b), \<dots>]
+            = JTerm.subterm_at (full_pos_as_tpos b fp) (term_of [\<dots>, (s, t, b), \<dots>]) *)
+  val full_pos_as_tpos : int -> bool -> full_pos -> JTerm.tpos
   val occurs_deeply : term -> T -> bool
   val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
   val norm_beta_eta_qeta : Proof.context -> T -> T
@@ -57,6 +69,9 @@ sig
   val is_false : T -> bool
   val is_unit : T -> bool
   val is_positive_unit : T -> bool
+  val is_negative_unit : T -> bool
+  val the_unit_lit : T -> JLit.T
+  val orient_unit : JLit.lpos -> T -> term * term * bool
   val maxidx_of_literal_list : JLit.T list -> int
   (* literal selection *)
   val selected : T -> int list
@@ -102,6 +117,9 @@ val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid, se
 fun map_literals f { literals, id, maxidx, origin, selected } =
   { literals = f literals, id = id, maxidx = ~1, origin = origin, selected = [~1] }
 
+fun unsafe_map_literals f { literals, id, maxidx, origin, selected } =
+  { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected }
+
 fun lit_at cp clause = nth (literals clause) cp
 
 fun dummy literals =
@@ -120,8 +138,29 @@ fun map_maxidx f { literals, id, maxidx, origin, selected } =
 
 fun set_maxidx maxidx = map_maxidx (K maxidx)
 
-fun set_origin origin { literals, id, maxidx, selected, ... } =
-  { literals = literals, id = id, maxidx = maxidx, selected = selected, origin = origin }
+fun check_clause ctxt clause =
+  if not (Config.get ctxt Jeha_Common.debug_check_clauses) then () else
+  let
+    val computed_maxidx = maxidx_of_literal_list (literals clause)
+    val stored_maxidx = maxidx clause
+  in
+    if computed_maxidx > stored_maxidx
+      then error (
+        "check_clause: computed_maxidx greater than stored_maxidx in clause"
+        ^ @{make_string} clause
+      )
+    else
+      ()
+  end
+
+fun set_origin ctxt origin { literals, id, maxidx, selected, ... } =
+  let
+    val clause =
+      { literals = literals, id = id, maxidx = maxidx, selected = selected, origin = origin }
+  in
+    check_clause ctxt clause;
+    clause
+  end
 
 fun origin { origin, ... } = origin
 
@@ -269,6 +308,76 @@ fun pretty_clauses' ctxt cs =
 
 val pretty_clauses = Pretty.string_of oo pretty_clauses'
 
+(* Dependeing on clause length:
+Length 0: error (the empty clause has no literals)
+Length 1: [] (the root is the literal)
+Length 2:
+     /\
+    0  1
+  which have subterm positions [1] and [2].
+Recursion via this invariant:
+  * add another /\ on the top left
+  * increment indices by 1
+  * prefix term positions by 2
+    /\
+   0 /\
+    1  2  (formerly 0, 1, with subterm positions [1], [2], now [2, 1], [2, 2])
+*)
+fun as_tpos 1 0 = []
+  | as_tpos 2 0 = [1]
+  | as_tpos 2 1 = [2]
+  | as_tpos len cp =
+      if cp >= len then
+        error ("as_tpos: cp " ^ @{make_string} cp ^ " is not a valid index into a clause of length "
+          ^ @{make_string} len)
+      else
+        2::as_tpos (len - 1) (cp - 1)
+
+fun full_pos_as_tpos clause_len positive_lit (tp, lp, cp) =
+  as_tpos clause_len cp @ JLit.as_tpos positive_lit lp @ tp
+
+fun impl_pretty_subterm' ctxt c as_tp =
+  let
+    val as_term = term_of c
+  in
+    JTerm.pretty_subterm' ctxt as_term as_tp
+  end
+
+fun pretty_subterm' ctxt c (tp, lp, cp) =
+  let
+    val fp_as_tp = full_pos_as_tpos (length c) (JLit.is_positive (lit_at cp c)) (tp, lp, cp)
+  in
+    impl_pretty_subterm' ctxt c fp_as_tp
+  end
+
+val pretty_subterm = Pretty.string_of ooo pretty_subterm'
+
+fun pretty_lit' ctxt c cp = impl_pretty_subterm' ctxt c (as_tpos (length c) cp)
+
+val pretty_lit = Pretty.string_of ooo pretty_lit'
+
+(* lp points to the lhs of the conditional rewrite rules conclusion *)
+fun pretty_oriented' ctxt c (lp, cp) =
+  let
+    fun term_of_lit (cp', lit) =
+      if cp = cp' then JLit.as_oriented_for_pretty lit lp else JLit.term_of lit
+    fun term_of_lits [] = @{term False}
+      | term_of_lits lits =
+          let
+            val (x :: xs) = rev lits
+          in
+            fold
+              (curry HOLogic.mk_disj)
+              (map_index term_of_lit xs)
+              (term_of_lit (List.length lits - 1, x))
+          end
+    val t = term_of_lits (literals c)
+  in
+    Jeha_Common.pretty_term' ctxt (term_of_lits (literals c))
+  end
+
+val pretty_oriented = Pretty.string_of ooo pretty_oriented'
+
 fun cposs_of c = 0 upto (length c - 1)
 
 fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = JTerm.subterm_at (JLit.term_at_lpos (nth literals cp) lp) tp
@@ -412,5 +521,15 @@ val is_unit = length #> curry (op =) 1
 
 fun is_positive_unit { literals = [lit], ... } = JLit.is_positive lit
   | is_positive_unit _ = false
+
+fun is_negative_unit { literals = [lit], ... } = JLit.is_negative lit
+  | is_negative_unit _ = false
+
+fun the_unit_lit c =
+  if not (is_unit c)
+    then error ("the_unit_lit: not a unit" ^ @{make_string} c)
+    else the_single (literals c)
+
+fun orient_unit lp = JLit.orient lp o the_unit_lit
 
 end;

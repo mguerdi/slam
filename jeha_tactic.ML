@@ -13,9 +13,6 @@ structure Jeha_Tactic : JEHA_TACTIC =
 struct
 open Jeha_Common
 
-infix 1 THEN_WITH_PREVIOUS
-fun (tac1 THEN_WITH_PREVIOUS tac2) th = (tac1 THEN (tac2 th)) th
-
 exception JEHA_UNIMPLEMENTED
 
 (* METIS: type jeha_options (string list option * string option) * thm list *)
@@ -30,13 +27,14 @@ fun reconstruct_proof
           passive = passive,
           active = active,
           archive = archive,
-          ... })
+          ... }: Jeha.prover_state)
       _
     =
   let
     val SOME false_id =
       active
-      |> find_first (curry (op =) 0 o length o JClause.literals)
+      |> Jeha_Clause_Set.dest
+      |> find_first JClause.is_false
       |> Jeha_Common.map_some JClause.id
     val clause_db = Jeha.make_clause_db state
     val false_proved =
@@ -63,12 +61,12 @@ fun jeha_tac options ctxt ths i st0 =
           end)
         else raise e
     val atomized_ths = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) ths
-    fun tac ctxt' goal i' =
+    fun tac ctxt' i' =
       (* FIXME: why are we doing this??? *)
       Subgoal.FOCUS (fn { context, prems, ...} => (fn st =>
         (* FIXME: make sure that we really don't need asms (only use is in
         HOL/Tools/Quotient/quotient_tacs.ML) *)
-        case ((Jeha_Common.cpu_time_milliseconds (Jeha.try_saturate context goal) (prems @ atomized_ths)
+        case ((Jeha_Common.cpu_time_milliseconds (Jeha.try_saturate context) (atomized_ths @ prems)
             handle Jeha.JEHA_EXCEPTION (e, state) => handle_exception (e, state))
             handle Exn.Interrupt_Breakdown => error "caught Interrupt_Breakdown") of
           ((Jeha.Unsat, final_state), time) =>
@@ -93,12 +91,10 @@ fun jeha_tac options ctxt ths i st0 =
           ... *)
       SELECT_GOAL
         (Object_Logic.atomize_prems_tac ctxt 1
-          (* turn the goal
-            A \<Longrightarrow> ... \<Longrightarrow> B
-          into
-            A \<Longrightarrow> ... \<Longrightarrow> \<not> B \<Longrightarrow> False *)
+          (* goal: A \<Longrightarrow> ... \<Longrightarrow> B *)
           THEN resolve_tac ctxt @{thms ccontr} 1
-          THEN_WITH_PREVIOUS (fn th => tac ctxt (Thm.concl_of th) 1))
+          (* goal: A \<Longrightarrow> ... \<Longrightarrow> \<not> B \<Longrightarrow> False *)
+          THEN tac ctxt 1)
         i
         st0
   in

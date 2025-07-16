@@ -45,6 +45,8 @@ sig
     }
   val is_skolem_constant : term -> bool
   val make_choice_witness : term -> term -> term
+  val pretty_subterm : Proof.context -> term -> tpos -> string
+  val pretty_subterm' : Proof.context -> term -> tpos -> Pretty.T
 end;
 
 structure JTerm : JTERM =
@@ -105,7 +107,7 @@ fun subterm_at t [] = t
   that. Scoping broken?? *)
   | subterm_at (t as (_$_)) (i :: p) = subterm_at (nth (uncurry cons (strip_comb t)) i) p
   | subterm_at t pos =
-      raise JTERM (t, ("subterm_at: Can't get subterm of " ^ @{make_string} t ^ " at tpos " ^ @{make_string} pos))
+      raise JTERM (t, ("subterm_at: Can't get subterm of " ^ Jeha_Common.pretty_term @{context} t ^ " at tpos " ^ @{make_string} pos))
 
 fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
   | tposs_of (t as (_$_)) =
@@ -579,5 +581,18 @@ fun make_skolem_constant
     error
       ("make_skolem_constant: can only make skolem constants for (\<eta>-expanded) choice witnesses,"
         ^ " got " ^ @{make_string} t)
+
+fun pretty_subterm' ctxt t p =
+  let
+    fun context u = map_at p (K u) t
+    val subterm = subterm_at t p
+    val a = fastype_of subterm
+    val highlighted_subterm =
+      \<^instantiate>\<open>subterm and 'a=a in term "<subterm>"\<close>
+  in
+    Jeha_Common.pretty_term' ctxt (context highlighted_subterm)
+  end
+
+val pretty_subterm = Pretty.string_of ooo pretty_subterm'
 
 end;

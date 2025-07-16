@@ -7,20 +7,18 @@ sig
   val trace_active : bool Config.T
   (* output 10 passive clauses at each step *)
   val trace_passive : bool Config.T
-  (* output single simplification steps *)
-  val trace_simp_steps : bool Config.T
-  (* output during forward simplification (overrides) *)
+
+  (* override jeha_trace during the respective phases *)
   val trace_forward_simp : bool Config.T
-  (* output during backward simplification (overrides) *)
   val trace_backward_simp : bool Config.T
-  (* output during cheap simplification *)
   val trace_cheap_simp : bool Config.T
+
   (* output archive *)
   val trace_archive : bool Config.T
   (* output inferred / new clauses *)
   val trace_inferred : bool Config.T
 
-  (* trace rules *)
+  (* trace rules (more fine grained control) *)
   val trace_sup : bool Config.T
   val trace_e_res : bool Config.T
   val trace_e_fact : bool Config.T
@@ -35,20 +33,30 @@ sig
   val trace_forall_rw : bool Config.T
   val trace_exists_rw : bool Config.T
   val trace_neg_ext : bool Config.T
-  (* internal *)
-  val trace_simp_results : bool Config.T
-  
+  val trace_delete_duplicated_lits : bool Config.T
+  val trace_delete_resolved_lits : bool Config.T
+  val trace_rewrite_positive_lits : bool Config.T
+  val trace_rewrite_negative_lits : bool Config.T
+  val trace_positive_simplify_reflect : bool Config.T
+  val trace_negative_simplify_reflect : bool Config.T
+  val trace_simp_outer_claus : bool Config.T
+  val trace_simp_bool_rw : bool Config.T
+  val trace_simp_false_elim : bool Config.T
+  val trace_syntactic_tautology_deletion1 : bool Config.T
+  val trace_syntactic_tautology_deletion2 : bool Config.T
+  val trace_clause_subsumption : bool Config.T
+  val trace_equality_subsumption : bool Config.T
+
   (* report how many milliseconds the given clause procedure took to find a contradiction *)
   val report_main_loop_timing : bool Config.T
-  
-  val report_rule_timing : bool Config.T
-  
-  val time_rule : Proof.context -> ('a -> 'b) -> 'a -> 'b
+
+  val trace_rule_timing : bool Config.T
+
+  val time_rule : Proof.context -> bool Config.T -> ('a -> 'b) -> 'a -> 'b
 
   val trace_msg : Proof.context -> (unit -> string) -> unit
   val trace_msg_active : Proof.context -> (unit -> string) -> unit
   val trace_msg_passive : Proof.context -> (unit -> string) -> unit
-  val trace_msg_simp_steps : Proof.context -> (unit -> string) -> unit
   val trace_msg_forward_simp : Proof.context -> (unit -> string) -> unit
   val trace_msg_backward_simp : Proof.context -> (unit -> string) -> unit
   val trace_msg_cheap_simp : Proof.context -> (unit -> string) -> unit
@@ -69,9 +77,21 @@ sig
   val trace_msg_forall_rw : Proof.context -> (unit -> string) -> unit
   val trace_msg_exists_rw : Proof.context -> (unit -> string) -> unit
   val trace_msg_neg_ext : Proof.context -> (unit -> string) -> unit
-
-  (* internal *)
-  val trace_msg_simp_results : Proof.context -> (unit -> string) -> unit
+  val trace_msg_delete_duplicated_lits : Proof.context -> (unit -> string) -> unit
+  val trace_msg_delete_resolved_lits : Proof.context -> (unit -> string) -> unit
+  val trace_msg_rewrite_positive_lits : Proof.context -> (unit -> string) -> unit
+  val trace_msg_rewrite_negative_lits : Proof.context -> (unit -> string) -> unit
+  val trace_msg_positive_simplify_reflect : Proof.context -> (unit -> string) -> unit
+  val trace_msg_negative_simplify_reflect : Proof.context -> (unit -> string) -> unit
+  val trace_msg_simp_outer_claus : Proof.context -> (unit -> string) -> unit
+  val trace_msg_simp_bool_rw : Proof.context -> (unit -> string) -> unit
+  val trace_msg_simp_false_elim : Proof.context -> (unit -> string) -> unit
+  (*
+  val trace_msg_syntactic_tautology_deletion1 : Proof.context -> (unit -> string) -> unit
+  val trace_msg_syntactic_tautology_deletion2 : Proof.context -> (unit -> string) -> unit
+  *)
+  val trace_msg_clause_subsumption : Proof.context -> (unit -> string) -> unit
+  val trace_msg_equality_subsumption : Proof.context -> (unit -> string) -> unit
 
   val proof_reconstruction : string Config.T
   datatype proof_reconstruction_mode = Cheat | Argo | Metis | Blast | Manual
@@ -94,9 +114,6 @@ sig
   val some_is : ('a -> bool) -> 'a option -> bool
   val seq_cartesian_product : 'a Seq.seq -> 'b Seq.seq -> ('a * 'b) Seq.seq
   val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
-  (* Config option to turn smashing unifiers off. The incomplete unifiers are
-  discarded! *)
-  val disable_smash_unifiers : bool Config.T
   val max_number_of_steps : int Config.T
   (* Config options to turn rules on and off. *)
   val disable_all : bool Config.T
@@ -134,12 +151,16 @@ sig
   val rule_syntactic_tautology_deletion2 : bool Config.T
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
-  
+
   val select_negativoid : bool Config.T
   val select_flex_sided : bool Config.T
   val literal_selection_function : string Config.T
 
   val unify_search_bound : int Config.T
+  val unify_timeout_ms : int Config.T
+  val supress_unify_trace : bool Config.T
+
+  val debug_check_clauses : bool Config.T
 
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
 
@@ -163,10 +184,12 @@ fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
 val trace_active = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_active\<close> (K true)
 (* FIXME change to int and show only that many *)
 val trace_passive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_passive\<close> (K true)
-val trace_simp_steps = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_steps\<close> (K true)
+
+(* override jeha_trace during the respective phases *)
 val trace_forward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_forward_simp\<close> (K true)
 val trace_backward_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_backward_simp\<close> (K false)
 val trace_cheap_simp = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_cheap_simp\<close> (K false)
+
 val trace_archive = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_archive\<close> (K false)
 val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_inferred\<close> (K false)
 
@@ -185,19 +208,28 @@ val trace_bool_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_bool_r
 val trace_forall_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_forall_rw\<close> (K false)
 val trace_exists_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_exists_rw\<close> (K false)
 val trace_neg_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_neg_ext\<close> (K false)
-
-(* internal *)
-val trace_simp_results = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_results\<close> (K false)
+val trace_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_delete_duplicated_lits\<close> (K false)
+val trace_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_delete_resolved_lits\<close> (K false)
+val trace_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_rewrite_positive_lits\<close> (K false)
+val trace_rewrite_negative_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_rewrite_negative_lits\<close> (K false)
+val trace_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_positive_simplify_reflect\<close> (K false)
+val trace_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_negative_simplify_reflect\<close> (K false)
+val trace_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_outer_claus\<close> (K false)
+val trace_simp_bool_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_bool_rw\<close> (K false)
+val trace_simp_false_elim = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_simp_false_elim\<close> (K false)
+val trace_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_syntactic_tautology_deletion1\<close> (K false)
+val trace_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_syntactic_tautology_deletion2\<close> (K false)
+val trace_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_clause_subsumption\<close> (K false)
+val trace_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_equality_subsumption\<close> (K false)
 
 (* FIXME: actually use this config option *)
 val report_main_loop_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_report_main_loop_timing\<close> (K false)
 
-val report_rule_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_report_rule_timing\<close> (K false) 
+val trace_rule_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_rule_timing\<close> (K false)
 
 (* only output if trace would *)
 fun trace_msg_active ctxt msg = if Config.get ctxt trace_active then trace_msg ctxt msg else ();
 fun trace_msg_passive ctxt msg = if Config.get ctxt trace_passive then trace_msg ctxt msg else ();
-fun trace_msg_simp_steps ctxt msg = if Config.get ctxt trace_simp_steps then trace_msg ctxt msg else ();
 fun trace_msg_forward_simp ctxt msg = if Config.get ctxt trace_forward_simp then trace_msg ctxt msg else ();
 fun trace_msg_backward_simp ctxt msg = if Config.get ctxt trace_backward_simp then trace_msg ctxt msg else ();
 fun trace_msg_cheap_simp ctxt msg = if Config.get ctxt trace_cheap_simp then trace_msg ctxt msg else ();
@@ -206,22 +238,34 @@ fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_m
 
 (* individual rules *)
 fun trace_msg_sup ctxt msg = if Config.get ctxt trace_sup then trace_msg ctxt msg else ();
-fun trace_msg_e_res ctxt msg = if Config.get ctxt trace_e_res then trace_msg ctxt msg else (); 
+fun trace_msg_e_res ctxt msg = if Config.get ctxt trace_e_res then trace_msg ctxt msg else ();
 fun trace_msg_e_fact ctxt msg = if Config.get ctxt trace_e_fact then trace_msg ctxt msg else ();
-fun trace_msg_arg_cong ctxt msg = if Config.get ctxt trace_arg_cong then trace_msg ctxt msg else (); 
-fun trace_msg_bool_hoist ctxt msg = if Config.get ctxt trace_bool_hoist then trace_msg ctxt msg else (); 
-fun trace_msg_false_elim ctxt msg = if Config.get ctxt trace_false_elim then trace_msg ctxt msg else (); 
-fun trace_msg_eq_hoist ctxt msg = if Config.get ctxt trace_eq_hoist then trace_msg ctxt msg else (); 
-fun trace_msg_neq_hoist ctxt msg = if Config.get ctxt trace_neq_hoist then trace_msg ctxt msg else (); 
-fun trace_msg_forall_hoist ctxt msg = if Config.get ctxt trace_forall_hoist then trace_msg ctxt msg else (); 
-fun trace_msg_exists_hoist ctxt msg = if Config.get ctxt trace_exists_hoist then trace_msg ctxt msg else (); 
-fun trace_msg_bool_rw ctxt msg = if Config.get ctxt trace_bool_rw then trace_msg ctxt msg else (); 
-fun trace_msg_forall_rw ctxt msg = if Config.get ctxt trace_forall_rw then trace_msg ctxt msg else (); 
-fun trace_msg_exists_rw ctxt msg = if Config.get ctxt trace_exists_rw then trace_msg ctxt msg else (); 
-fun trace_msg_neg_ext ctxt msg = if Config.get ctxt trace_neg_ext then trace_msg ctxt msg else (); 
-
-(* internal *)
-fun trace_msg_simp_results ctxt msg = if Config.get ctxt trace_simp_results then trace_msg ctxt msg else ();
+fun trace_msg_arg_cong ctxt msg = if Config.get ctxt trace_arg_cong then trace_msg ctxt msg else ();
+fun trace_msg_bool_hoist ctxt msg = if Config.get ctxt trace_bool_hoist then trace_msg ctxt msg else ();
+fun trace_msg_false_elim ctxt msg = if Config.get ctxt trace_false_elim then trace_msg ctxt msg else ();
+fun trace_msg_eq_hoist ctxt msg = if Config.get ctxt trace_eq_hoist then trace_msg ctxt msg else ();
+fun trace_msg_neq_hoist ctxt msg = if Config.get ctxt trace_neq_hoist then trace_msg ctxt msg else ();
+fun trace_msg_forall_hoist ctxt msg = if Config.get ctxt trace_forall_hoist then trace_msg ctxt msg else ();
+fun trace_msg_exists_hoist ctxt msg = if Config.get ctxt trace_exists_hoist then trace_msg ctxt msg else ();
+fun trace_msg_bool_rw ctxt msg = if Config.get ctxt trace_bool_rw then trace_msg ctxt msg else ();
+fun trace_msg_forall_rw ctxt msg = if Config.get ctxt trace_forall_rw then trace_msg ctxt msg else ();
+fun trace_msg_exists_rw ctxt msg = if Config.get ctxt trace_exists_rw then trace_msg ctxt msg else ();
+fun trace_msg_neg_ext ctxt msg = if Config.get ctxt trace_neg_ext then trace_msg ctxt msg else ();
+fun trace_msg_delete_duplicated_lits ctxt msg = if Config.get ctxt trace_delete_duplicated_lits then trace_msg ctxt msg else ();
+fun trace_msg_delete_resolved_lits ctxt msg = if Config.get ctxt trace_delete_resolved_lits then trace_msg ctxt msg else ();
+fun trace_msg_rewrite_positive_lits ctxt msg = if Config.get ctxt trace_rewrite_positive_lits then trace_msg ctxt msg else ();
+fun trace_msg_rewrite_negative_lits ctxt msg = if Config.get ctxt trace_rewrite_negative_lits then trace_msg ctxt msg else ();
+fun trace_msg_positive_simplify_reflect ctxt msg = if Config.get ctxt trace_positive_simplify_reflect then trace_msg ctxt msg else ();
+fun trace_msg_negative_simplify_reflect ctxt msg = if Config.get ctxt trace_negative_simplify_reflect then trace_msg ctxt msg else ();
+fun trace_msg_simp_outer_claus ctxt msg = if Config.get ctxt trace_simp_outer_claus then trace_msg ctxt msg else ();
+fun trace_msg_simp_bool_rw ctxt msg = if Config.get ctxt trace_simp_bool_rw then trace_msg ctxt msg else ();
+fun trace_msg_simp_false_elim ctxt msg = if Config.get ctxt trace_simp_false_elim then trace_msg ctxt msg else ();
+(*
+fun trace_msg_syntactic_tautology_deletion1 ctxt msg = if Config.get ctxt trace_syntactic_tautology_deletion1 then trace_msg ctxt msg else ();
+fun trace_msg_syntactic_tautology_deletion2 ctxt msg = if Config.get ctxt trace_syntactic_tautology_deletion2 then trace_msg ctxt msg else ();
+*)
+fun trace_msg_clause_subsumption ctxt msg = if Config.get ctxt trace_clause_subsumption then trace_msg ctxt msg else ();
+fun trace_msg_equality_subsumption ctxt msg = if Config.get ctxt trace_equality_subsumption then trace_msg ctxt msg else ();
 
 datatype proof_reconstruction_mode = Cheat | Argo | Metis | Blast | Manual
 
@@ -231,7 +275,7 @@ fun string_of_proof_reconstruction_mode Cheat = "cheat"
   | string_of_proof_reconstruction_mode Blast = "blast"
   | string_of_proof_reconstruction_mode Manual = "manual"
 
-fun parse_proof_reconstruction_mode "cheat" = Cheat 
+fun parse_proof_reconstruction_mode "cheat" = Cheat
   | parse_proof_reconstruction_mode "argo" = Argo
   | parse_proof_reconstruction_mode "metis" = Metis
   | parse_proof_reconstruction_mode "blast" = Blast
@@ -249,7 +293,6 @@ val proof_reconstruction =
 
 fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)
 
-val disable_smash_unifiers = Attrib.setup_config_bool \<^binding>\<open>jeha_disable_smash_unifiers\<close> (K false)
 (* FIXME: remove or better default *)
 val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>jeha_max_number_of_steps\<close> (K 300)
 
@@ -298,6 +341,10 @@ val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>jeha_select_f
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_maximal_neg_lit")
 
 val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 20)
+val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 0)
+val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>jeha_supress_unify_trace\<close> (K true)
+
+val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>jeha_debug_check_clauses\<close> (K false)
 
 (** term parsing antiquotations **)
 
@@ -364,7 +411,7 @@ fun verbose_of ctxt = config_put_many_bool ctxt
 and config_put_many_bool ctxt options =
   List.foldr (fn (option, ctxt) => Config.put option true ctxt) ctxt options
 
-fun pretty_term' ctxt t = Syntax.pretty_term ctxt t 
+fun pretty_term' ctxt t = Syntax.pretty_term ctxt t
 val pretty_term = Pretty.string_of oo pretty_term'
 
 fun pretty_typ' ctxt T = Syntax.pretty_typ ctxt T
@@ -435,8 +482,8 @@ fun cpu_time_milliseconds f x =
   let val ({elapsed, ...}, y) = Timing.timing f x
   in (y, Time.toMilliseconds elapsed) end;
 
-fun time_rule ctxt f x =
-  if Config.get ctxt report_rule_timing
+fun time_rule ctxt trace_rule f x =
+  if Config.get ctxt trace_rule andalso Config.get ctxt trace_rule_timing
     then
       let
         val (res, elapsed) = cpu_time_milliseconds f x
