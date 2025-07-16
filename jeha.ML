@@ -1682,7 +1682,7 @@ fun forward_simplify
   given_clause
 =
   let
-    val () = \<^assert> (not (forward andalso cheap))
+    val () = \<^assert> (if cheap then (* also *) forward else true)
     (* tracing *)
     val do_trace =
       if forward then
