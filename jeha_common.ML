@@ -163,6 +163,7 @@ sig
   val debug_check_clauses : bool Config.T
 
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
+  val time_and_trace : ((unit -> string) -> unit) -> ('a -> 'b) -> 'a -> 'b
 
   datatype ('a, 'b) either = Left of 'a | Right of 'b
   val get_left : ('a, 'b) either -> 'a option
@@ -482,15 +483,18 @@ fun cpu_time_milliseconds f x =
   let val ({elapsed, ...}, y) = Timing.timing f x
   in (y, Time.toMilliseconds elapsed) end;
 
+fun time_and_trace channel f x =
+  let
+    val (res, elapsed) = cpu_time_milliseconds f x
+    val () = channel (fn () => "elapsed: " ^ @{make_string} elapsed ^ " ms")
+  in
+    res
+  end
+
 fun time_rule ctxt trace_rule f x =
   if Config.get ctxt trace_rule andalso Config.get ctxt trace_rule_timing
     then
-      let
-        val (res, elapsed) = cpu_time_milliseconds f x
-        val () = trace_msg ctxt (fn () => "elapsed: " ^ @{make_string} elapsed)
-      in
-        res
-      end
+      time_and_trace (trace_msg ctxt) f x
     else
       f x
 
