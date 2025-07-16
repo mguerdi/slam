@@ -25,7 +25,7 @@ fun add_new_clause clause = Inttab.update_new (JClause.id clause, clause)
 
 fun add_new_clauses clauses = fold add_new_clause clauses
 
-val delete = Inttab.delete o JClause.id
+val delete = Inttab.delete_safe o JClause.id
 
 val delete_clauses = fold delete
 
