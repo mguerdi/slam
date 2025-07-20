@@ -137,14 +137,12 @@ fun with_fixed_vars vars tvars ctxt tac th =
         val proved_th :: refls_new =
           Variable.export ctxt_fixed ctxt (proved_th_fixed :: refls_fixed)
 
-        val old_vars = fold (Term.add_vars o Thm.prop_of) refls_old []
-        val new_vars = fold (Term.add_vars o Thm.prop_of) refls_new []
-        val () = \<^assert> (length old_vars = length new_vars)
+        val () = \<^assert> (length refls_old = length refls_new)
         (* Doesn't work with Unify.matchers *)
         val new_to_old_matcher =
           fold
             (Pattern.first_order_match (Proof_Context.theory_of ctxt))
-            (ListPair.zip (map Var new_vars, map Var old_vars))
+            (ListPair.zip (apply2 (map Thm.prop_of) (refls_new, refls_old)))
             (Vartab.empty, Vartab.empty)
         
         val proved_th_repaired = envir_subst_thm ctxt new_to_old_matcher proved_th
