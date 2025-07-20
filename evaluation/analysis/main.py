@@ -217,7 +217,14 @@ def summarize(calls, dirname, plot):
 
     print(f"jeha success, metis fail or timeout: {str(len(jeha_success_metis_fail_or_timeout))}")
 
-    print("\n".join([get_call_by_goal(jeha_calls, goal)["result"].as_string + "\t\t" + goal for goal in jeha_success_metis_fail_or_timeout]))
+    print(
+        "\n".join(
+            [
+                get_call_by_goal(jeha_calls, goal)["result"].as_string + "\t\t" + goal
+                for goal in jeha_success_metis_fail_or_timeout
+            ]
+        )
+    )
 
     # print(jeha_success_metis_fail_or_timeout)
     # print(sorted(list(jeha_success_metis_fail_or_timeout))[:10])
