@@ -236,20 +236,18 @@ def summarize(calls, dirname, plot):
 
 
 def plot_success_calls(metis_calls, jeha_calls, dirname):
-    def plot_calls(calls):
+    def plot_calls(calls, label):
         success = sorted(
             [call for call in calls if call["result"].is_success()], key=lambda call: call["result"]
         )
         success_times = [call["result"].time_ms for call in success]
         cumulative_problems = [i for i, _ in enumerate(success)]
-        plt.plot(success_times, cumulative_problems, "+")
+        # print(f"plotting with label {label}")
+        plt.plot(success_times, cumulative_problems, "+", label=label)
+        # print("done plotting")
 
-    plot_calls(metis_calls)
-    plot_calls(jeha_calls)
-    plt.title(dirname)
-    plt.xlabel("time [ms]")
-    plt.ylabel("problems solved (cumulative)")
-    plt.show()
+    plot_calls(metis_calls, label=dirname + " (metis)")
+    plot_calls(jeha_calls, label=dirname + " (jeha)")
 
 
 # https://stackoverflow.com/questions/38834378/path-to-a-directory-as-argparse-argument
@@ -266,6 +264,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d",
         "--dir",
+        action="append",
         help="directory containing the files `commit` and `mirabelle.log`",
         type=dir_path,
     )
@@ -276,7 +275,12 @@ if __name__ == "__main__":
         from matplotlib import pyplot as plt
 
     if args.dir is not None:
-        runs_dirs = [args.dir]
+        if isinstance(args.dir, list):
+            runs_dirs = args.dir
+        elif isinstance(args.dir, str):
+            runs_dirs = [args.dir]
+        else:
+            raise TypeError(f"neither string nor list of strings: {args.dir=}")
     else:
         if not os.path.isdir("runs"):
             raise RuntimeError("Couldn't find directory with name 'runs'.")
@@ -296,3 +300,9 @@ if __name__ == "__main__":
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
         print()
+    if args.plot:
+        plt.xlabel("time [ms]")
+        plt.ylabel("problems solved (cumulative)")
+        plt.legend()
+        plt.title("metis vs. jeha")
+        plt.show()
