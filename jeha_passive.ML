@@ -84,7 +84,7 @@ struct
     , (favor_small_num_vars, 1)
     , (favor_positive_unit, 1)
     (* FIXME: not the favor_goal from zip, which requires tracking distance to negated conjecture *)
-    (* , (favor_goal_symbols goal_symbols, 1) *)
+    , (favor_goal_symbols goal_symbols, 1)
     , (favor_initial, 3)
     ]
 end

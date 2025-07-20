@@ -101,32 +101,6 @@ fun jeha_tac options ctxt ths i st0 =
     seq
   end handle JClause.NOBOOL (msg, term, typ) => (Jeha_Common.trace_msg ctxt (fn () => (msg ^ ". Term " ^ @{make_string} term ^ " of type " ^ @{make_string} typ)); Seq.empty)
 
-(* from metis_tactic.ML *)
-fun neg_clausify ctxt combinators =
-  single
-  #> Meson.make_clauses_unsorted ctxt
-  #> combinators ? map (Meson_Clausify.introduce_combinators_in_theorem ctxt)
-  #> Meson.finish_cnf true
-
-fun preskolem_tac ctxt st0 =
-  (if exists (Meson.has_too_many_clauses ctxt)
-             (Logic.prems_of_goal (Thm.prop_of st0) 1) then
-     Simplifier.full_simp_tac (Meson_Clausify.ss_only @{thms not_all not_ex} ctxt) 1
-     THEN CNF.cnfx_rewrite_tac ctxt 1
-   else
-     all_tac) st0
-
-fun jeha_meson_tac options ctxt facts i: tactic =
-  Meson.MESON
-    (preskolem_tac ctxt)
-    (maps (neg_clausify ctxt false))
-    (fn ths => jeha_tac options ctxt (ths @ facts) i)
-    ctxt
-    i
-
-fun jeha_meson_method (options, ths) ctxt facts =
-    HEADGOAL (jeha_meson_tac options ctxt (facts @ ths))
-
 (* FIXME: only pass schematic facts to jeha_tac? see metis_tactic.ML *)
 fun jeha_method (options, ths) ctxt facts =
     HEADGOAL (jeha_tac options ctxt (facts @ ths))
@@ -154,7 +128,7 @@ val _ =
       (* -- to pass the tokens left over by parse_jeha_options to Attrib.thms and pair the
       resulting theorem list with parse_jeha_options' parse result *)
       (* >> to apply (METHOD oo jeha_method) the the previous parse result *)
-      (Scan.lift parse_jeha_options -- Attrib.thms >> (METHOD oo jeha_meson_method))
+      (Scan.lift parse_jeha_options -- Attrib.thms >> (METHOD oo jeha_method))
       "jeha for FOL and HOL problems");
 
 end
