@@ -325,6 +325,7 @@ fun forward_rewrite ctxt active unit_index given_clause =
           SOME active_clause => SOME (active_clause, lp)
         | NONE => NONE)
   in
+    (* FIXME: do all possible rewrites, instead of only one and re-querying every time *)
     green_subterms_in_given_clause
     |> get_first (fn (t, fp) =>
     candidate_units t
@@ -857,6 +858,36 @@ fun sup_given_into_active
         candidate_green_subterms t
         |> maps (fn (c, u_pos) =>
             infer_sup ctxt (given_clause, (lp, cp)) (c, u_pos)))
+  end
+
+(* given clause as the right premise of superposition *)
+fun sup_active_into_given
+  (ctxt : Proof.context)
+  (given_clause : JClause.T)
+  (active : Jeha_Clause_Set.T)
+  (green_index: (int * JClause.full_pos) Term_Index.T)
+  : JClause.T list
+=
+  let
+    val green_subterms_given : (term * JClause.full_pos) list =
+      JClause.green_full_poss_of given_clause
+      |> map (`(JClause.subterm_at_full_pos given_clause))
+    fun candidate_active_lits t : (JClause.T * (JLit.lpos * JClause.cpos)) list =
+      Term_Index.get_unifiables t green_index
+      |> map_filter (fn (id, fp) =>
+           case fp of
+             ([], lp, cp) =>
+               (case Jeha_Clause_Set.lookup active id of
+                 SOME active_clause => SOME (active_clause, (lp, cp))
+                 | NONE => NONE)
+           | _ => NONE (* only want top-level terms *)
+         )
+  in
+    green_subterms_given
+    |> maps (fn (t, fp) =>
+        candidate_active_lits t
+        |> maps (fn active_lit =>
+            infer_sup ctxt active_lit (given_clause, fp)))
   end
 
 (* ERes inference *)
@@ -1954,7 +1985,7 @@ fun infer_clauses ctxt active given_clause green_index =
       )
     , ( Jeha_Common.rule_sup
       , Jeha_Common.trace_sup
-      , (fn _ => (maps (uncurry (infer_sup ctxt)) eq_target_pairs))
+      , (fn _ => sup_active_into_given ctxt given_clause active green_index)
       )
     (* ERes, EFact have already been performed for the active clauses *)
     , ( Jeha_Common.rule_e_res

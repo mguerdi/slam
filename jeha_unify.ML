@@ -25,7 +25,7 @@ fun with_timeout ctxt (xq : 'a Seq.seq) : 'a Seq.seq =
         Seq.make (fn () =>
           (case (Timeout.apply timeout Seq.pull) xq of
             NONE => NONE
-          | SOME (x, xq') => SOME (x, xq'))
+          | SOME (x, xq') => SOME (x, with_timeout ctxt xq'))
           handle Timeout.TIMEOUT _ => NONE
         )
   end
