@@ -1,6 +1,11 @@
+import argparse
 from enum import Enum, auto
 from functools import total_ordering
 import os
+
+
+def str_digits(s):
+    return "".join(c for c in s if c.isdigit())
 
 
 def squeeze(line):
@@ -156,7 +161,14 @@ def get_best_metis(calls):
     return list(get_best_metis_by_goal(calls).values())
 
 
-def summarize(calls):
+def get_call_by_goal(calls, goal):
+    for call in calls:
+        if call["goal"] == goal:
+            return call
+    raise ValueError(f"No call with {goal} in calls.")
+
+
+def summarize(calls, dirname, plot):
     failed = [call for call in calls if call["result"].is_failed()]
     timed_out = [call for call in calls if call["result"].is_timeout()]
     success = [call for call in calls if call["result"].is_success()]
@@ -204,25 +216,100 @@ def summarize(calls):
     jeha_success_metis_fail_or_timeout = set(jeha_success) - set(metis_success)
 
     print(f"jeha success, metis fail or timeout: {str(len(jeha_success_metis_fail_or_timeout))}")
-    print(jeha_success_metis_fail_or_timeout)
-    # print(sorted(list(jeha_success_metis_fail_or_timeout))[:10])
+
     print(
-        f"metis success, jeha fail or timeout: {str(len(set(jeha_fails_or_timeouts) - set(metis_fails_or_timeouts)))}"
+        "\n".join(
+            [
+                get_call_by_goal(jeha_calls, goal)["result"].as_string + "\t\t" + goal
+                for goal in jeha_success_metis_fail_or_timeout
+            ]
+        )
     )
+
+    # print(jeha_success_metis_fail_or_timeout)
+    # print(sorted(list(jeha_success_metis_fail_or_timeout))[:10])
+
+    metis_success_jeha_fail_or_timeout = set(metis_success) - set(jeha_success)
+    print(f"metis success, jeha fail or timeout: {str(len(metis_success_jeha_fail_or_timeout))}")
+    print("10 easiest (to metis) problems where jeha fails:")
+    ten_easiest = sorted(
+        list(metis_success_jeha_fail_or_timeout),
+        key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
+    )[:10]
+    print(ten_easiest)
+
+    if plot:
+        plot_success_calls(metis_calls, jeha_calls, dirname)
+
+
+def plot_success_calls(metis_calls, jeha_calls, dirname):
+    def plot_calls(calls, label):
+        success = sorted(
+            [call for call in calls if call["result"].is_success()], key=lambda call: call["result"]
+        )
+        success_times = [call["result"].time_ms for call in success]
+        cumulative_problems = [i for i, _ in enumerate(success)]
+        # print(f"plotting with label {label}")
+        plt.plot(success_times, cumulative_problems, "+", label=label)
+        # print("done plotting")
+
+    plot_calls(metis_calls, label=dirname + " (metis)")
+    plot_calls(jeha_calls, label=dirname + " (jeha)")
+
+
+# https://stackoverflow.com/questions/38834378/path-to-a-directory-as-argparse-argument
+def dir_path(string):
+    if os.path.isdir(string):
+        return string
+    else:
+        raise NotADirectoryError(string)
 
 
 if __name__ == "__main__":
-    if not os.path.isdir("runs"):
-        raise RuntimeError("Couldn't find directory with name 'runs'.")
-    runs_dirs = sorted(list(os.listdir("runs")))
+    # CLI
+    parser = argparse.ArgumentParser(prog="metis vs jeha analysis script")
+    parser.add_argument(
+        "-d",
+        "--dir",
+        action="append",
+        help="directory containing the files `commit` and `mirabelle.log`",
+        type=dir_path,
+    )
+    parser.add_argument("-p", "--plot", action="store_true", help="create plots")
+    args = parser.parse_args()
+
+    if args.plot:
+        from matplotlib import pyplot as plt
+
+    if args.dir is not None:
+        if isinstance(args.dir, list):
+            runs_dirs = args.dir
+        elif isinstance(args.dir, str):
+            runs_dirs = [args.dir]
+        else:
+            raise TypeError(f"neither string nor list of strings: {args.dir=}")
+    else:
+        if not os.path.isdir("runs"):
+            raise RuntimeError("Couldn't find directory with name 'runs'.")
+        runs_dirs_relative = sorted(
+            list(os.listdir("runs")), key=lambda dir_name: int(str_digits(dir_name))
+        )
+        runs_dirs = ["runs/" + dirname for dirname in runs_dirs_relative]
+
     for dirname in runs_dirs:
-        filename = "runs/" + dirname + "/mirabelle.log"
-        with open("runs/" + dirname + "/commit") as c:
+        filename = dirname + "/mirabelle.log"
+        with open(dirname + "/commit") as c:
             commit = c.read()
         print(filename, commit)
         try:
             calls = parse_file(filename)
-            summarize(calls)
+            summarize(calls, dirname, args.plot)
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
         print()
+    if args.plot:
+        plt.xlabel("time [ms]")
+        plt.ylabel("problems solved (cumulative)")
+        plt.legend()
+        plt.title("metis vs. jeha")
+        plt.show()

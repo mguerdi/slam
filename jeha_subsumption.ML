@@ -61,7 +61,7 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
       let val subsumed =
         let
           (* apply the substitution (only to the subsuming clause) *)
-          val ls = (map o JLit.map o JTerm.norm_beta_eta_qeta_env) env ls
+          val ls = (map o JLit.map o JTerm.norm_beta_eta_qeta_env) env (drop 1 ls)
         in
           (* move on to next l in ls *)
           (* FIXME: do we need to check that env is consistent with later envs, i.e. they combine to
