@@ -843,14 +843,20 @@ fun sup_given_into_active
   let
     (* the equality literals that are being eliminated *)
     val ts_in_given_clause : (term * (JLit.lpos * JClause.cpos)) list =
-      (Jeha_Common.cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of given_clause))
+      (Jeha_Common.cartesian_product
+        [JLit.Left, JLit.Right]
+        (JClause.potentially_eligible_cposs_of given_clause)
+      )
       |> map (`(fn (lp, cp) => JClause.subterm_at_full_pos given_clause ([], lp, cp)))
     fun candidate_green_subterms t : (JClause.T * JClause.full_pos) list =
       Term_Index.get_unifiables t green_index
       (* FIXME: replace this by `map`, once we delete from the index. *)
       |> map_filter (fn (id, fp) =>
         case Jeha_Clause_Set.lookup active id of
-          SOME active_clause => SOME (active_clause, fp)
+          SOME active_clause =>
+            if JClause.is_potentially_eligible_full_pos active_clause fp
+              then SOME (active_clause, fp)
+              else NONE
         | NONE => NONE)
   in
     ts_in_given_clause
@@ -870,7 +876,7 @@ fun sup_active_into_given
 =
   let
     val green_subterms_given : (term * JClause.full_pos) list =
-      JClause.green_full_poss_of given_clause
+      JClause.potentially_eligible_green_full_poss_of given_clause
       |> map (`(JClause.subterm_at_full_pos given_clause))
     fun candidate_active_lits t : (JClause.T * (JLit.lpos * JClause.cpos)) list =
       Term_Index.get_unifiables t green_index
@@ -878,7 +884,10 @@ fun sup_active_into_given
            case fp of
              ([], lp, cp) =>
                (case Jeha_Clause_Set.lookup active id of
-                 SOME active_clause => SOME (active_clause, (lp, cp))
+                 SOME active_clause =>
+                   if JClause.is_potentially_eligible_cpos active_clause cp
+                     then SOME (active_clause, (lp, cp))
+                     else NONE
                  | NONE => NONE)
            | _ => NONE (* only want top-level terms *)
          )
