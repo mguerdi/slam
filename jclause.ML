@@ -63,8 +63,16 @@ sig
   val norm_negative_predicate_literals : Proof.context -> T -> T
   val incr_indexes : int -> T -> T
   val kbo : T * T -> Jeha_Order.partial_order
+
   val is_eligible_cpos : T -> cpos -> bool
   val is_eligible_full_pos : T -> full_pos -> bool
+
+  val potentially_eligible_cposs_of : T -> int list
+  val potentially_eligible_green_full_poss_of : T -> full_pos list
+
+  val is_potentially_eligible_cpos : T -> cpos -> bool
+  val is_potentially_eligible_full_pos : T -> full_pos -> bool
+
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
   val is_false : T -> bool
   val is_unit : T -> bool
@@ -498,18 +506,37 @@ fun is_eligible_cpos c cpos =
       else member (op =) selected cpos
   end
 
+fun potentially_eligible_cposs_of c =
+  if selected c = []
+    then cposs_of c
+    else selected c
+
+fun is_potentially_eligible_cpos c cpos =
+  if selected c = []
+    then true
+    else member (op=) (selected c) cpos
+
 fun is_eligible_full_pos c (tpos, lpos, cpos) =
   let
     val literal = nth (literals c) cpos
     val (s, t, _) = JLit.orient lpos literal
-    val s_t_comp = Jeha_KBO.ord (s, t)
-    val s_leq_t =
-      (SOME LESS = s_t_comp) orelse (SOME EQUAL = s_t_comp)
+    fun s_leq_t () =
+      let val s_t_comp = Jeha_KBO.ord (s, t) in
+        (SOME LESS = s_t_comp) orelse (SOME EQUAL = s_t_comp)
+      end
   in
     is_eligible_cpos c cpos
-      andalso not s_leq_t
+      andalso not (s_leq_t ())
       andalso is_eligible_tpos s tpos
   end
+
+fun potentially_eligible_green_full_poss_of c =
+  potentially_eligible_cposs_of c
+  |> maps (fn cp => [JLit.Left, JLit.Right] |> map (fn lp => (subterm_at_full_pos c ([], lp, cp), lp, cp)))
+  |> maps (fn (t, lp, cp) => map (fn tp => (tp, lp, cp)) (JTerm.green_tposs_of t))
+
+fun is_potentially_eligible_full_pos c (tpos, lpos, cpos) =
+  is_potentially_eligible_cpos c cpos
 
 fun is_position_of_fully_applied_logical_symbol (tpos, lpos, cpos) c =
   subterm_at_full_pos c ([], lpos, cpos)
