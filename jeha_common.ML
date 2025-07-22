@@ -231,9 +231,18 @@ val trace_rule_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_ru
 (* only output if trace would *)
 fun trace_msg_active ctxt msg = if Config.get ctxt trace_active then trace_msg ctxt msg else ();
 fun trace_msg_passive ctxt msg = if Config.get ctxt trace_passive then trace_msg ctxt msg else ();
-fun trace_msg_forward_simp ctxt msg = if Config.get ctxt trace_forward_simp then trace_msg ctxt msg else ();
-fun trace_msg_backward_simp ctxt msg = if Config.get ctxt trace_backward_simp then trace_msg ctxt msg else ();
-fun trace_msg_cheap_simp ctxt msg = if Config.get ctxt trace_cheap_simp then trace_msg ctxt msg else ();
+fun trace_msg_forward_simp ctxt msg =
+  if Config.get ctxt trace_forward_simp
+    then trace_msg ctxt (fn () => "forward simplification: " ^ msg ())
+    else ();
+fun trace_msg_backward_simp ctxt msg =
+  if Config.get ctxt trace_backward_simp
+    then trace_msg ctxt (fn () => "backward simplification: " ^ msg ())
+    else ();
+fun trace_msg_cheap_simp ctxt msg =
+  if Config.get ctxt trace_cheap_simp
+    then trace_msg ctxt (fn () => "cheap simplification: " ^ msg ())
+    else ();
 fun trace_msg_archive ctxt msg = if Config.get ctxt trace_archive then trace_msg ctxt msg else ();
 fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_msg ctxt msg else ();
 
