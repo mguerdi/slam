@@ -1,6 +1,6 @@
 theory subsumption
 
-imports JEHA_TEST_BASE.test_base
+imports JEHA_TEST_BASE.test_base HOL.List
 
 begin
 
@@ -35,5 +35,23 @@ ML \<open>
 
 lemma "(\<And>x. f x) \<Longrightarrow> f a \<or> False \<Longrightarrow> f b"
   using [[jeha_rule_forall_hoist, jeha_rule_simp_false_elim]] by jeha
+
+ML_val \<open>
+  (* potentially subsuming clause *)
+  val ct = @{term_schem
+    "map (?f::bool \<Rightarrow> ?'b) (?xs::bool list) = map (?g::bool \<Rightarrow> ?'b) ?xs
+    \<or> (False \<in> set ?xs) = True
+    \<or> (True \<in> set ?xs) = True"
+  }
+  (* potentially subsumed clause *)
+  val dt = @{term_schem
+    "(False \<in> set (?xs::bool list)) = True
+    \<or> (True \<in> set ?xs) = True
+    \<or> map (?g6::bool \<Rightarrow> ?'b) ?xs = map (?g::bool \<Rightarrow> ?'b) ?xs"
+  }
+  val c = JClause.of_term @{context} (ct, 0)
+  val d = JClause.of_term @{context} (dt, 1)
+  val r = Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)
+\<close>
 
 end

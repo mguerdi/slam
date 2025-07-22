@@ -22,12 +22,12 @@ structure Jeha_Subsumption : JEHA_SUBSUMPTION =
 struct
 
 fun literal_subsumes ctxt maxidx ll' =
-  (* (writeln ("literals subumes:" ^ JLit.pretty_lit (Context.the_proof ctxt) (#1 ll') ^ " can match? " ^ JLit.pretty_lit (Context.the_proof ctxt) (#2 ll')); *)
+  (writeln ("literals subumes:" ^ JLit.pretty_lit (Context.the_proof ctxt) (#1 ll') ^ " can match? " ^ JLit.pretty_lit (Context.the_proof ctxt) (#2 ll'));
   case Seq.pull (Jeha_Unify.literal_matchers ctxt maxidx ll') of
-    NONE => (* (writeln "=> no"; *) NONE (* ) *)
+    NONE => (writeln "=> no"; NONE)
     (* throw away the others *)
-  | SOME ((_, env), _) => (* (writeln "=> yes"; *) SOME env (* ) *)
-  (* ) *)
+  | SOME ((_, env), _) => (writeln "=> yes"; SOME env)
+  )
 
 (* all ways in which l can subsume a literal of d *)
 (* FIXME: lazify with make / pull if it isn't yet. *)
@@ -52,16 +52,27 @@ fun subsumed_alternatives ctxt maxidx (l, []) = Seq.empty
 (* read: "c subsumes d" *)
 fun impl_subsumes ctxt _ ([], d) = true
   | impl_subsumes ctxt maxidx (l :: ls, d) =
+      (writeln ("impl_subsumes: \n"
+        ^ JClause.pretty_clause (Context.the_proof ctxt) (JClause.dummy (l :: ls))
+        ^ "\n maybe subsumes \n"
+        ^ JClause.pretty_clause (Context.the_proof ctxt) (JClause.dummy d));
       try_alternatives_with_backtracking ctxt (subsumed_alternatives ctxt maxidx (l, d)) ls
+      )
 
 and try_alternatives_with_backtracking ctxt alternatives ls =
+  (writeln "pulling alternative";
   case Seq.pull alternatives of
-    NONE => false
+    NONE => (writeln "got NONE"; false)
   | SOME ((env, d_without_l'), alternatives) =>
       let val subsumed =
         let
           (* apply the substitution (only to the subsuming clause) *)
+          val () = writeln "pulled"
+          val () = writeln ("norming " ^ JClause.pretty_clause (Context.the_proof ctxt) (JClause.dummy ls) ^ "with: \n\t"
+            ^ Jeha_Common.pretty_tyenv (Context.the_proof ctxt) (Envir.type_env env) ^ "\n\t"
+            ^ Jeha_Common.pretty_tenv (Context.the_proof ctxt) (Envir.term_env env))
           val ls = (map o JLit.map o JTerm.norm_beta_eta_qeta_env) env ls
+          val () = writeln "normed"
         in
           (* move on to next l in ls *)
           (* FIXME: do we need to check that env is consistent with later envs, i.e. they combine to
@@ -76,6 +87,7 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
          (* backtrack, try the next l' *)
          else try_alternatives_with_backtracking ctxt alternatives ls
       end
+      )
 
 val subsumption_ord = prod_ord int_ord int_ord
 
@@ -88,6 +100,7 @@ fun subsumption_sort lits =
     val idxs = 0 upto (length lits - 1)
     val idxs_sorted = sort (subsumption_ord o apply2 (nth keys)) idxs
     val lits_sorted = map (nth lits) idxs_sorted
+    val () = writeln "done sorting"
   in
     lits_sorted 
   end
@@ -96,6 +109,8 @@ fun subsumes ctxt (c, d) =
   let
     (* make vars of c (the pattern) distinct from those of d *)
     val c = JClause.incr_indexes (JClause.maxidx d + 1) c
+    val () = writeln ("c=" ^ JClause.pretty_clause (Context.the_proof ctxt) c)
+    val () = writeln ("d=" ^ JClause.pretty_clause (Context.the_proof ctxt) d)
     (* to ensure generate variables are fresh w.r.t. both clauses *)
     val maxidx = JClause.maxidx_of2 (c, d)
     (* val _ = writeln ("check if " ^ JClause.pretty_clause (Context.the_proof ctxt) c ^ " subsumes " ^ JClause.pretty_clause (Context.the_proof ctxt) d) *)
