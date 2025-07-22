@@ -503,7 +503,17 @@ fun time_and_trace channel f x =
 fun time_rule ctxt trace_rule f x =
   if Config.get ctxt trace_rule andalso Config.get ctxt trace_rule_timing
     then
-      time_and_trace (trace_msg ctxt) f x
+      time_and_trace
+        (trace_msg ctxt o (fn msg => fn () =>
+          let
+            val name = Config.name_of trace_rule
+          in
+            \<^assert> (String.isPrefix "jeha_trace_" name);
+            String.extract (name, 11, NONE) ^ " " ^ msg ()
+          end
+        ))
+        f
+        x
     else
       f x
 
