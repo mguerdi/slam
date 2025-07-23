@@ -51,6 +51,7 @@ sig
   val report_main_loop_timing : bool Config.T
 
   val trace_rule_timing : bool Config.T
+  val trace_all_rule_timings : bool Config.T
 
   val time_rule : Proof.context -> bool Config.T -> ('a -> 'b) -> 'a -> 'b
 
@@ -227,13 +228,24 @@ val trace_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha
 val report_main_loop_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_report_main_loop_timing\<close> (K false)
 
 val trace_rule_timing = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_rule_timing\<close> (K false)
+val trace_all_rule_timings =
+  Attrib.setup_config_bool \<^binding>\<open>jeha_trace_all_rule_timings\<close> (K false)
 
 (* only output if trace would *)
 fun trace_msg_active ctxt msg = if Config.get ctxt trace_active then trace_msg ctxt msg else ();
 fun trace_msg_passive ctxt msg = if Config.get ctxt trace_passive then trace_msg ctxt msg else ();
-fun trace_msg_forward_simp ctxt msg = if Config.get ctxt trace_forward_simp then trace_msg ctxt msg else ();
-fun trace_msg_backward_simp ctxt msg = if Config.get ctxt trace_backward_simp then trace_msg ctxt msg else ();
-fun trace_msg_cheap_simp ctxt msg = if Config.get ctxt trace_cheap_simp then trace_msg ctxt msg else ();
+fun trace_msg_forward_simp ctxt msg =
+  if Config.get ctxt trace_forward_simp
+    then trace_msg ctxt (fn () => "forward simplification: " ^ msg ())
+    else ();
+fun trace_msg_backward_simp ctxt msg =
+  if Config.get ctxt trace_backward_simp
+    then trace_msg ctxt (fn () => "backward simplification: " ^ msg ())
+    else ();
+fun trace_msg_cheap_simp ctxt msg =
+  if Config.get ctxt trace_cheap_simp
+    then trace_msg ctxt (fn () => "cheap simplification: " ^ msg ())
+    else ();
 fun trace_msg_archive ctxt msg = if Config.get ctxt trace_archive then trace_msg ctxt msg else ();
 fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_msg ctxt msg else ();
 
@@ -492,9 +504,20 @@ fun time_and_trace channel f x =
   end
 
 fun time_rule ctxt trace_rule f x =
-  if Config.get ctxt trace_rule andalso Config.get ctxt trace_rule_timing
+  if Config.get ctxt trace_all_rule_timings
+      orelse (Config.get ctxt trace_rule andalso Config.get ctxt trace_rule_timing)
     then
-      time_and_trace (trace_msg ctxt) f x
+      time_and_trace
+        (trace_msg ctxt o (fn msg => fn () =>
+          let
+            val name = Config.name_of trace_rule
+          in
+            \<^assert> (String.isPrefix "jeha_trace_" name);
+            String.extract (name, 11, NONE) ^ " " ^ msg ()
+          end
+        ))
+        f
+        x
     else
       f x
 

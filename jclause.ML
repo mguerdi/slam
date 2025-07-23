@@ -146,13 +146,12 @@ fun map_maxidx f { literals, id, maxidx, origin, selected } =
 
 fun set_maxidx maxidx = map_maxidx (K maxidx)
 
-fun check_clause ctxt clause =
-  if not (Config.get ctxt Jeha_Common.debug_check_clauses) then () else
+fun check_maxidx clause =
   let
-    val computed_maxidx = maxidx_of_literal_list (literals clause)
-    val stored_maxidx = maxidx clause
+    val actual = maxidx_of_literal_list (literals clause)
+    val stored = maxidx clause
   in
-    if computed_maxidx > stored_maxidx
+    if actual > stored
       then error (
         "check_clause: computed_maxidx greater than stored_maxidx in clause"
         ^ @{make_string} clause
@@ -160,6 +159,10 @@ fun check_clause ctxt clause =
     else
       ()
   end
+
+fun check_clause ctxt clause =
+  if not (Config.get ctxt Jeha_Common.debug_check_clauses) then () else
+  check_maxidx clause
 
 fun set_origin ctxt origin { literals, id, maxidx, selected, ... } =
   let

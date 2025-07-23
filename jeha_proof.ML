@@ -224,45 +224,20 @@ fun reconstruct_eres {premise, literal} =
 \<not>C' \<Longrightarrow> v \<approx> v' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> False
 *)
 fun reconstruct_efact {premise, left_literal, right_literal} =
-  (* Premise *)
-  (* u /\<approx> v' \<Longrightarrow> u /\<approx> v \<Longrightarrow> False *)
-  (* Conclusion *)
-  (* u /\<approx> v' \<Longrightarrow> v \<approx> v' \<Longrightarrow> False *)
-
-  (* Rewriting clause: *)
-  (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u \<approx> v *)    (* make_last of premise *)
-  (* Lemma: *)
-  (* u /\<approx> v' \<Longrightarrow> u \<approx> v' \<Longrightarrow> False *)
-  (*              ^-rewrite here   *)
-  (* Result *)
-  (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> v \<approx> v' \<Longrightarrow> False *)
-  (* To remove double literal *)
-    (* Lemma *)
-    (* (A \<Longrightarrow> A \<Longrightarrow> B \<Longrightarrow> False) \<Longrightarrow> (A \<Longrightarrow> B \<Longrightarrow> False) *)
-    (* Drule.compose ? FIXME: ??? *)
   let
     (* left_literal and right_literal refer to the rule in the paper, not to how they are actually
     ordered in the premise. *)
     val () = \<^assert> ((snd left_literal : JClause.cpos) <> snd right_literal)
+    val left_literal_cpos = snd left_literal
+    val right_literal_cpos = snd right_literal
     val premise =
       premise
       |> HClause.orient_lit_at left_literal
       |> HClause.orient_lit_at right_literal
-    val (_, [u, v]) =
-      premise
-      |> HClause.negated_lit_trueprop_cterm_at (snd right_literal)
-      |> Thm.dest_arg (* dest_Trueprop *)
-      |> Thm.dest_arg (* strip negation *)
-      |> Drule.strip_comb
-    val (_, [_, v']) =
-      premise
-      |> HClause.negated_lit_trueprop_cterm_at (snd left_literal)
-      |> Thm.dest_arg (* dest_Trueprop *)
-      |> Thm.dest_arg (* strip negation *)
-      |> Drule.strip_comb
-    val left_literal_cpos = snd left_literal
-    val right_literal_cpos = snd right_literal
+    val (u, v, true) = HClause.dest_lit_cterm_at right_literal_cpos premise
+    val (_, v', false) = HClause.dest_lit_cterm_at left_literal_cpos premise
     val left_literal_left_of_right_literal_in_premise = left_literal_cpos < right_literal_cpos
+    (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u /\<approx> v \<Longrightarrow> False *)
     val C =
       premise
       |> HClause.make_last left_literal_cpos
@@ -590,7 +565,10 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
 
     fun neq_true_tac ctxt = resolve_tac ctxt [@{lemma "\<not> A \<Longrightarrow> A \<noteq> True" by auto}]
     fun neq_false_tac ctxt = resolve_tac ctxt [@{lemma "A \<Longrightarrow> A \<noteq> False" by auto}]
-    fun lit_to_pred_tac ctxt = FIRST' [neq_true_tac ctxt, neq_false_tac ctxt]
+    fun true_neq_tac ctxt = resolve_tac ctxt [@{lemma "\<not> A \<Longrightarrow> True \<noteq> A" by auto}]
+    fun false_neq_tac ctxt = resolve_tac ctxt [@{lemma "A \<Longrightarrow> False \<noteq> A" by auto}]
+    fun lit_to_pred_tac ctxt =
+      FIRST' [neq_true_tac ctxt, neq_false_tac ctxt, true_neq_tac ctxt, false_neq_tac ctxt]
 
     fun eq_to_lit_tac ctxt = resolve_tac ctxt [@{lemma "s = t \<Longrightarrow> s = t" by auto}]
     fun neq_to_lit_tac ctxt = resolve_tac ctxt [@{lemma "s \<noteq> t \<Longrightarrow> s \<noteq> t" by auto}]
@@ -662,7 +640,7 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
       end
   in
     premise
-    |> HClause.traverse_hthm (oc_wrapper ctxt (oc_tac ctxt) (literal + 1))
+    |> HClause.traverse_hthm (oc_wrapper ctxt (oc_tac ctxt) (literal + length (#skolems premise) + 1))
     |> map move_new_literals_to_last
   end
 
@@ -671,7 +649,7 @@ fun reconstruct_neg_ext ctxt { premise, literal, skolems } =
     val (s, s', false) = HClause.dest_lit_at literal premise
     val [(skolem_const, skolem_with_args, skolem_def)] = skolems
     val lemma =
-      (* FIXME: move construction of HClause.hthm into forall_exists_rw_lemma function *)
+      (* FIXME: move construction of HClause.hthm into neg_ext_lemma function *)
       { th = Jeha_Lemma.neg_ext_lemma ctxt (s, s') (skolem_const, skolem_with_args, skolem_def)
       , skolems = [(skolem_const, skolem_def)] 
       }
@@ -955,7 +933,10 @@ fun toposort_clauses clause_db contradiction =
 fun discharge_skolem_prems ctxt ({ th, skolems } : HClause.hthm) : thm =
   let
     (* FIXME: what about TFrees? (hidden polymorphism?) *)
-    val skolem_frees_names = map (fst o dest_Free o fst) skolems
+    val skolem_frees_names =
+      skolems
+      |> map (fst o dest_Free o fst)
+      |> distinct (op=) (* deduplicate *)
     val skolem_frees_names_unsuffixed = map Name.dest_skolem skolem_frees_names
     val (fixed_names, ctxt_fixed) = Variable.add_fixes skolem_frees_names_unsuffixed ctxt
     val () = if fixed_names <> skolem_frees_names then

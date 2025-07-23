@@ -396,48 +396,40 @@ fun incr_indexes shift { th, skolems } =
   , skolems = map (apply2 (Logic.incr_indexes ([], shift))) skolems
   }
 
-fun comp_no_flatten
+(* 1-based *)
+fun mk_comp_no_flatten
+  inner
   ({ th = th1, skolems = skolems1 }, n)
   i
   { th = th2, skolems = skolems2 }
 =
   let
-    val th_with_skolems2_in_middle =
-      Drule.comp_no_flatten
+    (* th1 = sk1 \<Longrightarrow> A \<Longrightarrow> B *)
+    (*                     ^ n = 1 (number of protected prems) *)
+    (* th2 = sk2 \<Longrightarrow> D \<Longrightarrow> B \<Longrightarrow> F *)
+    (*                     ^ i = 2 (target prem) *)
+    val th_with_skolems1_in_middle =
+      inner
         (th1, length skolems1 + n)
         (length skolems2 + i)
         th2
-    val th_with_skolems2_right_of_skolems1 =
+    (* th_with_skolems1_in_middle = sk2 \<Longrightarrow> D \<Longrightarrow> sk1 \<Longrightarrow> A \<Longrightarrow> F *)
+    val th_with_skolems1_left_of_skolems2 =
       Jeha_Proof_Util.move_prems_left
-        (Thm.nprems_of th1 + 1)
-        (length skolems2)
-        (Thm.nprems_of th1 - length skolems1)
-        th_with_skolems2_in_middle
+        (length skolems2 + i)     (* from: sk1 is now where target prem was *)
+        (length skolems1)         (* how many *)
+        (length skolems2 + i - 1) (* how far: move over sk2 \<Longrightarrow> D *)
+        th_with_skolems1_in_middle
+    (* th_with_skolems1_left_of_skolems2 = sk1 \<Longrightarrow> sk2 \<Longrightarrow> D \<Longrightarrow> A \<Longrightarrow> F *)
   in
-    { th = th_with_skolems2_right_of_skolems1, skolems = skolems1 @ skolems2 }
+    { th = th_with_skolems1_left_of_skolems2, skolems = skolems1 @ skolems2 }
   end
 
 (* 1-based *)
-fun comp_no_flatten_no_incr
-  ({ th = th1, skolems = skolems1 }, n)
-  i
-  { th = th2, skolems = skolems2 }
-=
-  let
-    val th_with_skolems2_in_middle =
-      Jeha_Proof_Util.comp_no_flatten_no_incr
-        (th1, length skolems1 + n)
-        (length skolems2 + i)
-        th2
-    val th_with_skolems2_right_of_skolems1 =
-      Jeha_Proof_Util.move_prems_left
-        (Thm.nprems_of th1 + 1)
-        (length skolems2)
-        (Thm.nprems_of th1 - length skolems1)
-        th_with_skolems2_in_middle
-  in
-    { th = th_with_skolems2_right_of_skolems1, skolems = skolems1 @ skolems2 }
-  end
+val comp_no_flatten = mk_comp_no_flatten Drule.comp_no_flatten
+
+(* 1-based *)
+val comp_no_flatten_no_incr = mk_comp_no_flatten Jeha_Proof_Util.comp_no_flatten_no_incr
 
 (* Drule.compose, first argument is a thm, i.e. something that does not contain skolem premises,
 e.g. some helper lemma. *)

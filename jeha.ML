@@ -2092,16 +2092,20 @@ fun given_clause_step
     val _ = trace_msg_clauses Jeha_Common.trace_msg "given_clause " [given_clause]
   in
     (* simplify given_clause with active set *)
-    (* FIXME TODO add simplification steps to archive *)
     case
-      forward_simplify
-        context
-        { forward = true, cheap = false }
-        active
-        unit_index
-        green_index
-        subsumption_index
-        given_clause
+      Jeha_Common.time_and_trace
+        (Jeha_Common.trace_msg_forward_simp context)
+        (fn () =>
+          forward_simplify
+            context
+            { forward = true, cheap = false }
+            active
+            unit_index
+            green_index
+            subsumption_index
+            given_clause
+        )
+        ()
     of
       (* given_clause redundant w.r.t. active set, don't add intermediat simplifications to archive *)
       { simplifications = [], archive = _ } =>
@@ -2143,7 +2147,18 @@ fun given_clause_step
               , simplified_active
               , unsimplifiable_active )
             =
-              backward_simplify context active unit_index green_index subsumption_index given_clause
+              Jeha_Common.time_and_trace
+                (Jeha_Common.trace_msg_backward_simp context)
+                (fn () =>
+                  backward_simplify
+                    context
+                    active
+                    unit_index
+                    green_index
+                    subsumption_index
+                    given_clause
+                )
+              ()
             val archive = redundant_active_and_intermediate_simplifications @ archive
             (* remove simplified and redundant actives, add given_clause to active set *)
             val active = Jeha_Clause_Set.add_new_clause given_clause unsimplifiable_active
@@ -2168,14 +2183,19 @@ fun given_clause_step
                     let
                       val { simplifications = new_simplifications, archive = new_intermediate } =
                         (* cheap_simplify *)
-                        forward_simplify
-                          context
-                          { forward = true, cheap = true }
-                          active
-                          unit_index
-                          green_index
-                          subsumption_index
-                          inferred_clause
+                        Jeha_Common.time_and_trace
+                          (Jeha_Common.trace_msg_cheap_simp context)
+                          (fn () =>
+                            forward_simplify
+                              context
+                              { forward = true, cheap = true }
+                              active
+                              unit_index
+                              green_index
+                              subsumption_index
+                              inferred_clause
+                          )
+                        ()
                     in
                       (* FIXME: only add new_intermediate if simplifications non-empty. OR: just
                       move this logic into forward_simplify *)
