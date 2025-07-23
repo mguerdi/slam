@@ -565,7 +565,10 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
 
     fun neq_true_tac ctxt = resolve_tac ctxt [@{lemma "\<not> A \<Longrightarrow> A \<noteq> True" by auto}]
     fun neq_false_tac ctxt = resolve_tac ctxt [@{lemma "A \<Longrightarrow> A \<noteq> False" by auto}]
-    fun lit_to_pred_tac ctxt = FIRST' [neq_true_tac ctxt, neq_false_tac ctxt]
+    fun true_neq_tac ctxt = resolve_tac ctxt [@{lemma "\<not> A \<Longrightarrow> True \<noteq> A" by auto}]
+    fun false_neq_tac ctxt = resolve_tac ctxt [@{lemma "A \<Longrightarrow> False \<noteq> A" by auto}]
+    fun lit_to_pred_tac ctxt =
+      FIRST' [neq_true_tac ctxt, neq_false_tac ctxt, true_neq_tac ctxt, false_neq_tac ctxt]
 
     fun eq_to_lit_tac ctxt = resolve_tac ctxt [@{lemma "s = t \<Longrightarrow> s = t" by auto}]
     fun neq_to_lit_tac ctxt = resolve_tac ctxt [@{lemma "s \<noteq> t \<Longrightarrow> s \<noteq> t" by auto}]
@@ -637,7 +640,7 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
       end
   in
     premise
-    |> HClause.traverse_hthm (oc_wrapper ctxt (oc_tac ctxt) (literal + 1))
+    |> HClause.traverse_hthm (oc_wrapper ctxt (oc_tac ctxt) (literal + length (#skolems premise) + 1))
     |> map move_new_literals_to_last
   end
 
