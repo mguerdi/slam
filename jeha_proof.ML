@@ -224,45 +224,20 @@ fun reconstruct_eres {premise, literal} =
 \<not>C' \<Longrightarrow> v \<approx> v' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> False
 *)
 fun reconstruct_efact {premise, left_literal, right_literal} =
-  (* Premise *)
-  (* u /\<approx> v' \<Longrightarrow> u /\<approx> v \<Longrightarrow> False *)
-  (* Conclusion *)
-  (* u /\<approx> v' \<Longrightarrow> v \<approx> v' \<Longrightarrow> False *)
-
-  (* Rewriting clause: *)
-  (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u \<approx> v *)    (* make_last of premise *)
-  (* Lemma: *)
-  (* u /\<approx> v' \<Longrightarrow> u \<approx> v' \<Longrightarrow> False *)
-  (*              ^-rewrite here   *)
-  (* Result *)
-  (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> v \<approx> v' \<Longrightarrow> False *)
-  (* To remove double literal *)
-    (* Lemma *)
-    (* (A \<Longrightarrow> A \<Longrightarrow> B \<Longrightarrow> False) \<Longrightarrow> (A \<Longrightarrow> B \<Longrightarrow> False) *)
-    (* Drule.compose ? FIXME: ??? *)
   let
     (* left_literal and right_literal refer to the rule in the paper, not to how they are actually
     ordered in the premise. *)
     val () = \<^assert> ((snd left_literal : JClause.cpos) <> snd right_literal)
+    val left_literal_cpos = snd left_literal
+    val right_literal_cpos = snd right_literal
     val premise =
       premise
       |> HClause.orient_lit_at left_literal
       |> HClause.orient_lit_at right_literal
-    val (_, [u, v]) =
-      premise
-      |> HClause.negated_lit_trueprop_cterm_at (snd right_literal)
-      |> Thm.dest_arg (* dest_Trueprop *)
-      |> Thm.dest_arg (* strip negation *)
-      |> Drule.strip_comb
-    val (_, [_, v']) =
-      premise
-      |> HClause.negated_lit_trueprop_cterm_at (snd left_literal)
-      |> Thm.dest_arg (* dest_Trueprop *)
-      |> Thm.dest_arg (* strip negation *)
-      |> Drule.strip_comb
-    val left_literal_cpos = snd left_literal
-    val right_literal_cpos = snd right_literal
+    val (u, v, true) = HClause.dest_lit_cterm_at right_literal_cpos premise
+    val (_, v', false) = HClause.dest_lit_cterm_at left_literal_cpos premise
     val left_literal_left_of_right_literal_in_premise = left_literal_cpos < right_literal_cpos
+    (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u /\<approx> v \<Longrightarrow> False *)
     val C =
       premise
       |> HClause.make_last left_literal_cpos
