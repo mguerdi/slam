@@ -115,6 +115,14 @@ fun subsumes ctxt (c, d) =
     val maxidx = JClause.maxidx_of2 (c, d)
     (* val _ = writeln ("check if " ^ JClause.pretty_clause (Context.the_proof ctxt) c ^ " subsumes " ^ JClause.pretty_clause (Context.the_proof ctxt) d) *)
     val (c_lits, d_lits) = apply2 JClause.literals (c, d)
+
+    fun to_fixedT (TVar ((name, index), S)) = TFree ("?'" ^ name ^ @{make_string} index, S)
+      | to_fixedT T = T
+    fun to_fixed (Var ((name, index), T)) = Free ("?" ^ name ^ @{make_string} index, T)
+      | to_fixed t = t
+    val all_to_fixed = Term.map_types (Term.map_atyps to_fixedT) #> Term.map_aterms to_fixed
+
+    val d_lits = map (JLit.map all_to_fixed) d_lits
     val (c_lits_sorted, d_lits_sorted) = apply2 subsumption_sort (c_lits, d_lits)
   in
     impl_subsumes ctxt maxidx (c_lits_sorted, d_lits_sorted)
