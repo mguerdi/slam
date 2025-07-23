@@ -649,7 +649,7 @@ fun reconstruct_neg_ext ctxt { premise, literal, skolems } =
     val (s, s', false) = HClause.dest_lit_at literal premise
     val [(skolem_const, skolem_with_args, skolem_def)] = skolems
     val lemma =
-      (* FIXME: move construction of HClause.hthm into forall_exists_rw_lemma function *)
+      (* FIXME: move construction of HClause.hthm into neg_ext_lemma function *)
       { th = Jeha_Lemma.neg_ext_lemma ctxt (s, s') (skolem_const, skolem_with_args, skolem_def)
       , skolems = [(skolem_const, skolem_def)] 
       }
