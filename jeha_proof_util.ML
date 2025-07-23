@@ -125,10 +125,12 @@ fun with_fixed_vars vars tvars ctxt tac th =
       map (fn tvar => Thm.reflexive \<^instantiate>\<open>'a=tvar in cterm \<open>TYPE('a)\<close>\<close>) tvars
     val refls_old = refls_of_old_vars @ refls_of_old_tvars_themselves
 
+    (* Declare variables, so Variable.import generates fresh names. *)
+    val ctxt_declared = fold Variable.declare_term (map Thm.prop_of refls_old) ctxt
     (* Fix all variable names. *)
     (* refls: _A = _A, _B = _B, ... *)
     val ((tables, (th_fixed :: refls_fixed)), ctxt_fixed) =
-      Variable.import false (th :: refls_old) ctxt
+      Variable.import false (th :: refls_old) ctxt_declared
 
     (* Replaced Free's by Var's and rename back to the original variable names. *)
     fun export_and_rename proved_th_fixed =
