@@ -933,7 +933,10 @@ fun toposort_clauses clause_db contradiction =
 fun discharge_skolem_prems ctxt ({ th, skolems } : HClause.hthm) : thm =
   let
     (* FIXME: what about TFrees? (hidden polymorphism?) *)
-    val skolem_frees_names = map (fst o dest_Free o fst) skolems
+    val skolem_frees_names =
+      skolems
+      |> map (fst o dest_Free o fst)
+      |> distinct (op=) (* deduplicate *)
     val skolem_frees_names_unsuffixed = map Name.dest_skolem skolem_frees_names
     val (fixed_names, ctxt_fixed) = Variable.add_fixes skolem_frees_names_unsuffixed ctxt
     val () = if fixed_names <> skolem_frees_names then
