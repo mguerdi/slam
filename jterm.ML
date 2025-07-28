@@ -532,7 +532,7 @@ fun make_skolem_constant
       val var_args = map Var vars
       (* Lambda Abstraction over the variables in the witness, to serve as a definition for the
       skolem constant. *)
-      val choice_abstracted_over_vars = fold abs_over_var var_args choice_witness
+      val choice_abstracted_over_vars = fold abs_over_var (rev var_args) choice_witness
 
       val tvars_in_vars_set = Vars.fold (fn ((_, T), _) => TVars.add_tvarsT T) vars_set TVars.empty
       (* This is the part of the hidden polymorphism that is not yet accounted for by the Vars. *)
