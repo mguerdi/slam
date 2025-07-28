@@ -49,6 +49,7 @@ sig
   val pretty_oriented : Proof.context -> T -> JLit.lpos * cpos -> string
   val pretty_oriented' : Proof.context -> T -> JLit.lpos * cpos -> Pretty.T
   val cposs_of : T -> cpos list
+  val positive_cposs_of : T -> cpos list
   val green_full_poss_of : T -> full_pos list
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T (* NOTE: invalidates maxidx, selected *)
@@ -68,9 +69,11 @@ sig
   val is_eligible_full_pos : T -> full_pos -> bool
 
   val potentially_eligible_cposs_of : T -> int list
+  val potentially_eligible_positive_cposs_of : T -> int list
   val potentially_eligible_green_full_poss_of : T -> full_pos list
 
   val is_potentially_eligible_cpos : T -> cpos -> bool
+  val is_potentially_eligible_positive_cpos : T -> cpos -> bool
   val is_potentially_eligible_full_pos : T -> full_pos -> bool
 
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
@@ -335,10 +338,14 @@ Recursion via this invariant:
     1  2  (formerly 0, 1, with subterm positions [1], [2], now [2, 1], [2, 2])
 *)
 fun as_tpos 1 0 = []
-  | as_tpos 2 0 = [1]
+  | as_tpos _ 0 = [1]
   | as_tpos 2 1 = [2]
   | as_tpos len cp =
-      if cp >= len then
+      if len <= 0 then
+        error ("as_tpos: len " ^ @{make_string} len ^ "is not a valid length")
+      else if cp < 0 then
+        error ("as_tpos: cp " ^ @{make_string} cp ^ "is not a valid clause position")
+      else if cp >= len then
         error ("as_tpos: cp " ^ @{make_string} cp ^ " is not a valid index into a clause of length "
           ^ @{make_string} len)
       else
@@ -390,6 +397,8 @@ fun pretty_oriented' ctxt c (lp, cp) =
 val pretty_oriented = Pretty.string_of ooo pretty_oriented'
 
 fun cposs_of c = 0 upto (length c - 1)
+
+fun positive_cposs_of c = filter (JLit.is_positive o (fn cpos => lit_at cpos c)) (cposs_of c)
 
 fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = JTerm.subterm_at (JLit.term_at_lpos (nth literals cp) lp) tp
 
@@ -514,10 +523,20 @@ fun potentially_eligible_cposs_of c =
     then cposs_of c
     else selected c
 
+fun potentially_eligible_positive_cposs_of c =
+  if selected c = []
+    then positive_cposs_of c
+    else []
+
 fun is_potentially_eligible_cpos c cpos =
   if selected c = []
     then true
     else member (op=) (selected c) cpos
+
+fun is_potentially_eligible_positive_cpos c cpos =
+  if selected c = []
+    then JLit.is_positive (lit_at cpos c)
+    else false
 
 fun is_eligible_full_pos c (tpos, lpos, cpos) =
   let

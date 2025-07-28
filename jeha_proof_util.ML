@@ -125,20 +125,73 @@ fun with_fixed_vars vars tvars ctxt tac th =
       map (fn tvar => Thm.reflexive \<^instantiate>\<open>'a=tvar in cterm \<open>TYPE('a)\<close>\<close>) tvars
     val refls_old = refls_of_old_vars @ refls_of_old_tvars_themselves
 
+    val ths = th::refls_old
+    (* val () = Jeha_Common.trace_msg ctxt (fn () => "with_fixed_vars: ths=" ^ @{make_string} ths) *)
+
     (* Declare variables, so Variable.import generates fresh names. *)
-    val ctxt_declared = fold Variable.declare_term (map Thm.prop_of refls_old) ctxt
+    (* val ctxt_declared = fold Variable.declare_term (map Thm.prop_of refls_old) ctxt *)
+    val ctxt_declared = fold Variable.declare_names (map Thm.prop_of ths) ctxt
     (* Fix all variable names. *)
     (* refls: _A = _A, _B = _B, ... *)
-    val ((tables, (th_fixed :: refls_fixed)), ctxt_fixed) =
-      Variable.import false (th :: refls_old) ctxt_declared
+    val ((tables, ths_fixed), ctxt_fixed) =
+      Variable.import false ths ctxt_declared
+    val th_fixed::refls_fixed = ths_fixed
+
+    (* val () = Jeha_Common.trace_msg ctxt (fn () => "with_fixed_vars: ths_fixed=" ^ @{make_string} ths_fixed) *)
 
     (* Replaced Free's by Var's and rename back to the original variable names. *)
     fun export_and_rename proved_th_fixed =
       let
         (* refls: ?A2 = ?A, ?B4 = ?B4, ... (have been renamed which we want to undo) *)
-        val proved_th :: refls_new =
-          Variable.export ctxt_fixed ctxt (proved_th_fixed :: refls_fixed)
+        (* val () = Jeha_Common.trace_msg ctxt (fn () => "with_fixed_vars: proved_th_fixed=" ^ @{make_string} proved_th_fixed) *)
 
+        (* Like Variable.export but also generalizes TFrees even if they occur in the type of a
+        not-to-be-generalized Free. *)
+        val tfrees = fold (Names.add_tfree_names o Thm.prop_of) refls_fixed (Names.empty)
+        val frees = fold (Names.add_free_names o Thm.prop_of) refls_fixed (Names.empty)
+
+        val maxidx = 1 + fold (curry Int.max o Thm.maxidx_of) (proved_th_fixed::ths_fixed) ~1
+        (* val () = Jeha_Common.trace_msg ctxt (fn () => "with_fixed_vars: maxidx=" ^ @{make_string} maxidx) *)
+        (* from Thm.generalize *)
+        fun non_generalizable ths =
+          let
+            val add_bad_type =
+              if Names.is_empty tfrees then K I
+              else Term.fold_subtypes (fn
+                  TFree (a, _) => if Names.defined tfrees a then (fn (TF, F) => (a::TF, F)) else I
+                | _ => I);
+            fun add_bad_term (Free (x, T)) =
+                  add_bad_type T #> (if Names.defined frees x then (fn (TF, F) => (TF, x::F)) else I)
+              | add_bad_term (Var (_, T)) = add_bad_type T
+              | add_bad_term (Const (_, T)) = add_bad_type T
+              | add_bad_term (Abs (_, T, t)) = add_bad_type T #> add_bad_term t
+              | add_bad_term (t $ u) = add_bad_term t #> add_bad_term u
+              | add_bad_term (Bound _) = I
+            val hyps = maps Thm.hyps_of ths
+            val bads = fold add_bad_term hyps ([], [])
+          in
+            bads
+          end
+        val (bad_tfrees, bad_frees) = non_generalizable [proved_th_fixed]
+        (*
+        val () = Jeha_Common.trace_msg ctxt (fn () =>
+          "with_fixed_vars: non-generalizable: "
+          ^ @{make_string} bad_tfrees ^ ", " ^ @{make_string} bad_frees
+        )
+        *)
+        val good_tfrees = fold Names.remove bad_tfrees tfrees
+        val good_frees = fold Names.remove bad_frees frees
+
+        val proved_th :: refls_new =
+          map
+            (Thm.generalize (good_tfrees, good_frees) maxidx)
+            (proved_th_fixed :: refls_fixed)
+
+        (*
+        val () = Jeha_Common.trace_msg ctxt (fn () => "with_fixed_vars: proved_th=" ^ @{make_string} proved_th)
+        val () = Jeha_Common.trace_msg ctxt (fn () => "with_fixed_vars: refls_new=" ^ @{make_string} refls_new)
+        val () = Jeha_Common.trace_msg ctxt (fn () => "with_fixed_vars: refls_old=" ^ @{make_string} refls_old)
+        *)
         val () = \<^assert> (length refls_old = length refls_new)
         (* Doesn't work with Unify.matchers *)
         val new_to_old_matcher =
