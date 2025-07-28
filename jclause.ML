@@ -335,10 +335,14 @@ Recursion via this invariant:
     1  2  (formerly 0, 1, with subterm positions [1], [2], now [2, 1], [2, 2])
 *)
 fun as_tpos 1 0 = []
-  | as_tpos 2 0 = [1]
+  | as_tpos _ 0 = [1]
   | as_tpos 2 1 = [2]
   | as_tpos len cp =
-      if cp >= len then
+      if len <= 0 then
+        error ("as_tpos: len " ^ @{make_string} len ^ "is not a valid length")
+      else if cp < 0 then
+        error ("as_tpos: cp " ^ @{make_string} cp ^ "is not a valid clause position")
+      else if cp >= len then
         error ("as_tpos: cp " ^ @{make_string} cp ^ " is not a valid index into a clause of length "
           ^ @{make_string} len)
       else
