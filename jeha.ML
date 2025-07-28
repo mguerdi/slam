@@ -845,7 +845,7 @@ fun sup_given_into_active
     val ts_in_given_clause : (term * (JLit.lpos * JClause.cpos)) list =
       (Jeha_Common.cartesian_product
         [JLit.Left, JLit.Right]
-        (JClause.potentially_eligible_cposs_of given_clause)
+        (JClause.potentially_eligible_positive_cposs_of given_clause)
       )
       |> map (`(fn (lp, cp) => JClause.subterm_at_full_pos given_clause ([], lp, cp)))
     fun candidate_green_subterms t : (JClause.T * JClause.full_pos) list =
@@ -885,7 +885,7 @@ fun sup_active_into_given
              ([], lp, cp) =>
                (case Jeha_Clause_Set.lookup active id of
                  SOME active_clause =>
-                   if JClause.is_potentially_eligible_cpos active_clause cp
+                   if JClause.is_potentially_eligible_positive_cpos active_clause cp
                      then SOME (active_clause, (lp, cp))
                      else NONE
                  | NONE => NONE)
