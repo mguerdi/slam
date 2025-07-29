@@ -60,6 +60,17 @@ fun jeha_tac options ctxt ths i st0 =
             (writeln "EXCEPTION WAS RAISED! Prover state dumped to Jeha_Tactic.dump"; raise e)
           end)
         else raise e
+    fun contains_const name t =
+      fold_aterms (fn (Const (name', _)) => (fn b => b orelse name = name') | _ => I) t false
+    (* Sledgehammer does not know that jeha requires lemmas characterizing if-then-else, because
+    metis doesn't need them (thanks to the Meson clausifier). *)
+    val extra_lemmas =
+      if contains_const @{const_name "HOL.If"} (Thm.prop_of st0)
+        then @{thms "HOL.if_True" "HOL.if_False"}
+        else []
+    val () = if not (null extra_lemmas) then Jeha_Common.trace_msg ctxt (fn () =>
+      "adding extra lemmas:\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths)) else ()
+    val ths = ths @ extra_lemmas
     val atomized_ths = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) ths
     fun tac ctxt' i' =
       (* FIXME: why are we doing this??? *)

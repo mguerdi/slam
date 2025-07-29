@@ -807,7 +807,9 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           (* val _ = writeln ("t_comp_t' " ^ @{make_string} t_comp_t') *)
         in
           (* order restrictions *)
-          if Partial_Ord.is_less_equal t_comp_t' then fail NONE (K "t\<sigma> \<preceq> u\<sigma>") else (* 5 *)
+          if Partial_Ord.is_less_equal t_comp_t' then
+            fail NONE (fn () => "t\<sigma> \<preceq> t'\<sigma>: " ^
+              Jeha_Common.pretty_term ctxt t ^ " \<preceq> " ^ Jeha_Common.pretty_term ctxt t') else (* 5 *)
           if not u_eligible then fail NONE (K "u not eligible") else (* 6 *)
           if Partial_Ord.is_less_equal c_comp_d then fail NONE (K "C\<sigma> \<preceq> D\<sigma>") else (* 7 *)
           if not tt'_eligible then fail NONE (K "t \<approx> t' not eligible") else (* 8 *)
