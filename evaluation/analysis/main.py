@@ -236,7 +236,7 @@ def summarize(calls, dirname, plot):
         list(metis_success_jeha_fail_or_timeout),
         key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
     )[:10]
-    print(ten_easiest)
+    print('\n'.join(ten_easiest))
 
     if plot:
         plot_success_calls(metis_calls, jeha_calls, dirname)
