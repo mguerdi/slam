@@ -792,29 +792,24 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
             |> apply2 (JClause.recompute_selected ctxt)
           val u_eligible = JClause.is_eligible_full_pos c u_pos
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
-          val tt'_eligible = JClause.is_eligible_cpos d cp
-          (* FIXME: according to the thesis this is skipped for performance
-          reasons, would explain the difficulty in understanding zipperpositions
-          implementation *)
-          val c_comp_d = JClause.kbo (c, d)
+          fun tt'_eligible () = JClause.is_eligible_cpos d cp
           (* val _ = writeln ("c_comp_d " ^ @{make_string} c_comp_d) *)
-          val d' = JClause.delete_lit_at ctxt cp d
+          fun d' () = JClause.delete_lit_at ctxt cp d
           (* this relies on normalization not destroying green / top level positions, i.e.
           (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
           val (t, t', _) = JLit.orient lp (JClause.lit_at cp d)
-          val ct' = JClause.map_at_full_pos u_pos (K t') c (* FIXME: recompute selected *)
-          val t_comp_t' = Jeha_KBO.ord (t, t')
-          (* val _ = writeln ("t_comp_t' " ^ @{make_string} t_comp_t') *)
+          fun ct' () = JClause.map_at_full_pos u_pos (K t') c (* FIXME: recompute selected *)
+          fun t_comp_t' () = Jeha_KBO.ord (t, t')
         in
           (* order restrictions *)
-          if Partial_Ord.is_less_equal t_comp_t' then
+          if Partial_Ord.is_less_equal (t_comp_t' ()) then
             fail NONE (fn () => "t\<sigma> \<preceq> t'\<sigma>: " ^
-              Jeha_Common.pretty_term ctxt t ^ " \<preceq> " ^ Jeha_Common.pretty_term ctxt t') else (* 5 *)
+              Jeha_Common.pretty_term ctxt t ^ "\<preceq>" ^ Jeha_Common.pretty_term ctxt t') else (* 5 *)
           if not u_eligible then fail NONE (K "u not eligible") else (* 6 *)
-          if Partial_Ord.is_less_equal c_comp_d then fail NONE (K "C\<sigma> \<preceq> D\<sigma>") else (* 7 *)
-          if not tt'_eligible then fail NONE (K "t \<approx> t' not eligible") else (* 8 *)
+          (* according to the thesis, side condition 7 is skipped for performance reasons *)
+          if not (tt'_eligible ()) then fail NONE (K "t \<approx> t' not eligible") else (* 8 *)
           (* FXIME 9. 10. *)
-          JClause.combine ctxt d' ct'
+          JClause.combine ctxt (d' ()) (ct' ())
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
           |> JClause.refresh_id ()
