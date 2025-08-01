@@ -1014,7 +1014,7 @@ fun infer_arg_cong ctxt c cpos =
 
     val maxidx = JClause.maxidx c
 
-    val new_maxidx = s_num_of_args + ARG_CONG_EXTRA_CONCLUSIONS + 1
+    val new_maxidx = maxidx + s_num_of_args + ARG_CONG_EXTRA_CONCLUSIONS + 1
 
     val fresh_result_type = mk_fresh_typ new_maxidx
     val xs_idxs = (maxidx + 1) upto (new_maxidx - 1)
