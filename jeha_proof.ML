@@ -612,9 +612,11 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
           THEN' REPEAT o dne_tac ctxt
           THEN' TRY o demorgan_tac ctxt
           THEN' tac
-          (* Some oc cases produce multiple clauses, we want all of them. *)
-          THEN_ALL_NEW REPEAT o dne_tac ctxt
-          THEN_ALL_NEW pred_to_lit_tac ctxt
+          (* Some oc cases produce multiple literals, e.g. (p \<or> q) \<approx> \<top> *)
+          THEN_ALL_NEW (
+            (REPEAT o dne_tac ctxt)
+            THEN' pred_to_lit_tac ctxt
+          )
       in
         Jeha_Proof_Util.with_all_vars_fixed ctxt (wrapped_tac i) th
         (* wrapped_tac i th *)
