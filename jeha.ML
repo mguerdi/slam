@@ -1128,6 +1128,16 @@ fun infer_arg_cong ctxt c cpos =
   end
   end
 
+fun variable_condition ctxt u =
+  case Jeha_Common.get_sup_variable_condition ctxt of
+    Jeha_Common.None => NONE
+  | Jeha_Common.FirstOrder =>
+      if JTerm.is_variable_headed u
+        then SOME "u is variable headed"
+        else NONE
+  | Jeha_Common.Approximate =>
+      error "approximate sup variable condition unimplemented"
+
 fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
   let
     val tracer = mk_tracer ctxt Jeha_Common.trace_msg_bool_hoist "BoolHoist"
@@ -1151,6 +1161,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
         val unifier = Envir.Envir { maxidx = maxidx, tenv = Vartab.empty, tyenv = unifier }
       in
         if JTerm.is_variable_headed u (* 2. *) then fail [] (K "u variable headed") else
+        case variable_condition ctxt u of SOME msg => fail [] (K msg) | NONE =>
         if JClause.is_position_of_fully_applied_logical_symbol u_pos c (* 2. *) then
           fail [] (K "u is a fully applied logical symbol") else
         if not u_eligible (* 3. *) then fail [] (K "u not eligible") else

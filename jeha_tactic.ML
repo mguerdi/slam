@@ -45,8 +45,7 @@ fun reconstruct_proof
 
 fun jeha_tac options ctxt ths i st0 =
   let
-    (* validate config *)
-    val _ = Jeha_Common.get_proof_reconstruction_mode ctxt
+    val _ = Jeha_Common.validate_config ctxt
     val ctxt = Config.put Unify.search_bound (Config.get ctxt Jeha_Common.unify_search_bound) ctxt
     (* tracing *)
     val _ = Jeha_Common.trace_msg ctxt (fn () => "st0: " ^ @{make_string} st0)

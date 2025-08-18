@@ -94,6 +94,8 @@ sig
   val trace_msg_clause_subsumption : Proof.context -> (unit -> string) -> unit
   val trace_msg_equality_subsumption : Proof.context -> (unit -> string) -> unit
 
+  val validate_config : Proof.context -> unit
+
   val proof_reconstruction : string Config.T
   datatype proof_reconstruction_mode = Cheat | Argo | Metis | Blast | Manual
   val get_proof_reconstruction_mode : Proof.context -> proof_reconstruction_mode
@@ -156,6 +158,10 @@ sig
   val select_negativoid : bool Config.T
   val select_flex_sided : bool Config.T
   val literal_selection_function : string Config.T
+
+  val sup_variable_condition : string Config.T
+  datatype sup_variable_condition = None | FirstOrder | Approximate
+  val get_sup_variable_condition : Proof.context -> sup_variable_condition
 
   val unify_search_bound : int Config.T
   val unify_timeout_ms : int Config.T
@@ -352,6 +358,32 @@ val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>jeha_
 val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>jeha_select_negativoid\<close> (K true)
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>jeha_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_neg_lit")
+
+val sup_variable_condition = Attrib.setup_config_string \<^binding>\<open>jeha_sup_variable_condition\<close> (K "first_order")
+
+datatype sup_variable_condition = None | FirstOrder | Approximate
+
+fun string_of_sup_variable_condition None = "none"
+  | string_of_sup_variable_condition FirstOrder = "first_order"
+  | string_of_sup_variable_condition Approximate = "approximate"
+
+fun parse_sup_variable_condition "none" = None
+  | parse_sup_variable_condition "first_order" = FirstOrder
+  | parse_sup_variable_condition "approximate" = Approximate
+  | parse_sup_variable_condition s = error
+      ( "Not a valid jeha superposition vairable condition"
+      ^ s
+      ^ " (must be either of \"none\", \"first_order\" or \"approximate\")")
+
+fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
+
+fun validate_config ctxt =
+  let
+    val _ = get_proof_reconstruction_mode ctxt
+    val _ = get_sup_variable_condition ctxt
+  in
+    ()
+  end
 
 val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>jeha_unify_search_bound\<close> (K 50)
 val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>jeha_unify_timeout_ms\<close> (K 10)
