@@ -27,6 +27,7 @@ sig
   val thm_of : hthm -> thm
   val map_hthm : (thm -> thm) -> hthm -> hthm
   val traverse_hthm : (thm -> thm list) -> hthm -> hthm list
+  val seq_traverse_hthm : (thm -> thm Seq.seq) -> hthm -> hthm Seq.seq
   
   val cprop_without_skolem_prems : hthm -> cterm
   
@@ -62,7 +63,6 @@ sig
   val comp_no_flatten: hthm * int -> int -> hthm -> hthm
   val compose : thm * int * hthm -> hthm
 
-  (* protects skolems *)
   val incr_indexes : int -> hthm -> hthm
   
   val congruence_wrt_subterm_position : Proof.context -> term * term -> hthm -> JClause.full_pos -> hthm
@@ -96,6 +96,10 @@ fun term_of { t, ... } = t
 (* name borrowed from Haskell Traversable *)
 fun traverse_hthm (f : thm -> thm list) { th, skolems } : hthm list =
   map (fn th' => { th = th', skolems = skolems }) (f th)
+
+(* name borrowed from Haskell Traversable *)
+fun seq_traverse_hthm (f : thm -> thm Seq.seq) { th, skolems } : hthm Seq.seq =
+  Seq.map (fn th' => { th = th', skolems = skolems }) (f th)
 
 fun of_lemma th = { th = th, skolems = [] }
 

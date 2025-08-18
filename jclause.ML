@@ -163,9 +163,27 @@ fun check_maxidx clause =
       ()
   end
 
+fun term_of { literals = [], ... } = @{term False}
+  | term_of { literals = (c as (_ :: _)), ... } =
+      let
+        val (x :: xs) = rev c
+      in
+        fold (curry HOLogic.mk_disj) (map JLit.term_of xs) (JLit.term_of x)
+      end
+
+fun check_type clause =
+  let
+    val term = term_of clause
+    val typ = type_of term
+  in
+    ()
+  end
+
 fun check_clause ctxt clause =
-  if not (Config.get ctxt Jeha_Common.debug_check_clauses) then () else
-  check_maxidx clause
+  if not (Config.get ctxt Jeha_Common.debug_check_clauses) then () else (
+    check_maxidx clause;
+    check_type clause
+  )
 
 fun set_origin ctxt origin { literals, id, maxidx, selected, ... } =
   let
@@ -289,14 +307,6 @@ fun filter_out_lits ctxt f clause =
   |> set_maxidx (maxidx clause)
 
 val length = List.length o literals
-
-fun term_of { literals = [], ... } = @{term False}
-  | term_of { literals = (c as (_ :: _)), ... } =
-      let
-        val (x :: xs) = rev c
-      in
-        fold (curry HOLogic.mk_disj) (map JLit.term_of xs) (JLit.term_of x)
-      end
 
 fun pretty_clause' ctxt c =
   let

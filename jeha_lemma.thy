@@ -155,6 +155,7 @@ sig
   val hclause_of_uninstantiated_bool_rw_rule: Proof.context -> term * term -> thm
   val forall_exists_rw_lemma: Proof.context -> term -> bool -> term * term * term -> thm
   val neg_ext_lemma: Proof.context -> term * term -> term * term * term -> thm
+  val oc_exists_lemma: Proof.context -> term -> term * term * term -> thm
 end
 
 structure Jeha_Lemma: JEHA_LEMMA =
@@ -178,7 +179,7 @@ fun hclause_of_uninstantiated_bool_rw_rule ctxt (lhs, rhs) =
       else lemma
   end
 
-fun forall_exists_rw_lemma ctxt predicate is_forall_rw (sk, sk_with_args, sk_def) =
+fun impl_forall_exists_rw_lemma ctxt predicate is_forall_rw (sk, sk_with_args, sk_def) =
   let
     val T = predicate |> fastype_of |> domain_type
     val P = predicate
@@ -198,9 +199,16 @@ fun forall_exists_rw_lemma ctxt predicate is_forall_rw (sk, sk_with_args, sk_def
       |> Seq.hd
       |> Goal.finish ctxt
   in
-    (* Turn into HClause form *)
-    Drule.comp_no_flatten (th, Thm.nprems_of th) 1 @{thm HOL.cnf.clause2raw_notE}
+    th
   end
+
+fun forall_exists_rw_lemma ctxt predicate is_forall_rw skolem =
+    let
+      val th = impl_forall_exists_rw_lemma ctxt predicate is_forall_rw skolem
+    in
+      (* Turn into HClause form *)
+      Drule.comp_no_flatten (th, Thm.nprems_of th) 1 @{thm HOL.cnf.clause2raw_notE}
+    end
 
 fun neg_ext_lemma ctxt (s, s') (sk, sk_with_args, sk_def) =
   let
@@ -222,6 +230,17 @@ fun neg_ext_lemma ctxt (s, s') (sk, sk_with_args, sk_def) =
   in
     th
   end
+
+  (* sk = (\<lambda>. \<dots>) \<Longrightarrow> \<not> P (sk \<dots>) \<Longrightarrow> \<not> (\<exists>x. P x) *)
+  fun oc_exists_lemma ctxt predicate skolems =
+    let
+      (* sk = (\<lambda>. \<dots>) \<Longrightarrow> P (sk \<dots>) = \<exists>x. P x *)
+      val lemma = impl_forall_exists_rw_lemma ctxt predicate false skolems
+      (* ?s = ?t \<Longrightarrow> \<not>?s \<Longrightarrow> \<not>?t *)
+      val subst = @{thm HOL.ssubst[of _ _ \<open>\<lambda>x. \<not>x\<close>]}
+    in
+      Drule.comp_no_flatten (lemma, Thm.nprems_of lemma) 1 subst
+    end
 
 end
 \<close>
