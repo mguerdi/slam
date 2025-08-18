@@ -1123,7 +1123,8 @@ fun infer_arg_cong ctxt c cpos =
   in
     prefixes1 fresh_variables
     |> map_filter
-        (fn vars => build_conclusion vars handle Pattern.Unif => fail NONE (K "Pattern.Unif"))
+        (fn vars =>
+            build_conclusion vars handle Pattern.Unif => fail NONE (K "Pattern.Unif"))
   end
   end
 
@@ -1355,7 +1356,6 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> trace_concl ctxt tracer
         |> pair unifier
         |> SOME
       end
@@ -1456,7 +1456,6 @@ fun impl_simp_bool_rw
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
-        |> trace_concl ctxt tracer
         |> pair unifier
         |> SOME
       end
@@ -1669,6 +1668,8 @@ fun impl_fa_ex_rw
           |> JClause.recompute_selected ctxt
 
         val abstract_over = Free ("z", fresh_typ)
+        val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
+          name = #1 (dest_Free abstract_over) | _ => false) fresh_predicate))
         val choice_body = (is_forall ? HOLogic.mk_not) (fresh_predicate $ abstract_over)
         val choice_witness =
           JTerm.make_choice_witness abstract_over choice_body
@@ -1741,6 +1742,10 @@ fun infer_neg_ext ctxt c cpos =
   if null (Term.binder_types (fastype_of s)) then fail [] (K "not of function type") else
   let
     val x = Free ("x_neg_ext", domain_type (fastype_of s))
+    val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
+      name = #1 (dest_Free x) | _ => false) s))
+    val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
+      name = #1 (dest_Free x) | _ => false) s'))
     val choice_body = HOLogic.mk_not (HOLogic.mk_eq (s $ x, s' $ x))
     (* Note: FV(s\<noteq>s') = FV(SOME z. s z \<noteq> s' z), where FV gives the set of *schematic* variables. *)
     val choice_witness = JTerm.make_choice_witness x choice_body
