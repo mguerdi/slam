@@ -8,6 +8,7 @@ sig
   val is_false : term -> bool
   val hol_bool_of : bool -> term
   val negate_hol_bool : term -> term
+  val negate_in_lambda : term -> term
   val is_quantifier : term -> bool
   val quantified_typ : term -> typ
   val strip_comb_fun_types_args : term -> term * typ list * term list
@@ -66,6 +67,15 @@ fun hol_bool_of true = @{term "True"}
 fun is_false t = t = @{term "False"}
 
 val negate_hol_bool = hol_bool_of o not o ml_bool_of
+
+(* turn (\<lambda>x. P[x]) into (\<lambda>x. \<not>P[x]) *)
+fun negate_in_lambda (Abs (x, xT, body)) =
+      if fastype_of1 ([xT], body) <> @{typ HOL.bool}
+        then error (
+          "negate_in_lambda: not a predicate (return type is "
+          ^ @{make_string} (fastype_of1 ([xT], body)) ^ ")")
+        else (Abs (x, xT, HOLogic.mk_not body))
+  | negate_in_lambda _ = error "negate_in_lambda: not a lambda"
 
 (* type T = term *)
 

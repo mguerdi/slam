@@ -16,7 +16,15 @@ sig
   val equality_subsumes : Proof.context -> JClause.T * JClause.T -> bool
   val bool_rw_non_var_rules : bool -> (term * term) list
   (* outer clausification *)
-  val outer_clausify : Proof.context -> bool -> term -> JClause.T -> JClause.T list
+  val outer_clausify :
+    Proof.context
+    -> int
+    -> bool
+    -> term
+    -> JClause.T
+    -> (JClause.T * (term * (term, (term * term * term)) Jeha_Common.either) option) list
+             (*        ^       ^             ^          *)
+             (*   predicate variable      skolem        *)
   val is_trivial : JClause.T -> bool
   val is_equality_subsumed : Proof.context -> Jeha_Clause_Set.T -> JClause.T -> bool
   val simp_bool_outer_claus : Proof.context -> JClause.T * JClause.cpos -> JClause.T list
@@ -89,33 +97,82 @@ val UNIFIER_CUTOFF = 2
 
 (* oc function from the PhD thesis
 logically:
-  outer_clausify b s c = clauses of (if b then s else \<not>s) \<or> c
+  outer_clausify maxidx b s c = clauses of (if b then s else \<not>s) \<or> c
 Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix
 of negations above and below) *)
-fun outer_clausify ctxt b (@{term Not} $ s) c = outer_clausify ctxt (not b) s c
-  | outer_clausify ctxt b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
+fun outer_clausify_non_quant ctxt maxidx b (@{term Not} $ s) c =
+      outer_clausify_non_quant ctxt maxidx (not b) s c
+  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
       then [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
       else
         [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
         , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
-  | outer_clausify ctxt b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
+  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
       then
         [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
         , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
       else [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
-  | outer_clausify ctxt b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
+  | outer_clausify_non_quant ctxt maxidx b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
-      outer_clausify ctxt b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
+      outer_clausify_non_quant ctxt maxidx b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
   (* FIXME: Making HO Sup work p.7 says: never simplify \<longleftrightarrow>. What does this mean
   concretely? (Isabelle represents \<longleftrightarrow> as HOL.eq) *)
-  | outer_clausify ctxt b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
+  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
       [JClause.add_literal ctxt (s, t, b) c]
-  (* FIXME: add forall, exists (make fresh var, increment maxidx) *)
-  | outer_clausify ctxt b s c = []
+  | outer_clausify_non_quant _ _ _ _ _ = []
+
+
+fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
+      if b then
+        (* \<forall>x. P x = \<top> \<leadsto> P ?x_oc *)
+        let
+          val fresh_var = Var (("x_oc", maxidx + 1), Term.domain_type (fastype_of P))
+          val new_lit =
+            JLit.of_term_signed true (JTerm.norm_beta_eta_qeta (P $ fresh_var))
+        in
+          [ (JClause.add_literal ctxt new_lit c, SOME (P, Jeha_Common.Left fresh_var)) ]
+        end
+      else
+        (* (\<forall>x. P x) = \<bottom> is the same as (\<exists>x. \<not>P x) = \<top> *)
+        outer_clausify
+          ctxt
+          maxidx
+          true
+          (* \<beta>\<eta>Q\<eta>-normal form guarantees that P is a \<lambda>-expression. *)
+          (Const (@{const_name HOL.Ex}, T) $ JTerm.negate_in_lambda P)
+          c
+  | outer_clausify ctxt maxidx b (Const (@{const_name HOL.Ex}, T) $ P) c =
+      if b then
+        let
+          val abstract_over = Free ("z", domain_type (fastype_of P))
+          val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
+            name = #1 (dest_Free abstract_over) | _ => false) P))
+          val choice_witness =
+            JTerm.make_choice_witness abstract_over (P $ abstract_over)
+          val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
+            JTerm.make_skolem_constant choice_witness
+          val skolem = (skolem_constant, skolem_constant_with_args, skolem_constant_definition)
+          val lit =
+            JLit.of_term_signed true (JTerm.norm_beta_eta_qeta (P $ skolem_constant_with_args))
+        in
+          [ (JClause.add_literal ctxt lit c, SOME (P, Jeha_Common.Right skolem)) ]
+        end
+      else
+        (* (\<exists>x. P x) = \<bottom> is the same as (\<forall>x. \<not>P x) = \<top> *)
+        outer_clausify
+          ctxt
+          maxidx
+          true
+          (* \<beta>\<eta>Q\<eta>-normal form guarantees that P is a \<lambda>-expression. *)
+          (Const (@{const_name HOL.All}, T) $ JTerm.negate_in_lambda P)
+          c
+  | outer_clausify ctxt maxidx b s c =
+      outer_clausify_non_quant ctxt maxidx b s c
+      |> map (fn c => (c, NONE))
 
 (*** Rules ***)
 
@@ -686,23 +743,28 @@ fun simp_bool_outer_claus ctxt (c, i) =
   in
   if not (JLit.is_pred lit) then fail [] (K "not a predicate literal") else
   let
+    val maxidx = JClause.maxidx c
     val (s, b) = lit |> JLit.dest_pred ||> ml_bool_of
     val c' = JClause.delete_lit_at ctxt i c
     (* Meaning: "if b then PosOuterClaus else NegOuterClaus" *)
-    val clausified = outer_clausify ctxt b s c'
+    val clausified = outer_clausify ctxt maxidx b s c'
   in
     if null clausified then
       (* in particular if head of s is not a logical symbol *)
       fail [] (K "no clausification results") else
     clausified
     |> map_index
-      (fn (index, clause) =>
+      (fn (index, (clause, quant_info)) =>
         clause
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.set_origin ctxt (
           Jeha_Log.SimpPosNegOuterClaus
-            { premise = JClause.id c, literal = i, conclusion_index = index }
+            { premise = JClause.id c
+            , literal = i
+            , conclusion_index = index
+            , quant_info = quant_info
+            }
         )
         |> trace_concl ctxt tracer
       )

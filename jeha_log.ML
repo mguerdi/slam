@@ -39,7 +39,7 @@ sig
   | NegativeSimplifyReflect of { unit: 'a, unit_shift : int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, literal: JClause_Pos.cpos }
   (* | PosOuterClaus of { premise: 'a, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   | NegOuterClaus of { premise: 'a, top_level_term: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env } *)
-  | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos, conclusion_index: int }
+  | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos, conclusion_index: int, quant_info: (term * (term, (term * term * term)) Jeha_Common.either) option }
   (* *)
   | SimpBoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | SimpFalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -94,7 +94,7 @@ datatype 'a inference =
   | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | PositiveSimplifyReflect of { unit: 'a, unit_shift: int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, disagreement: JClause_Pos.full_pos }
   | NegativeSimplifyReflect of { unit: 'a, unit_shift : int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, literal: JClause_Pos.cpos }
-  | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos, conclusion_index: int }
+  | SimpPosNegOuterClaus of { premise: 'a, literal: JClause_Pos.cpos, conclusion_index: int, quant_info: (term * (term, (term * term * term)) Jeha_Common.either) option }
   | SimpBoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | SimpFalseElim of { premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
   (* redundancy FIXME: different type? these don't make sense in logs in clauses *)

@@ -1,3 +1,5 @@
+infix H_THEN_ALL_NEW H_THEN H_THEN'
+
 (* detailed proof and proof reconstruction *) 
 signature JEHA_PROOF =
 sig
@@ -96,7 +98,8 @@ sig
   val reconstruct_simp_outer_claus:
     Proof.context
     -> { premise: HClause.hthm
-       , literal: JClause.cpos }
+       , literal: JClause.cpos
+       , quant_info: (term * (term, (term * term * term)) Jeha_Common.either) option }
     -> HClause.hthm list
   val reconstruct_neg_ext:
     Proof.context
@@ -559,7 +562,7 @@ fun reconstruct_negative_simplify_reflect
   end
 
 (* NOTE: Needs to match Jeha.outer_clausify *)
-fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
+fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal, quant_info } =
   let
     (* Each of these replaces the rhs of the `\<Longrightarrow>` by the lhs. *)
 
@@ -579,6 +582,84 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
       FIRST'
         ([eq_to_lit_tac ctxt, neq_to_lit_tac ctxt] (* equalities stay equalities *)
         @ [not_to_eq_false_tac ctxt, to_eq_true_tac ctxt])
+
+    fun not_forall_tac ctxt = resolve_tac ctxt [@{lemma "\<not>(\<exists>x. \<not>P x) \<Longrightarrow> \<forall>x. P x" by auto}]
+    fun not_exists_tac ctxt = resolve_tac ctxt [@{lemma "\<not>(\<forall>x. \<not>P x) \<Longrightarrow> \<exists>x. P x" by auto}]
+
+    val beta_reduce_outer = Thm.beta_conversion false
+    val beta_reduce_outer_under_not = Conv.arg_conv beta_reduce_outer
+
+    type hthm_tactic = HClause.hthm -> HClause.hthm Seq.seq
+
+    fun tac_to_hthm_tac (tac: int -> tactic) : JClause.cpos -> hthm_tactic =
+      fn cpos => fn th => HClause.seq_traverse_hthm (tac (length (#skolems th) + cpos + 1)) th
+
+    (*the tactical THEN performs one tactic followed by another*)
+    (* from TACTICAL.THEN *)
+    fun (tac1 H_THEN tac2) st = Seq.maps tac2 (tac1 st);
+
+    (*the tactical THEN performs one tactic followed by another*)
+    (* from TACTICAL.THEN *)
+    fun (tac1 H_THEN' tac2) i st = Seq.maps (tac2 i) (tac1 i st);
+    
+    (*Apply second tactic to all subgoals emerging from the first --
+      following usual convention for subgoal-based tactics.*)
+    (* from TACTICAL.THEN_ALL_NEW *)
+    fun (tac1 H_THEN_ALL_NEW tac2) cpos st =
+      st |> (tac1 cpos H_THEN (fn st' =>
+        st' |> Seq.INTERVAL tac2 cpos (cpos + HClause.nprems_of st' - HClause.nprems_of st)));
+
+    (* Turns
+      \<dots> \<Longrightarrow> \<not> (\<forall>x. P x) \<Longrightarrow> \<dots> \<Longrightarrow> False
+    into
+      \<dots> \<Longrightarrow> \<not> P ?x \<Longrightarrow> \<dots> \<Longrightarrow> False
+    and \<beta>-reduces appropriately *)
+    fun impl_forall_tac ctxt P x =
+      let
+        val P = Thm.cterm_of ctxt P
+        val x = Thm.cterm_of ctxt x
+        val xT = Thm.ctyp_of_cterm x
+      in
+        ( Seq.single oo (
+            Jeha_Proof_Util.comp_no_flatten_no_incr
+              (\<^instantiate>\<open>P and x and 'a=xT in lemma \<open>\<not>P (x :: 'a) \<Longrightarrow> \<not>(\<forall>x. P x)\<close> by auto\<close>, 1)
+           )
+        )
+        (* DNE requires (at least) \<beta>-reduction: \<not> (\<lambda>x. \<not> Q x) ?x vs \<not>\<not> Q ?x *)
+        THEN' (
+          TRY
+          o Jeha_Proof_Util.with_all_vars_fixed ctxt
+          o CONVERSION (HOLogic.Trueprop_conv beta_reduce_outer_under_not)
+        )
+      end
+
+    (* Turns
+      \<dots> \<Longrightarrow> \<not> (\<exists>x. P x) \<Longrightarrow> \<dots> \<Longrightarrow> False
+    into
+      sk = \<dots> \<Longrightarrow> \<dots> \<Longrightarrow> \<not> P (sk \<dots>) \<Longrightarrow> \<dots> \<Longrightarrow> False
+    and \<beta>-reduces appropriately *)
+    fun impl_exists_tac ctxt P (skolem_const, skolem_with_args, skolem_def) cp th =
+      let
+        (* sk = (\<lambda>. \<dots>) \<Longrightarrow> \<not> P (sk \<dots>) \<Longrightarrow> \<not> (\<exists>x. P x) *)
+        val left_premise =
+          { th =
+              Jeha_Lemma.oc_exists_lemma
+                ctxt
+                P
+                (skolem_const, skolem_with_args, skolem_def)
+          , skolems = [(skolem_const, skolem_def)]
+          }
+        val concl = HClause.comp_no_flatten_no_incr (left_premise, 1) (cp + 1) th
+        val beta_reduce =
+         tac_to_hthm_tac (
+           TRY
+           o Jeha_Proof_Util.with_all_vars_fixed ctxt
+           o (CONVERSION (HOLogic.Trueprop_conv beta_reduce_outer_under_not))
+         )
+        val concl_beta_reduced = Seq.hd (beta_reduce cp concl)
+      in
+        Seq.single concl_beta_reduced
+      end
 
     fun dne_tac ctxt = resolve_tac ctxt [@{lemma "A \<Longrightarrow> \<not>\<not>A" by auto}]
 
@@ -601,13 +682,31 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
     fun not_imp_tac ctxt =
       resolve_tac ctxt [@{lemma "A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>(A \<longrightarrow> B)" by auto}]
 
-    fun oc_tac ctxt =
-      (* all_tac to ignore equality literals etc. *)
-      FIRST' [and_tac ctxt, or_tac ctxt, imp_tac ctxt, not_imp_tac ctxt, K all_tac]
-
-    fun oc_wrapper ctxt tac i th =
+    fun oc_wrapper_hthm ctxt (tac: int -> HClause.hthm -> HClause.hthm Seq.seq) i th =
       let
         val wrapped_tac =
+          tac_to_hthm_tac
+            ( lit_to_pred_tac ctxt
+              THEN' REPEAT o dne_tac ctxt
+              THEN' TRY o demorgan_tac ctxt
+            )
+          H_THEN' tac
+          H_THEN_ALL_NEW
+            ( tac_to_hthm_tac
+              ( Jeha_Proof_Util.with_all_vars_fixed ctxt o
+                ( REPEAT o dne_tac ctxt
+                  THEN' pred_to_lit_tac ctxt
+                )
+              )
+            )
+      in
+        wrapped_tac i th
+      end
+            
+            
+    fun oc_wrapper ctxt tac i th =
+      let
+        val wrapped_tac: int -> tactic =
           lit_to_pred_tac ctxt
           THEN' REPEAT o dne_tac ctxt
           THEN' TRY o demorgan_tac ctxt
@@ -619,16 +718,57 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
           )
       in
         Jeha_Proof_Util.with_all_vars_fixed ctxt (wrapped_tac i) th
-        (* wrapped_tac i th *)
-        |> Seq.chop 2
-        |> (fn (clauses, tail) =>
-          case Seq.pull tail of
-            SOME _ =>
-              (* This can't happen because outer clausification only clausfies one layer of \<or> at a
-              time. *)
-              error "outer_clausification reconstruction produced more than two clauses"
-          | NONE => clauses)
       end
+
+    fun the_up_to_two ths =
+      ths
+      |> Seq.chop 2
+      |> (fn (clauses, tail) =>
+        case Seq.pull tail of
+          SOME _ =>
+            (* This can't happen because outer clausification only clausfies one layer of \<and> at a
+            time. *)
+            error "outer_clausification reconstruction produced more than two clauses"
+        | NONE => clauses)
+
+    fun oc_non_quant_tac ctxt: int -> tactic =
+      (* all_tac to ignore equality literals etc. *)
+      FIRST'
+        ( map
+            (oc_wrapper ctxt)
+            [and_tac ctxt, or_tac ctxt, imp_tac ctxt, not_imp_tac ctxt, K all_tac]
+        )
+
+    fun oc_quant_tac ctxt =
+      case quant_info of
+        NONE => tac_to_hthm_tac (K all_tac)
+      | SOME (predicate, Jeha_Common.Left variable) =>
+          oc_wrapper_hthm ctxt (
+            tac_to_hthm_tac (TRY o not_exists_tac ctxt)
+            H_THEN' tac_to_hthm_tac (impl_forall_tac ctxt predicate variable)
+          )
+      | SOME (predicate, Jeha_Common.Right skolem) =>
+          oc_wrapper_hthm ctxt (
+            tac_to_hthm_tac (TRY o not_forall_tac ctxt)
+            H_THEN' impl_exists_tac ctxt predicate skolem
+          )
+
+    fun oc th =
+      case quant_info of
+        NONE => 
+          th
+          |> tac_to_hthm_tac (oc_non_quant_tac ctxt) literal
+          |> the_up_to_two
+      | SOME _ =>
+          th
+          |> oc_quant_tac ctxt literal
+          |> Seq.pull
+          |> (fn
+                SOME (hd, tl) =>
+                  if is_some (Seq.pull tl)
+                    then error "oc_quant_tac: multiple results"
+                    else [hd]
+              | NONE => error "oc_quant_tac: no results")
 
     fun move_new_literals_to_last (conclusion: HClause.hthm) =
       let
@@ -642,7 +782,7 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal } =
       end
   in
     premise
-    |> HClause.traverse_hthm (oc_wrapper ctxt (oc_tac ctxt) (literal + length (#skolems premise) + 1))
+    |> oc
     |> map move_new_literals_to_last
   end
 
@@ -857,9 +997,9 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
             , unit_orientation = unit_orientation
             , right_premise = get_thm right_premise
             , literal = literal }
-      | Jeha_Log.SimpPosNegOuterClaus { premise, literal, conclusion_index }  =>
+      | Jeha_Log.SimpPosNegOuterClaus { premise, literal, conclusion_index, quant_info }  =>
           nth
-            (reconstruct_simp_outer_claus ctxt { premise = get_thm premise, literal = literal })
+            (reconstruct_simp_outer_claus ctxt { premise = get_thm premise, literal = literal, quant_info = quant_info })
             conclusion_index
       | Jeha_Log.SimpBoolRw { premise, subterm, subrule, substitution } =>
           (* See BoolRw above *)
