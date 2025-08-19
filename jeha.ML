@@ -130,7 +130,8 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
       if b then
         (* \<forall>x. P x = \<top> \<leadsto> P ?x_oc *)
         let
-          val fresh_var = Var (("x_oc", maxidx + 1), Term.domain_type (fastype_of P))
+          val Abs (name, _, _) = P
+          val fresh_var = Var ((name, maxidx + 1), Term.domain_type (fastype_of P))
           val new_lit =
             JLit.of_term_signed true (JTerm.norm_beta_eta_qeta (P $ fresh_var))
         in
@@ -191,7 +192,7 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
     tracing output if there are no unifiers) or if there is an exception
 *)
 fun mk_tracer ctxt channel inference_name msg =
-  channel ctxt (fn () => inference_name ^ " :" ^ msg ())
+  channel ctxt (fn () => inference_name ^ ": " ^ msg ())
 
 fun trace_concl ctxt (tracer: (unit -> string) -> unit) =
   tap (fn concl => (tracer (fn () => ("concl: " ^ JClause.pretty_clause ctxt concl))))
@@ -314,8 +315,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
       (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
       if SOME GREATER <> Jeha_KBO.ord (from, to) then
         fail NONE (fn () =>
-          Jeha_Common.pretty_term ctxt from
-          ^ " not greater than "
+          "s\<sigma> !\<succ> t\<sigma>: "
+          ^ Jeha_Common.pretty_term ctxt from
+          ^ " !\<succ> "
           ^ Jeha_Common.pretty_term ctxt to) else
       let
         val rewritten_clause =
@@ -866,7 +868,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           (* order restrictions *)
           if Partial_Ord.is_less_equal (t_comp_t' ()) then
             fail NONE (fn () => "t\<sigma> \<preceq> t'\<sigma>: " ^
-              Jeha_Common.pretty_term ctxt t ^ "\<preceq>" ^ Jeha_Common.pretty_term ctxt t') else (* 5 *)
+              Jeha_Common.pretty_term ctxt t ^ " \<preceq> " ^ Jeha_Common.pretty_term ctxt t') else (* 5 *)
           if not u_eligible then fail NONE (K "u not eligible") else (* 6 *)
           (* according to the thesis, side condition 7 is skipped for performance reasons *)
           if not (tt'_eligible ()) then fail NONE (K "t \<approx> t' not eligible") else (* 8 *)

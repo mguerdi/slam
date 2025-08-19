@@ -68,6 +68,7 @@ fun norm_negative_predicate_literals ctxt th =
 (* Compare: Envir.subst_\<dots> *)
 fun envir_subst_thm ctxt (tyenv, tenv) th =
   let
+    (*
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "envir_subst_thm: \n\t" ^
       Thm.string_of_thm ctxt th ^
@@ -75,6 +76,7 @@ fun envir_subst_thm ctxt (tyenv, tenv) th =
       Jeha_Common.pretty_tenv ctxt (tenv) ^
       "\n\t" ^
       Jeha_Common.pretty_tyenv ctxt (tyenv))
+    *)
 
     fun mkT (v, (S, T)) = ((v, S), Thm.ctyp_of ctxt (Envir.subst_type tyenv T))
     fun mk (v, (T, t)) =
@@ -98,6 +100,7 @@ fun envir_norm_thm ctxt env th =
   let
     val tyenv = Envir.type_env env
     val tenv = Envir.term_env env 
+    (*
     val _ = Jeha_Common.trace_msg ctxt (fn () =>
       "envir_norm_thm: \n\t" ^
       Thm.string_of_thm ctxt th ^
@@ -105,6 +108,7 @@ fun envir_norm_thm ctxt env th =
       Jeha_Common.pretty_tenv ctxt (tenv) ^
       "\n\t" ^
       Jeha_Common.pretty_tyenv ctxt (tyenv))
+    *)
 
     fun mkT (v, (S, T)) = ((v, S), Thm.ctyp_of ctxt (Envir.norm_type tyenv T))
     fun mk (v, (T, t)) = ((v, Envir.norm_type tyenv T), Thm.cterm_of ctxt (Envir.norm_term env t))

@@ -702,8 +702,7 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal, quant_in
       in
         wrapped_tac i th
       end
-            
-            
+
     fun oc_wrapper ctxt tac i th =
       let
         val wrapped_tac: int -> tactic =
@@ -1086,18 +1085,26 @@ fun discharge_skolem_prems ctxt ({ th, skolems } : HClause.hthm) : thm =
         Variable.add_fixes_direct, Variable.is_body *)
         error ("discharge_skolem_prems: The fixed names should have been: "
           ^ @{make_string} skolem_frees_names ^ " but were " ^ @{make_string} fixed_names) else ()
+    (*
     val () = writeln "DEBUG discharge_skolem_prems"
     val () = writeln ("th " ^ @{make_string} th)
+    *)
     val [th_with_schematic_skolem_prems] = Variable.export ctxt_fixed ctxt [th]
+    (*
     val () = writeln ("th_with_schematic_skolem_prems " ^ @{make_string} th_with_schematic_skolem_prems)
+    *)
     val discharged_fixed: thm =
       funpow
         (length skolems)
         (curry (op RS) @{thm "HOL.refl"})
         th_with_schematic_skolem_prems
+    (*
     val () = writeln ("discharged_fixed " ^ @{make_string} discharged_fixed)
+    *)
     val [discharged] = Variable.export ctxt ctxt_fixed [discharged_fixed]
+    (*
     val () = writeln ("discharged " ^ @{make_string} discharged)
+    *)
   in
     discharged
   end
