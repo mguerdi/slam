@@ -141,6 +141,16 @@ val _ =
       (Scan.lift parse_jeha_options -- Attrib.thms >> (METHOD oo jeha_method))
       "jeha for FOL and HOL problems");
 
+val _ =
+  Theory.setup
+    (Method.setup \<^binding>\<open>slam\<close>
+      (* Scan.lift to turns the parser parse_jeha_options into a context_parser *)
+      (* -- to pass the tokens left over by parse_jeha_options to Attrib.thms and pair the
+      resulting theorem list with parse_jeha_options' parse result *)
+      (* >> to apply (METHOD oo jeha_method) the the previous parse result *)
+      (Scan.lift parse_jeha_options -- Attrib.thms >> (METHOD oo jeha_method))
+      "jeha for FOL and HOL problems");
+
 end
 
 
