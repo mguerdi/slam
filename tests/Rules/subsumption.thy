@@ -9,7 +9,7 @@ declare [[jeha_disable_all]]
 declare [[jeha_rule_clause_subsumption]]
 declare [[jeha_trace_forward_simp]]
 declare [[jeha_trace_backward_simp]]
-declare [[jeha_trace_simp_steps]]
+declare [[jeha_trace_clause_subsumption]]
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
@@ -52,6 +52,86 @@ ML_val \<open>
   val c = JClause.of_term @{context} (ct, 0)
   val d = JClause.of_term @{context} (dt, 1)
   val r = Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)
+\<close>
+
+(* From simple_stuff.thy
+  theorem T0: "\<exists>F. \<forall>T :: bool. \<exists>(S :: bool\<Rightarrow>bool). F S = T" ... by jeha
+
+output:
+(CS) :forward subsumption of 13918:jsk116__ (\<lambda>a. jsk116__ ?x_oc4) = True \<or> ?x_oc4 ?x_oc5 \<noteq> True (SimpFalseElim [13827]) 
+(CS) :fail: not subsumed by 12847:jsk116__ (\<lambda>a. jsk116__ ?x_oc2) = True \<or> ?x_oc2 ?x_oc3 \<noteq> True (SimpFalseElim [12762]) 
+*)
+(* doesn't work with this type *)
+ML_val \<open>
+  val ct = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc2 :: (bool \<Rightarrow> bool) \<Rightarrow> bool)) = True \<or> ?x_oc2 ?x_oc3 \<noteq> True"}
+  val dt = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc4 :: (bool \<Rightarrow> bool) \<Rightarrow> bool)) = True \<or> ?x_oc4 ?x_oc5 \<noteq> True"}
+  val c = JClause.of_term @{context} (ct, 0)
+  val d = JClause.of_term @{context} (dt, 1)
+  val r = Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)
+  val () = \<^assert> r
+\<close>
+
+(* doesn't but does work with this type *)
+ML_val \<open>
+  val ct = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc2 :: 'b \<Rightarrow> bool)) = True \<or> ?x_oc2 ?x_oc3 \<noteq> True"}
+  val dt = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc4 :: 'b \<Rightarrow> bool)) = True \<or> ?x_oc4 ?x_oc5 \<noteq> True"}
+  val c = JClause.of_term @{context} (ct, 0)
+  val d = JClause.of_term @{context} (dt, 1)
+  val r = Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)
+  val () = \<^assert> r
+\<close>
+
+(* Reason seems to be the solution to this unification problem *)
+
+(*
+declare [[unify_trace]]
+declare [[unify_trace, unify_trace_simp, unify_trace_failure, unify_trace_bound=0]]
+*)
+
+ML_val \<open>
+  val ct = @{term_schem "(?E :: (bool \<Rightarrow> bool) \<Rightarrow> bool) ?f"}
+  val dt = @{term_schem "(G :: (bool \<Rightarrow> bool) \<Rightarrow> bool) h"}
+  (* *)
+  val SOME (matcher1, matchers) =
+    Unify.matchers (Context.Proof @{context}) [(ct, dt)]
+    |> Seq.pull
+  val () = writeln ("matcher1: " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher1))
+(*
+  ?E := \<lambda>a. a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (G h)))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
+  ?f := \<lambda>a. a
+  so ?E ?f becomes G h
+*)
+(*
+  val (matchers, _) = Seq.chop 1000 matchers
+  fun write_matcher (i: int, matcher) =
+    writeln ("matcher" ^ @{make_string} i ^ ": " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher))
+  val _ = map_index write_matcher matchers
+*)
+\<close>
+
+ML_val \<open>
+  val ct = @{term_schem "(?E :: (bool \<Rightarrow> bool) \<Rightarrow> bool) ?f"}
+  val dt = @{term_schem "(G :: (bool \<Rightarrow> bool) \<Rightarrow> bool) h"}
+  (* *)
+  val SOME (matcher1, matchers) =
+    Unify.matchers (Context.Proof @{context}) [(ct, dt)]
+    |> Seq.pull
+  val () = writeln ("matcher1: " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher1))
+\<close>
+
+(* whereas here it's normal *)
+ML_val \<open>
+  val ct = @{term_schem "?E ?f"}
+  val dt = @{term_schem "G h"}
+  val matcher =
+    Jeha_Unify.matchers (Context.Proof @{context}) 10 [(ct, dt)]
+    |> Seq.hd
+  val () = writeln (Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher))
+(*
+  ?E := G,
+  ?f := h
+  so ?E ?f becomes G h
+*)
 \<close>
 
 end
