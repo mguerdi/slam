@@ -13,6 +13,73 @@ declare [[jeha_trace_clause_subsumption]]
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
+  val d = JClause.of_term @{context} (@{term "b \<or> a"}, 1)
+  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "?x \<or> b"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "a \<or> ?x"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "?x \<or> ?x"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "a :: bool"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "b :: bool"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "c :: bool"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+\<close>
+
+(* FIXME: shouldn't work in multiset subsumption *)
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "a \<or> a"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term_schem "a \<or> a \<or> a"}, 0)
+  val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
+  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term "a \<or> a \<or> a \<or> a"}, 1)
+  val d = JClause.of_term @{context} (@{term_schem "a \<or> a \<or> a"}, 0)
+  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+\<close>
+
+ML \<open>
+  val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
   val d = JClause.of_term @{context} (@{term_schem "?x \<or> b"}, 1)
   val () = writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of [c, d]))
   val symbols = Subsumption_Index.collect_symbols [c, d] 
@@ -34,7 +101,7 @@ ML \<open>
 \<close>
 
 lemma "(\<And>x. f x) \<Longrightarrow> f a \<or> False \<Longrightarrow> f b"
-  using [[jeha_rule_forall_hoist, jeha_rule_simp_false_elim]] by jeha
+  using [[jeha_rule_forall_hoist, jeha_rule_simp_false_elim, jeha_rule_sup]] by jeha
 
 ML_val \<open>
   (* potentially subsuming clause *)
@@ -71,7 +138,7 @@ ML_val \<open>
   val () = \<^assert> r
 \<close>
 
-(* doesn't but does work with this type *)
+(* does work with this type *)
 ML_val \<open>
   val ct = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc2 :: 'b \<Rightarrow> bool)) = True \<or> ?x_oc2 ?x_oc3 \<noteq> True"}
   val dt = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc4 :: 'b \<Rightarrow> bool)) = True \<or> ?x_oc4 ?x_oc5 \<noteq> True"}
@@ -91,7 +158,6 @@ declare [[unify_trace, unify_trace_simp, unify_trace_failure, unify_trace_bound=
 ML_val \<open>
   val ct = @{term_schem "(?E :: (bool \<Rightarrow> bool) \<Rightarrow> bool) ?f"}
   val dt = @{term_schem "(G :: (bool \<Rightarrow> bool) \<Rightarrow> bool) h"}
-  (* *)
   val SOME (matcher1, matchers) =
     Unify.matchers (Context.Proof @{context}) [(ct, dt)]
     |> Seq.pull
