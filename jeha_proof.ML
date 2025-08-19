@@ -706,17 +706,29 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal, quant_in
     fun oc_wrapper ctxt tac i th =
       let
         val wrapped_tac: int -> tactic =
-          lit_to_pred_tac ctxt
+          (* K (print_tac ctxt "before lit_to_pred")
+          THEN' *) lit_to_pred_tac ctxt
+          (* THEN' (K (print_tac ctxt "before dne_tac")) *)
           THEN' REPEAT o dne_tac ctxt
+          (* THEN' (K (print_tac ctxt "before demorgan_tac")) *)
           THEN' TRY o demorgan_tac ctxt
+          (* THEN' (K (print_tac ctxt "before tac")) *)
           THEN' tac
           (* Some oc cases produce multiple literals, e.g. (p \<or> q) \<approx> \<top> *)
+          (* THEN' (K (print_tac ctxt "before THEN_ALL_NEW")) *)
           THEN_ALL_NEW (
-            (REPEAT o dne_tac ctxt)
+            (* (K (print_tac ctxt "before dne_tac"))
+            THEN' *) (REPEAT o dne_tac ctxt)
+            (* THEN' (K (print_tac ctxt "pred_to_lit_tac")) *)
             THEN' pred_to_lit_tac ctxt
           )
       in
-        Jeha_Proof_Util.with_all_vars_fixed ctxt (wrapped_tac i) th
+        (
+          (* K (print_tac ctxt "before with_all_vars_fixed")
+          THEN' *) (fn i => (Jeha_Proof_Util.with_all_vars_fixed ctxt (wrapped_tac i)))
+          (* THEN' K (print_tac ctxt "after with_all_vars_fixed") *)
+        )
+        i th
       end
 
     fun the_up_to_two ths =
