@@ -94,4 +94,32 @@ ML_val \<open>
   (* \<^assert> (Envir.typ_env *)
 \<close>
 
+declare [[jeha_trace, jeha_trace_rewrite_positive_lits, jeha_trace_sup]]
+
+(* A case of the overapproximation of fluid subterms preventing a rewrite  *)
+ML_val \<open>
+  val target_clause_term = @{term_schem
+    "id (id (\<lambda>a::?'a19. id (\<lambda>b::?'a3. a) ((?x_ac22::?'a19 \<Rightarrow> ?'a3) a)) (?x::?'a19     )) = ?x"
+  }
+  val unit_term = @{term_schem
+    "id (id (?x21::?'a22 \<Rightarrow> ?'a20                                    ) (?x_ac22::?'a22))
+      = ?x21 ?x_ac22"
+  }
+
+  val target_clause = JClause.of_term @{context} (target_clause_term, 0)
+  val subterm = ([], JLit.Left, 0)
+
+  val unit_clause = JClause.of_term @{context} (unit_term, 1)
+  val lp = JLit.Left
+
+  val rw = Jeha.impl_simp_rewrite_lits true @{context} (unit_clause, lp) (target_clause, subterm)
+  (*
+  tenv:[?x21::?'a19 \<Rightarrow> ?'a19 := \<lambda>a::?'a19. id (\<lambda>b::?'a3. a) ((?x_ac22::?'a19 \<Rightarrow> ?'a3) a),
+  ?x_ac22::?'a19 := ?x::?'a19, ?maxidxforcer24 := _] and tyenv:[?'a20 := ?'a19, ?'a22 := ?'a19]
+  *)
+
+  (* superposition works *)
+  val sup = Jeha.infer_sup @{context} (unit_clause, (lp, 0)) (target_clause, subterm)
+\<close>
+
 end
