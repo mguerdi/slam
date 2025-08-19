@@ -68,7 +68,7 @@ ML_val \<open>
   val (s, t, false) = dest_lit_at 0 C
   val (u, v, true) = dest_lit_at 1 C
   val frees = map Free (fold_aterms Term.add_frees (Thm.prop_of (HClause.thm_of C)) [])
-  val () = \<^assert> (eq_list (op aconv) (frees, map Thm.term_of [v, u, t, s]))
+  val () = \<^assert> (eq_list (op aconv) (frees, [v, u, t, s]))
 \<close>
 
 end
