@@ -168,7 +168,7 @@ def get_call_by_goal(calls, goal):
     raise ValueError(f"No call with {goal} in calls.")
 
 
-def summarize(calls, dirname, plot):
+def summarize(calls, label, plot):
     failed = [call for call in calls if call["result"].is_failed()]
     timed_out = [call for call in calls if call["result"].is_timeout()]
     success = [call for call in calls if call["result"].is_success()]
@@ -239,10 +239,10 @@ def summarize(calls, dirname, plot):
     print('\n'.join(ten_easiest))
 
     if plot:
-        plot_success_calls(metis_calls, jeha_calls, dirname)
+        plot_success_calls(metis_calls, jeha_calls, label)
 
 
-def plot_success_calls(metis_calls, jeha_calls, dirname):
+def plot_success_calls(metis_calls, jeha_calls, label):
     def plot_calls(calls, label):
         success = sorted(
             [call for call in calls if call["result"].is_success()], key=lambda call: call["result"]
@@ -253,8 +253,8 @@ def plot_success_calls(metis_calls, jeha_calls, dirname):
         plt.plot(success_times, cumulative_problems, "+", label=label)
         # print("done plotting")
 
-    plot_calls(metis_calls, label=dirname + " (metis)")
-    plot_calls(jeha_calls, label=dirname + " (jeha)")
+    plot_calls(metis_calls, label=label + " (metis)")
+    plot_calls(jeha_calls, label=label + " (jeha)")
 
 
 # https://stackoverflow.com/questions/38834378/path-to-a-directory-as-argparse-argument
@@ -298,12 +298,15 @@ if __name__ == "__main__":
 
     for dirname in runs_dirs:
         filename = dirname + "/mirabelle.log"
-        with open(dirname + "/commit") as c:
-            commit = c.read()
+        try:
+            with open(dirname + "/commit") as c:
+                commit = c.read()[:7]
+        except FileNotFoundError as e:
+            commit = "UNKOWN_COMMIT"
         print(filename, commit)
         try:
             calls = parse_file(filename)
-            summarize(calls, dirname, args.plot)
+            summarize(calls, dirname + " " + commit, args.plot)
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
         print()
