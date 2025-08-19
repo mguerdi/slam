@@ -36,6 +36,48 @@ ML_val \<open>
   \<^assert> (maxidx <= Envir.maxidx_of right_matcher);
 \<close>
 
+(* Notes on Unify.matchers
+
+  (* in Jeha_Unify.matchers *)
+  val v = Var (("maxidxforcer", maxidx), dummyT)
+  val pairs = map (apply2 Jeha_Unify.give_to_undefined) ((v, Term.dummy) :: [(pattern, term)])
+
+  (* in Unify.matchers *)
+  val context = (Context.Proof @{context})
+  val thy = Context.theory_of context;
+
+  (* maxidx of the term to be matched *)
+  val maxidx = fold (Term.maxidx_term o #2) pairs ~1;
+  val offset = maxidx + 1;
+  (* rename patterns above terms *)
+  val pairs' = map (apfst (Logic.incr_indexes ([], offset))) pairs;
+  (* resulting overall maxidx *)
+  val maxidx' = fold (fn (t, u) => Term.maxidx_term t #> Term.maxidx_term u) pairs' ~1;
+
+  (* this applies to the result of Unify.smash_unifiers *)
+
+  val decr_indexesT_same =
+    Term.map_atyps_same
+      (fn TVar ((x, i), S) =>
+          (* *)
+          if i > maxidx then TVar ((x, i - offset), S) else raise Same.SAME
+        | _ => raise Same.SAME);
+  val decr_indexesT = Same.commit decr_indexesT_same;
+  val decr_indexes =
+    Term.map_types decr_indexesT_same #>
+    Term.map_aterms
+      (fn Var ((x, i), T) =>
+          if i > maxidx then Var ((x, i - offset), T) else raise Same.SAME
+        | _ => raise Same.SAME);
+
+  (* The check
+    Envir.above maxidx
+  tests, if
+  *)
+
+  val empty = Envir.empty maxidx';
+*)
+
 ML_val \<open>
   val x = @{term_schem "?x :: ?'a"};
   val y = @{term_schem "?y :: ?'b"};
@@ -50,6 +92,34 @@ ML_val \<open>
   val first_order_matcher = Pattern.first_order_match @{theory} (x, y) (Vartab.empty, Vartab.empty);
   (* *)
   (* \<^assert> (Envir.typ_env *)
+\<close>
+
+declare [[jeha_trace, jeha_trace_rewrite_positive_lits, jeha_trace_sup]]
+
+(* A case of the overapproximation of fluid subterms preventing a rewrite  *)
+ML_val \<open>
+  val target_clause_term = @{term_schem
+    "id (id (\<lambda>a::?'a19. id (\<lambda>b::?'a3. a) ((?x_ac22::?'a19 \<Rightarrow> ?'a3) a)) (?x::?'a19     )) = ?x"
+  }
+  val unit_term = @{term_schem
+    "id (id (?x21::?'a22 \<Rightarrow> ?'a20                                    ) (?x_ac22::?'a22))
+      = ?x21 ?x_ac22"
+  }
+
+  val target_clause = JClause.of_term @{context} (target_clause_term, 0)
+  val subterm = ([], JLit.Left, 0)
+
+  val unit_clause = JClause.of_term @{context} (unit_term, 1)
+  val lp = JLit.Left
+
+  val rw = Jeha.impl_simp_rewrite_lits true @{context} (unit_clause, lp) (target_clause, subterm)
+  (*
+  tenv:[?x21::?'a19 \<Rightarrow> ?'a19 := \<lambda>a::?'a19. id (\<lambda>b::?'a3. a) ((?x_ac22::?'a19 \<Rightarrow> ?'a3) a),
+  ?x_ac22::?'a19 := ?x::?'a19, ?maxidxforcer24 := _] and tyenv:[?'a20 := ?'a19, ?'a22 := ?'a19]
+  *)
+
+  (* superposition works *)
+  val sup = Jeha.infer_sup @{context} (unit_clause, (lp, 0)) (target_clause, subterm)
 \<close>
 
 end
