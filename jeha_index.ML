@@ -246,7 +246,7 @@ struct
   (* https://wwwlehre.dhbw-stuttgart.de/~sschulz/PAPERS/schulz_fp-index.pdf *)
   val e_fp6m_positions = [[], [1], [2], [3], [1, 1], [1, 2]]
 
-  val feature_positions = duper_default_feature_positions
+  val feature_positions = e_fp6m_positions
 
   fun compute_key t = map (fn p => Jeha_Fingerprint.feature_at [] p t) feature_positions
   
