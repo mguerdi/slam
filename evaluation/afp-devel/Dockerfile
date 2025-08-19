@@ -22,7 +22,7 @@ WORKDIR /home/isabelle
 # # Look at Docker_Build.packages.mkString(" ")
 # RUN curl "https://isabelle.sketis.net/repos/isabelle/archive/31b1c203357a.tar.gz"
 
-RUN hg clone "https://isabelle-dev.sketis.net/source/isabelle/" Isabelle
+RUN hg clone "https://isabelle.sketis.net/repos/isabelle" Isabelle
 # 31b1c203357a (2025-01-08)
 RUN Isabelle/Admin/init -u -L -n -r 31b1c203357a
 
