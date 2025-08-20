@@ -55,7 +55,7 @@ struct
   fun all_ground_and_neg c =
     forall (fn (lit as (l, r, _)) =>
       JLit.is_negative lit andalso JTerm.is_ground l andalso JTerm.is_ground r) (JClause.literals c)
-  
+
   fun favor_all_ground_and_neg c = if all_ground_and_neg c then 0 else PENALTY_COEFF
   
   fun favor_positive_unit c = if JClause.is_positive_unit c then 0 else PENALTY_COEFF
@@ -65,6 +65,16 @@ struct
     let
       fun aterm_weight t =
         if Jeha_Symbol_Table.aterm_defined goal_symbols t then 0 else PENALTY_COEFF
+      val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
+      val weight = fold (fn (l, r, _) => add_term_weight l #> add_term_weight r) (JClause.literals c) 0
+    in
+      weight
+    end
+  
+  fun favor_free c =
+    let
+      fun aterm_weight (Free _) = 0 
+        | aterm_weight _ = PENALTY_COEFF
       val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
       val weight = fold (fn (l, r, _) => add_term_weight l #> add_term_weight r) (JClause.literals c) 0
     in
@@ -86,6 +96,7 @@ struct
     (* FIXME: not the favor_goal from zip, which requires tracking distance to negated conjecture *)
     , (favor_goal_symbols goal_symbols, 1)
     , (favor_initial, 3)
+    , (favor_free, 3)
     ]
 end
 
