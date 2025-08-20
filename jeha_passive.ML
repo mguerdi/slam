@@ -96,7 +96,7 @@ struct
     (* FIXME: not the favor_goal from zip, which requires tracking distance to negated conjecture *)
     , (favor_goal_symbols goal_symbols, 1)
     , (favor_initial, 3)
-    , (favor_free, 3)
+    , (favor_free, 1)
     ]
 end
 
