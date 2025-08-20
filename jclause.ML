@@ -36,6 +36,8 @@ sig
   val delete_lits_at : Proof.context -> cpos list -> T -> T
   val filter_out_lits : Proof.context -> (JLit.T -> bool) -> T -> T
   val length : T -> int
+  val length_positive : T -> int
+  val length_negative : T -> int
   val of_term : Proof.context -> term * int -> T
   val term_of : T -> term
   val pretty_clause : Proof.context -> T -> string
@@ -307,6 +309,12 @@ fun filter_out_lits ctxt f clause =
   |> set_maxidx (maxidx clause)
 
 val length = List.length o literals
+
+fun length_positive c =
+  fold (fn lit => if JLit.is_positive lit then curry (op+) 1 else I) (literals c) 0
+
+fun length_negative c =
+  fold (fn lit => if JLit.is_negative lit then curry (op+) 1 else I) (literals c) 0
 
 fun pretty_clause' ctxt c =
   let

@@ -111,6 +111,22 @@ fun subsumption_sort lits =
     lits_sorted 
   end
 
+(* from Zipperposition SolidSubsumption.ml *)
+fun check_subsumption_possibility ctxt (c, d) maxidx =
+  let
+    val (neg_c, neg_d) = apply2 JClause.length_negative (c, d)
+    val (pos_c, pos_d) = apply2 JClause.length_positive (c, d)
+    val (c_lits, d_lits) = apply2 JClause.literals (c, d)
+    fun lit_can_match_some c_lit =
+      exists
+        (fn d_lit => is_some (Seq.pull (Jeha_Unify.literal_matchers ctxt maxidx (c_lit, d_lit))))
+        d_lits
+  in
+  neg_c <= neg_d
+  andalso pos_c <= pos_d
+  andalso (not (neg_d >=3 orelse pos_d >= 3) orelse forall lit_can_match_some c_lits)
+  end
+
 fun subsumes ctxt (c, d) =
   let
     (* make vars of c (the pattern) distinct from those of d *)
@@ -122,8 +138,10 @@ fun subsumes ctxt (c, d) =
     (* to ensure generate variables are fresh w.r.t. both clauses *)
     val maxidx = JClause.maxidx_of2 (c, d)
     (* val _ = writeln ("check if " ^ JClause.pretty_clause (Context.the_proof ctxt) c ^ " subsumes " ^ JClause.pretty_clause (Context.the_proof ctxt) d) *)
+  in
+  if not (check_subsumption_possibility ctxt (c, d) maxidx) then false else
+  let
     val (c_lits, d_lits) = apply2 JClause.literals (c, d)
-
     fun to_fixedT (TVar ((name, index), S)) = TFree ("?'" ^ name ^ @{make_string} index, S)
       | to_fixedT T = T
     fun to_fixed (Var ((name, index), T)) = Free ("?" ^ name ^ @{make_string} index, T)
@@ -134,6 +152,7 @@ fun subsumes ctxt (c, d) =
     val (c_lits_sorted, d_lits_sorted) = apply2 subsumption_sort (c_lits, d_lits)
   in
     impl_subsumes ctxt maxidx (c_lits_sorted, d_lits_sorted)
+  end
   end
 
 end;
