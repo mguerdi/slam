@@ -27,6 +27,7 @@ sig
   (* axioms *)
   | Ext
   | NegExt of { premise: 'a, literal: JClause_Pos.cpos, skolems: (term * term * term) list }
+  | NegCongFun of { premise: 'a, literal: JClause_Pos.cpos, number_of_new_lits: int }
   | Choice
   (* simplification *)
   (* FIXME: | DeleteDuplicatedLits of { premise: 'a, left_literal: JClause_Pos.cpos, right_literal: JClause_Pos.cpos, substitution: Envir.env } *)
@@ -86,6 +87,7 @@ datatype 'a inference =
   (** axioms **)
   | Ext
   | NegExt of { premise: 'a, literal: JClause_Pos.cpos, skolems: (term * term * term) list }
+  | NegCongFun of { premise: 'a, literal: JClause_Pos.cpos, number_of_new_lits: int }
   | Choice
   (** simplification **)
   | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos, orientation: JLit.lpos } list }
@@ -125,6 +127,7 @@ fun premises (Axiom _) = []
   | premises (FluidLoobHoist { premise, ... }) = [premise]
   | premises Ext = error "Ext undefined"
   | premises (NegExt { premise, ...}) = [premise]
+  | premises (NegCongFun { premise, ... }) = [premise]
   | premises Choice = error "Choice undefined"
   | premises (DeleteDuplicatedLits { premise, ... }) = [premise]
   | premises (DeleteResolvedLits { premise, ... }) = [premise]
@@ -136,6 +139,7 @@ fun premises (Axiom _) = []
   | premises (SimpBoolRw { premise, ...}) = [premise]
   | premises (SimpFalseElim { premise, ... }) = [premise]
   | premises Invalid = error "\"Invalid\" inference encountered"
+  | premises _ = error "Jeha_Log.premises: unimplemented"
 
 fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_premise, substitution, ... })
       = [{ id = left_premise, shift = left_premise_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = substitution }]
@@ -258,6 +262,7 @@ fun name_of (Axiom _) = "Axiom"
   | name_of (FluidLoobHoist _) = "FluidLoobHoist" 
   | name_of Ext = "Ext" 
   | name_of (NegExt _) = "NegExt"
+  | name_of (NegCongFun _) = "NegCongFun"
   | name_of Choice = "Choice" 
   | name_of (DeleteDuplicatedLits _) = "DeleteDuplicatedLits" 
   | name_of (DeleteResolvedLits _) = "DeleteResolvedLits" 
@@ -273,6 +278,7 @@ fun name_of (Axiom _) = "Axiom"
   | name_of (SimpBoolRw _) = "SimpBoolRw"
   | name_of (SimpFalseElim _) = "SimpFalseElim" 
   | name_of Invalid = "Invalid" 
+  | name_of _ = error "Jeha_Log.name_of: unimplemented"
 
 fun pretty ctxt inference = case inference of
     Axiom { thm = thm } => "Axiom:" ^ Thm.string_of_thm ctxt thm (* shows hyps *)
