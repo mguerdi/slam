@@ -1786,6 +1786,47 @@ fun infer_neg_ext ctxt c cpos =
     [new_clause]
   end end end end
 
+(* FIXME: maximal context *)
+(* C \<or> f t\<^sub>1 \<dots> t\<^sub>n \<noteq> f s\<^sub>1 \<dots> s\<^sub>n *)
+(* --------------------------- *)
+(* C \<or> t\<^sub>1 \<noteq> s\<^sub>1 \<or> \<dots> \<or> t\<^sub>n \<noteq> s\<^sub>n *)
+fun infer_neg_cong_fun ctxt c cpos =
+  let
+    val tracer = mk_tracer ctxt Jeha_Common.trace_msg_neg_cong_fun "NegCongFun"
+    fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", literal: " ^ @{make_string} cpos)
+  in
+  if not (JClause.is_eligible_cpos c cpos) then fail [] (K "literal not eligible") else
+  let val lit = JClause.lit_at cpos c in
+  if JLit.is_positive lit then fail [] (K "not a negative literal") else
+  let
+    val (f_ss, g_ts, false) = lit
+    val ((f, ss), (g, ts)) = apply2 strip_comb (f_ss, g_ts)
+  in
+  if not (f aconv g) then fail [] (K "unequal heads") else
+  let val () = \<^assert> (length ss = length ts) in
+  if not (exists JTerm.has_functional_type ss) then fail [] (K "no argument has functional type") else
+  let
+    val disj_pairs = map (uncurry JLit.mk_neq) (ss ~~ ts)
+  in
+    c
+    |> JClause.delete_lit_at ctxt cpos
+    |> fold (JClause.add_literal ctxt) disj_pairs
+    |> JClause.norm_beta_eta_qeta ctxt
+    |> JClause.norm_negative_predicate_literals ctxt
+    |> JClause.recompute_selected ctxt
+    |> JClause.set_maxidx (JClause.maxidx c)
+    |> JClause.refresh_id ()
+    |> JClause.set_origin ctxt
+        (Jeha_Log.NegCongFun
+          { premise = JClause.id c
+          , literal = cpos
+          , number_of_new_lits = length disj_pairs
+          })
+    |> trace_concl ctxt tracer
+    |> single
+  end end end end end
+
 (** Saturation Loop **)
 
 (* FIXME: make sure to include given_clause itself in simplificatons unless it's redundant *)
@@ -2052,7 +2093,7 @@ fun infer_clauses ctxt active given_clause green_index =
       maps (fn c => map (pair c) (JClause.green_full_poss_of c)) active_list
     val eq_target_pairs =
       Jeha_Common.cartesian_product eqs_active targets_given
-    (* for ERes, EFact *)
+    (* for ERes, EFact, NegExt, NegCongFun *)
     val given_clause_cposs = JClause.cposs_of given_clause
     val given_clause_lpos_cpos_pairs =
       Jeha_Common.cartesian_product [JLit.Left, JLit.Right] given_clause_cposs
@@ -2089,6 +2130,10 @@ fun infer_clauses ctxt active given_clause green_index =
     , ( Jeha_Common.rule_neg_ext
       , Jeha_Common.trace_neg_ext
       , (fn _ => (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
+      )
+    , ( Jeha_Common.rule_neg_cong_fun
+      , Jeha_Common.trace_neg_cong_fun
+      , (fn _ => (maps (infer_neg_cong_fun ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_bool_hoist
       , Jeha_Common.trace_bool_hoist

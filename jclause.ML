@@ -95,6 +95,7 @@ sig
   val recompute_selected : Proof.context -> T -> T
   (* Debuggging *)
   val is_eligible_tpos : term -> JTerm.tpos -> bool
+  val check_clause : Proof.context -> T -> unit
 end;
 
 structure JClause : JCLAUSE =

@@ -37,14 +37,14 @@ lemma "(\<Sum>i\<in>A. (\<Sum>j\<in>A. f i j + g i j)) = (\<Sum>i\<in>A. \<Sum>j
 
   (* This would easily work with NegCongFun. *)
   (* But: How would it ever work without? FluidSup? Ext? *)
-  (* using sum.distrib by jeha *)
-  sorry
+  using sum.distrib [[jeha_trace, jeha_trace_forward_simp=false, jeha_trace_neg_cong_fun, jeha_debug_check_clauses]] by jeha
+  (* sorry *)
 
 lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j) + h i)
       = (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j) * (\<Prod>j\<in>B. g i j)) + (\<Sum>i\<in>A. h i)"
   (* by (metis (mono_tags, lifting) prod.cong prod.distrib sum.cong sum.distrib) *)
   (* This would easily work with NegCongFun. *)
-  (* using prod.distrib sum.distrib [[jeha_trace, jeha_trace_forward_simp=false]] by jeha *)
+  using prod.distrib sum.distrib [[jeha_trace, jeha_trace_forward_simp=false]] by jeha
   sorry
 
 lemma " P (\<Sum>i\<in>A. f i + h i + g i) (\<Prod>j\<in>B. f j * g j)

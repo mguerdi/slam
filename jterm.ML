@@ -48,6 +48,7 @@ sig
   val make_choice_witness : term -> term -> term
   val pretty_subterm : Proof.context -> term -> tpos -> string
   val pretty_subterm' : Proof.context -> term -> tpos -> Pretty.T
+  val has_functional_type : term -> bool
 end;
 
 structure JTerm : JTERM =
@@ -604,5 +605,15 @@ fun pretty_subterm' ctxt t p =
   end
 
 val pretty_subterm = Pretty.string_of ooo pretty_subterm'
+
+fun has_functional_type t =
+  let
+    val T = fastype_of t
+  in
+    case T of
+      (TVar _) => true
+    | (Type (\<^type_name>\<open>fun\<close>, _)) => true
+    | _ => false
+  end
 
 end;

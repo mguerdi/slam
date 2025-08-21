@@ -33,6 +33,7 @@ sig
   val trace_forall_rw : bool Config.T
   val trace_exists_rw : bool Config.T
   val trace_neg_ext : bool Config.T
+  val trace_neg_cong_fun : bool Config.T
   val trace_delete_duplicated_lits : bool Config.T
   val trace_delete_resolved_lits : bool Config.T
   val trace_rewrite_positive_lits : bool Config.T
@@ -78,6 +79,7 @@ sig
   val trace_msg_forall_rw : Proof.context -> (unit -> string) -> unit
   val trace_msg_exists_rw : Proof.context -> (unit -> string) -> unit
   val trace_msg_neg_ext : Proof.context -> (unit -> string) -> unit
+  val trace_msg_neg_cong_fun : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_duplicated_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_resolved_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_rewrite_positive_lits : Proof.context -> (unit -> string) -> unit
@@ -139,6 +141,7 @@ sig
   val rule_fluid_loob_ho : bool Config.T
   val rule_ext : bool Config.T
   val rule_neg_ext : bool Config.T
+  val rule_neg_cong_fun : bool Config.T
   val rule_choice : bool Config.T
   (* simplifications *)
   val rule_delete_duplicated_lits : bool Config.T
@@ -216,6 +219,7 @@ val trace_bool_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_bool_r
 val trace_forall_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_forall_rw\<close> (K false)
 val trace_exists_rw = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_exists_rw\<close> (K false)
 val trace_neg_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_neg_ext\<close> (K false)
+val trace_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_neg_cong_fun\<close> (K false)
 val trace_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_delete_duplicated_lits\<close> (K false)
 val trace_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_delete_resolved_lits\<close> (K false)
 val trace_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_trace_rewrite_positive_lits\<close> (K false)
@@ -270,6 +274,7 @@ fun trace_msg_bool_rw ctxt msg = if Config.get ctxt trace_bool_rw then trace_msg
 fun trace_msg_forall_rw ctxt msg = if Config.get ctxt trace_forall_rw then trace_msg ctxt msg else ();
 fun trace_msg_exists_rw ctxt msg = if Config.get ctxt trace_exists_rw then trace_msg ctxt msg else ();
 fun trace_msg_neg_ext ctxt msg = if Config.get ctxt trace_neg_ext then trace_msg ctxt msg else ();
+fun trace_msg_neg_cong_fun ctxt msg = if Config.get ctxt trace_neg_cong_fun then trace_msg ctxt msg else ();
 fun trace_msg_delete_duplicated_lits ctxt msg = if Config.get ctxt trace_delete_duplicated_lits then trace_msg ctxt msg else ();
 fun trace_msg_delete_resolved_lits ctxt msg = if Config.get ctxt trace_delete_resolved_lits then trace_msg ctxt msg else ();
 fun trace_msg_rewrite_positive_lits ctxt msg = if Config.get ctxt trace_rewrite_positive_lits then trace_msg ctxt msg else ();
@@ -339,6 +344,7 @@ val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>jeha_rule
 val rule_fluid_loob_ho = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_fluid_loob_hoist\<close> (K rule_default)
 val rule_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_ext\<close> (K rule_default)
 val rule_neg_ext = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neg_ext\<close> (K rule_default)
+val rule_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_neg_cong_fun\<close> (K rule_default)
 val rule_choice = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_choice\<close> (K rule_default)
 (* simplifications *)
 val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>jeha_rule_delete_duplicated_lits\<close> (K rule_default)
