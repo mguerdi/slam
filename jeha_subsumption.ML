@@ -127,6 +127,7 @@ fun check_subsumption_possibility ctxt (c, d) maxidx =
   andalso (not (neg_d >=3 orelse pos_d >= 3) orelse forall lit_can_match_some c_lits)
   end
 
+(* FIXME: include >_size from "Superposition with Lambdas" *)
 fun subsumes ctxt (c, d) =
   let
     (* make vars of c (the pattern) distinct from those of d *)
