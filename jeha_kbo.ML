@@ -1,6 +1,7 @@
 signature KBO_TERM =
 sig
 
+  (* FIXME: get rid of boundTs *)
   type kbo_term = { boundTs : typ list, below_lam : bool, term : term }
 
   val to_kbo_term : term -> kbo_term
@@ -337,28 +338,11 @@ fun eq_tvar_tfree (x_name, x_sort) (y_name, y_sort) =
       error ("same name but different sorts:" ^
         @{make_string} (x_name, x_sort) ^ " and " ^ @{make_string} (y_name, y_sort)))
 
-(* based on aconv from term.ML, compare KBOTermKey.ord *)
-fun aconv_bound smallestFree boundTs1 tm1 boundTs2 tm2 =
-  pointer_eq (tm1, tm2) orelse
-    (case (tm1, tm2) of
-      (t1 $ u1, t2 $ u2) =>
-        aconv_bound smallestFree boundTs1 t1 boundTs2 t2
-          andalso aconv_bound smallestFree boundTs1 u1 boundTs2 u2
-    | (Abs (_, T1, t1), Abs (_, T2, t2)) =>
-        aconv_bound (smallestFree + 1) boundTs1 t1 boundTs2 t2 andalso T1 = T2
-    | (Bound i, Bound j) =>
-        i = j andalso
-          (i < smallestFree (* bound *)
-            (* FIXME: cache the results of this comparison for each loose bound var *)
-            orelse nth boundTs1 (i - smallestFree) = nth boundTs2 (j - smallestFree))
-    | (a1, a2) => a1 = a2);
-
-(* aconv is not sufficent, we need aconv in a bound context *)
 fun eq_fluid_or_var
   { boundTs = x_boundTs, below_lam = x_below_lam, term = x_term }
   { boundTs = y_boundTs, below_lam = y_below_lam, term = y_term }
 =
-  x_below_lam = y_below_lam andalso aconv_bound 0 x_boundTs x_term y_boundTs y_term
+  x_below_lam = y_below_lam andalso x_term aconv y_term
 
 open Jeha_Weight
 
