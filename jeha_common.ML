@@ -374,7 +374,7 @@ fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
 val arg_cong_extra_conclusions = Attrib.setup_config_int \<^binding>\<open>jeha_arg_cong_extra_conclusions\<close> (K 2)
 fun get_arg_cong_extra_conclusions ctxt = Config.get ctxt arg_cong_extra_conclusions
 
-val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>jeha_select_negativoid\<close> (K true)
+val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>jeha_select_negativoid\<close> (K false)
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>jeha_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>jeha_literal_selection_function\<close> (K "select_first_neg_lit")
 
@@ -400,6 +400,10 @@ fun validate_config ctxt =
   let
     val _ = get_proof_reconstruction_mode ctxt
     val _ = get_sup_variable_condition ctxt
+    val () =
+      if Config.get ctxt select_negativoid
+        then warning "jeha_select_negativoid breaks JClause.potentially_eligible_positive_cposs"
+        else ()
   in
     ()
   end
