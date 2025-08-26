@@ -528,7 +528,7 @@ In practice the o\<lambda>Sup paper only ever asks for strict eligibility of pos
 fun is_eligible_cpos c cpos =
   let
     val literals = literals c
-    val literal = nth literals cpos
+    val literal = nth literals cpos (* FIXME: use lit_at *)
     val strict = JLit.is_positive literal
     val selected = selected c
   in
@@ -539,23 +539,17 @@ fun is_eligible_cpos c cpos =
 
 fun potentially_eligible_cposs_of c =
   if selected c = []
-    then cposs_of c
+    then cposs_of c (* FIXME: only consider potentially maximal literals *)
     else selected c
 
 fun potentially_eligible_positive_cposs_of c =
-  if selected c = []
-    then positive_cposs_of c
-    else []
+  (* Note: this returns in particular selected positive negativoid literals. *)
+  filter (fn cp => JLit.is_positive (lit_at cp c)) (potentially_eligible_cposs_of c)
 
-fun is_potentially_eligible_cpos c cpos =
-  if selected c = []
-    then true
-    else member (op=) (selected c) cpos
+fun is_potentially_eligible_cpos c = member (op=) (potentially_eligible_cposs_of c)
 
-fun is_potentially_eligible_positive_cpos c cpos =
-  if selected c = []
-    then JLit.is_positive (lit_at cpos c)
-    else false
+fun is_potentially_eligible_positive_cpos c =
+  member (op=) (potentially_eligible_positive_cposs_of c)
 
 fun is_eligible_full_pos c (tpos, lpos, cpos) =
   let
