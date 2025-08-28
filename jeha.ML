@@ -837,7 +837,9 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     val u = JClause.subterm_at_full_pos c u_pos
   in
     if not is_pos_eq then fail [] (K "not positive") else
+    (* FIXME: put back in!!
     if JTerm.might_be_fluid u then fail [] (K "might be fluid") else (* 1 *)
+    *)
     if is_Var u andalso JClause.occurs_deeply u c then fail [] (K "deeply occuring var") else (* 2 *)
     (* FIXME: 3. variable condition ... *)
     let
