@@ -847,10 +847,10 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     val u = JClause.subterm_at_full_pos c u_pos
   in
     if not is_pos_eq then fail [] (K "not positive") else
-    if (Config.get ctxt Jeha_Common.sup_into_fluid orelse JTerm.might_be_fluid u)
+    if (not (Config.get ctxt Jeha_Common.sup_into_fluid) andalso JTerm.might_be_fluid u)
       then fail [] (K "might be fluid") else (* 1 *)
-    if (Config.get ctxt Jeha_Common.sup_into_deeply_occuring
-        orelse (is_Var u andalso JClause.occurs_deeply u c))
+    if (not (Config.get ctxt Jeha_Common.sup_into_deeply_occuring)
+        andalso (is_Var u andalso JClause.occurs_deeply u c))
       then fail [] (K "deeply occuring var") else (* 2 *)
     case variable_condition ctxt u of SOME msg => fail [] (K msg) | NONE =>
     let
