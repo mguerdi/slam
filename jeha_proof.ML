@@ -1130,7 +1130,8 @@ fun reconstruct_manual
   let
     val clauses =
       toposort_clauses clause_db id
-      |> (fn x => (Jeha_Common.trace_msg ctxt (fn () => "RECONSTRUCTION sorted clauses" ^ @{make_string} x); x))
+      |> (fn x => (Jeha_Common.trace_msg ctxt (fn () =>
+        "RECONSTRUCTION sorted clauses: " ^ space_implode ", " (map @{make_string} x)); x))
       |> map clause_db
     fun replay_and_insert clause (reconstructed_clause_db : HClause.hthm Inttab.table) =
       let
