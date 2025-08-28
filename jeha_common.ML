@@ -172,6 +172,10 @@ sig
   datatype sup_variable_condition = None | FirstOrder | Approximate
   val get_sup_variable_condition : Proof.context -> sup_variable_condition
 
+  (* These cases would normally be handled by FluidSup *)
+  val sup_into_fluid : bool Config.T
+  val sup_into_deeply_occuring : bool Config.T
+
   val unify_search_bound : int Config.T
   val unify_timeout_ms : int Config.T
   val supress_unify_trace : bool Config.T
@@ -395,6 +399,10 @@ fun parse_sup_variable_condition "none" = None
       ^ " (must be either of \"none\", \"first_order\" or \"approximate\")")
 
 fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
+
+val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>jeha_sup_into_fluid\<close> (K true)
+
+val sup_into_deeply_occuring = Attrib.setup_config_bool \<^binding>\<open>jeha_sup_into_deeply_occuring\<close> (K true)
 
 fun validate_config ctxt =
   let
