@@ -822,6 +822,16 @@ fun impl_infer_sup precheck ctxt (d, (lp, cp), (c, u_pos)) =
   end
 *)
 
+fun variable_condition ctxt u =
+  case Jeha_Common.get_sup_variable_condition ctxt of
+    Jeha_Common.None => NONE
+  | Jeha_Common.FirstOrder =>
+      if JTerm.is_variable_headed u
+        then SOME "u is variable headed"
+        else NONE
+  | Jeha_Common.Approximate =>
+      error "approximate sup variable condition unimplemented"
+
 (* Sup inference *)
 fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
   let
@@ -839,7 +849,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     if not is_pos_eq then fail [] (K "not positive") else
     if JTerm.might_be_fluid u then fail [] (K "might be fluid") else (* 1 *)
     if is_Var u andalso JClause.occurs_deeply u c then fail [] (K "deeply occuring var") else (* 2 *)
-    (* FIXME: 3. variable condition ... *)
+    case variable_condition ctxt u of SOME msg => fail [] (K msg) | NONE =>
     let
       val () = tracer (fn () =>
         Jeha_Common.pretty_term ctxt t ^ " ?= " ^ Jeha_Common.pretty_term ctxt u)
@@ -1124,16 +1134,6 @@ fun infer_arg_cong ctxt c cpos =
   end
   end
 
-fun variable_condition ctxt u =
-  case Jeha_Common.get_sup_variable_condition ctxt of
-    Jeha_Common.None => NONE
-  | Jeha_Common.FirstOrder =>
-      if JTerm.is_variable_headed u
-        then SOME "u is variable headed"
-        else NONE
-  | Jeha_Common.Approximate =>
-      error "approximate sup variable condition unimplemented"
-
 fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
   let
     val tracer = mk_tracer ctxt Jeha_Common.trace_msg_bool_hoist "BoolHoist"
@@ -1157,7 +1157,6 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
         val unifier = Envir.Envir { maxidx = maxidx, tenv = Vartab.empty, tyenv = unifier }
       in
         if JTerm.is_variable_headed u (* 2. *) then fail [] (K "u variable headed") else
-        case variable_condition ctxt u of SOME msg => fail [] (K msg) | NONE =>
         if JClause.is_position_of_fully_applied_logical_symbol u_pos c (* 2. *) then
           fail [] (K "u is a fully applied logical symbol") else
         if not u_eligible (* 3. *) then fail [] (K "u not eligible") else
