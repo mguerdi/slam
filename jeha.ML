@@ -1785,7 +1785,7 @@ fun infer_neg_ext ctxt c cpos =
 (* FIXME: maximal context *)
 (* C \<or> f t\<^sub>1 \<dots> t\<^sub>n \<noteq> f s\<^sub>1 \<dots> s\<^sub>n *)
 (* --------------------------- *)
-(* C \<or> t\<^sub>1 \<noteq> s\<^sub>1 \<or> \<dots> \<or> t\<^sub>n \<noteq> s\<^sub>n *)
+(* C \<or> t\<^sub>n \<noteq> s\<^sub>n \<or> \<dots> \<or> t\<^sub>1 \<noteq> s\<^sub>1 *)
 fun infer_neg_cong_fun ctxt c cpos =
   let
     val tracer = mk_tracer ctxt Jeha_Common.trace_msg_neg_cong_fun "NegCongFun"

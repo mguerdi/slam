@@ -107,6 +107,12 @@ sig
        , literal: JClause.cpos
        , skolems: (term * term * term) list }
     -> HClause.hthm
+  val reconstruct_neg_cong_fun:
+    Proof.context
+    -> { premise: HClause.hthm
+       , literal: JClause.cpos
+       , number_of_new_lits: int }
+    -> HClause.hthm
 end;
 
 structure Jeha_Proof : JEHA_PROOF =
@@ -826,6 +832,68 @@ fun reconstruct_neg_ext ctxt { premise, literal, skolems } =
   end
 (* Use Thm.instantiate and assume that P is Var (("P", 0), _) *)
 
+fun reconstruct_neg_cong_fun ctxt { premise, literal, number_of_new_lits } =
+  let
+    val (f1_ss, f2_ts, false)  = HClause.dest_lit_cterm_at literal premise
+    val n_args = length (#2 (Drule.strip_comb f1_ss))
+
+    (* The lemmas
+      f s\<^sub>1 \<dots> s\<^sub>n\<^sub>-\<^sub>1 = f t\<^sub>1 \<dots> t\<^sub>n\<^sub>-\<^sub>1 \<Longrightarrow> s\<^sub>n = t\<^sub>n \<Longrightarrow> f s\<^sub>1 \<dots> s\<^sub>n = f t\<^sub>1 \<dots> t\<^sub>n
+    for decreasing values of n. *)
+    val (f1, f2, partial_apps_lemmas) =
+      fold
+        (fn _ => fn (l, r, lemmas) =>
+          let
+            val ((f, x), (g, y)) = apply2 Thm.dest_comb (l, r)
+            val aT = Thm.ctyp_of_cterm x
+            val bT = Thm.ctyp_of_cterm l
+            val lemma =
+              \<^instantiate>\<open>'a = aT and 'b = bT and f and g and x and y in lemma
+                \<open>f = g \<Longrightarrow> (x :: 'a) = y \<Longrightarrow> (f x :: 'b) = g y\<close> by auto
+              \<close>
+          in
+            ( f
+            , g
+            , lemma :: lemmas)
+          end)
+        (1 upto n_args)
+        (f1_ss, f2_ts, [])
+      |> (fn (f, g, lemmas) => (f, g, rev lemmas))
+
+    val () = if not (f1 aconvc f2) then
+      error ("reconstruct_neg_cong_fun: not identical functions: " ^
+        @{make_string} (Thm.term_of f1) ^ " and " ^ @{make_string} (Thm.term_of f2)) else ()
+    val fT = Thm.ctyp_of_cterm f1
+    (* reflexivity to get rid of the final f = f in
+      \<dots> \<Longrightarrow> f = f \<Longrightarrow> s\<^sub>1 = t\<^sub>1 \<Longrightarrow> \<dots> \<Longrightarrow> s\<^sub>n = t\<^sub>n \<Longrightarrow> \<dots> \<Longrightarrow> False
+    *)
+    val lemma2 = \<^instantiate>\<open>'a = fT and f = f1 in lemma \<open>(f :: 'a) = f\<close> by (rule HOL.refl)\<close>
+
+    (* \<dots> \<Longrightarrow> f = f \<Longrightarrow> s\<^sub>1 = t\<^sub>1 \<Longrightarrow> \<dots> \<Longrightarrow> s\<^sub>n = t\<^sub>n \<Longrightarrow> \<dots> \<Longrightarrow> False *)
+    val funs_equal_and_args_equal_imp_False =
+      fold
+        (fn lemma => fn th =>
+          HClause.comp_no_flatten_no_incr (HClause.of_lemma lemma, 2) (literal + 1) th)
+        partial_apps_lemmas
+        premise
+
+    (* \<dots> \<Longrightarrow> s\<^sub>1 = t\<^sub>1 \<Longrightarrow> \<dots> \<Longrightarrow> s\<^sub>n = t\<^sub>n \<Longrightarrow> \<dots> \<Longrightarrow> False *)
+    val args_equal_imp_False =
+      HClause.comp_no_flatten_no_incr
+        (HClause.of_lemma lemma2, 0)
+        (literal + 1)
+        funs_equal_and_args_equal_imp_False
+
+    (* move new negated literals to end of clause *)
+    val conclusion =
+      fold
+        (K (HClause.make_last literal))
+        (1 upto n_args)
+        args_equal_imp_False
+  in
+    conclusion
+  end
+
 (*
 (* FIXME: not needed right now *)
 fun instantiate_env (Envir.Envir { maxidx, tenv, tyenv }) =
@@ -1035,6 +1103,10 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
           reconstruct_neg_ext
             ctxt
             { premise = get_thm premise, literal = literal, skolems = skolems }
+      | Jeha_Log.NegCongFun { premise, literal, number_of_new_lits } =>
+          reconstruct_neg_cong_fun
+            ctxt
+            { premise = get_thm premise, literal = literal, number_of_new_lits = number_of_new_lits}
       (*
       | Jeha_Log.SyntacticTautologyDeletion1 { premise, literal, substitution } =>
           Jeha_Log.SyntacticTautologyDeletion1 { premise = f premise, literal = literal, substitution = substitution }
