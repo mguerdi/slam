@@ -69,11 +69,15 @@ def parse_time_ms(result_as_string):
 
 @total_ordering
 class Result:
-    def __init__(self, as_string):
+    def __init__(self, as_string, timeout_ms):
         self.as_string = as_string
         self.kind = ResultKind.from_string(as_string)
         if self.kind == ResultKind.SUCCESS:
-            self.time_ms = parse_time_ms(as_string)
+            time_ms = parse_time_ms(as_string)
+            if time_ms > timeout_ms:
+                self.kind = ResultKind.TIMEOUT
+            else:
+                self.time_ms = time_ms
 
     def is_failed(self):
         return self.kind == ResultKind.FAILED
@@ -96,7 +100,7 @@ class Result:
             return self.kind < other.kind
 
 
-def parse_file(filename):
+def parse_file(filename, timeout_ms):
     with open(filename) as f:
         s = f.read()
     lines = [
@@ -117,7 +121,7 @@ def parse_file(filename):
             method = "metis"
         else:
             raise RuntimeError("Line has neither jeha nor metis:\n" + line)
-        result = Result("(" + (tail.split("(")[-1]))
+        result = Result("(" + (tail.split("(")[-1]), timeout_ms)
         calls.append({"goal": goal, "method": method, "command": command, "result": result})
     return calls
 
@@ -276,6 +280,7 @@ if __name__ == "__main__":
         type=dir_path,
     )
     parser.add_argument("-p", "--plot", action="store_true", help="create plots")
+    parser.add_argument("-t", "--timeout-ms", type=int, default=4000, help="consider all calls above this threshold (in ms) as timeouts")
     args = parser.parse_args()
 
     if args.plot:
@@ -305,7 +310,7 @@ if __name__ == "__main__":
             commit = "UNKOWN_COMMIT"
         print(filename, commit)
         try:
-            calls = parse_file(filename)
+            calls = parse_file(filename, args.timeout_ms)
             summarize(calls, dirname + " " + commit, args.plot)
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
