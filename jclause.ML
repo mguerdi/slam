@@ -401,12 +401,12 @@ fun pretty_oriented' ctxt c (lp, cp) =
     fun term_of_lits [] = @{term False}
       | term_of_lits lits =
           let
-            val (x :: xs) = rev lits
+            val (term_of_last_lit :: terms_of_lits) = rev (map_index term_of_lit lits)
           in
             fold
               (curry HOLogic.mk_disj)
-              (map_index term_of_lit xs)
-              (term_of_lit (List.length lits - 1, x))
+              terms_of_lits
+              term_of_last_lit
           end
     val t = term_of_lits (literals c)
   in
