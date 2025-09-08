@@ -882,7 +882,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
               Jeha_Common.pretty_term ctxt t ^ " \<preceq> " ^ Jeha_Common.pretty_term ctxt t') else (* 5 *)
           if not u_eligible then fail NONE (K "u not eligible") else (* 6 *)
           (* according to the thesis, side condition 7 is skipped for performance reasons *)
-          if not (tt'_eligible ()) then fail NONE (K "t \<approx> t' not eligible") else (* 8 *)
+          if not (tt'_eligible ()) then fail NONE (fn () => ("t \<approx> t' not eligible in" ^ JClause.pretty_clause ctxt d)) else (* 8 *)
           (* FXIME 9. 10. *)
           JClause.combine ctxt (d' ()) (ct' ())
           |> JClause.norm_negative_predicate_literals ctxt
