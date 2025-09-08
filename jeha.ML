@@ -98,30 +98,32 @@ logically:
   outer_clausify maxidx b s c = clauses of (if b then s else \<not>s) \<or> c
 Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix
 of negations above and below) *)
-fun outer_clausify_non_quant ctxt maxidx b (@{term Not} $ s) c =
-      outer_clausify_non_quant ctxt maxidx (not b) s c
-  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
+(* fun outer_clausify_non_quant ctxt maxidx b (Const (@{const_name HOL.Not}, _) $ s) c = *)
+fun outer_clausify_non_quant _ ctxt maxidx b (@{term "HOL.Not"} $ s) c =
+      outer_clausify_non_quant true ctxt maxidx (not b) s c
+  | outer_clausify_non_quant _ ctxt _ b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
       then [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
       else
         [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
         , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
-  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
+  | outer_clausify_non_quant _ ctxt _ b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
       then
         [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
         , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
       else [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
-  | outer_clausify_non_quant ctxt maxidx b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
+  | outer_clausify_non_quant _ ctxt maxidx b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
-      outer_clausify_non_quant ctxt maxidx b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
+      outer_clausify_non_quant true ctxt maxidx b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
   (* FIXME: Making HO Sup work p.7 says: never simplify \<longleftrightarrow>. What does this mean
   concretely? (Isabelle represents \<longleftrightarrow> as HOL.eq) *)
-  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
+  | outer_clausify_non_quant _ ctxt _ b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
       [JClause.add_literal ctxt (s, t, b) c]
-  | outer_clausify_non_quant _ _ _ _ _ = []
+  | outer_clausify_non_quant true ctxt _ b t c = [JClause.add_literal ctxt (JLit.of_term_signed b t) c]
+  | outer_clausify_non_quant false _ _ _ _ _ = []
 
 
 fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
@@ -170,7 +172,7 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
           (Const (@{const_name HOL.All}, T) $ JTerm.negate_in_lambda P)
           c
   | outer_clausify ctxt maxidx b s c =
-      outer_clausify_non_quant ctxt maxidx b s c
+      outer_clausify_non_quant false ctxt maxidx b s c
       |> map (fn c => (c, NONE))
 
 (*** Rules ***)
@@ -741,7 +743,8 @@ fun simp_bool_outer_claus ctxt (c, i) =
 
     val lit = JClause.lit_at i c
   in
-  if not (JLit.is_pred lit) then fail [] (K "not a predicate literal") else
+  if not (JLit.is_pred lit) then
+    fail [] (fn () => "not a predicate literal: " ^ JLit.pretty_lit ctxt lit) else
   let
     val maxidx = JClause.maxidx c
     val (s, b) = lit |> JLit.dest_pred ||> ml_bool_of
@@ -751,7 +754,7 @@ fun simp_bool_outer_claus ctxt (c, i) =
   in
     if null clausified then
       (* in particular if head of s is not a logical symbol *)
-      fail [] (K "no clausification results") else
+      fail [] (fn () => "no clausification results for " ^ JLit.pretty_lit ctxt lit) else
     clausified
     |> map_index
       (fn (index, (clause, quant_info)) =>
