@@ -1920,6 +1920,20 @@ fun forward_simplify
               (if_cfg
                 Jeha_Common.rule_delete_resolved_lits
                 (Seq.single (simp_delete_resolved_lits ctxt))))
+        val neg_ext_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          if Config.get ctxt Jeha_Common.neg_ext_as_simpl
+            then
+              if_cfg
+                Jeha_Common.rule_neg_ext
+                (Seq.of_list (maps (infer_neg_ext ctxt c) (JClause.cposs_of c)))
+            else Seq.empty
+        val arg_cong_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          if Config.get ctxt Jeha_Common.arg_cong_as_simpl
+            then
+              if_cfg
+                Jeha_Common.rule_arg_cong
+                (Seq.of_list (maps (infer_arg_cong ctxt c) (JClause.cposs_of c)))
+            else Seq.empty
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
         [simp_fun_of_seq simp_bool_rewrites]
@@ -1929,7 +1943,9 @@ fun forward_simplify
         @ map simp_fun_of_seq
           ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
-          @ [dd_dr_rewrites] )
+          @ [dd_dr_rewrites]
+          @ [neg_ext_rewrites]
+          @ [arg_cong_rewrites] )
       end
     (* rewrite until not possible anymore *)
     val (simplifications, archive) =
@@ -2121,11 +2137,13 @@ fun infer_clauses ctxt active given_clause green_index =
       )
     , ( Jeha_Common.rule_arg_cong
       , Jeha_Common.trace_arg_cong
-      , (fn _ => (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
+      , (fn _ => if Config.get ctxt Jeha_Common.arg_cong_as_simpl then [] else
+          (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_neg_ext
       , Jeha_Common.trace_neg_ext
-      , (fn _ => (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
+      , (fn _ => if Config.get ctxt Jeha_Common.neg_ext_as_simpl then [] else
+          (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_neg_cong_fun
       , Jeha_Common.trace_neg_cong_fun
