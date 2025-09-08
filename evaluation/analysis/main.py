@@ -2,6 +2,9 @@ import argparse
 from enum import Enum, auto
 from functools import total_ordering
 import os
+import random
+import math
+import numpy as np
 
 
 def str_digits(s):
@@ -172,7 +175,7 @@ def get_call_by_goal(calls, goal):
     raise ValueError(f"No call with {goal} in calls.")
 
 
-def summarize(calls, label, plot):
+def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
     failed = [call for call in calls if call["result"].is_failed()]
     timed_out = [call for call in calls if call["result"].is_timeout()]
     success = [call for call in calls if call["result"].is_success()]
@@ -242,9 +245,50 @@ def summarize(calls, label, plot):
     )[:10]
     print('\n'.join(ten_easiest))
 
-    if plot:
+    if plot_cactus:
         plot_success_calls(metis_calls, jeha_calls, label)
 
+    both_success = list(set(metis_success).intersection(set(jeha_success)))
+    # get_call_by_goal(jeha_calls, goal)["result"].as_string + "\t\t" + goal
+    jeha_both_success_times = [get_call_by_goal(jeha_calls, goal)["result"].time_ms for goal in both_success]
+    metis_both_success_times = [get_call_by_goal(metis_calls, goal)["result"].time_ms for goal in both_success]
+
+    log_jeha_both_success_times = np.log(jeha_both_success_times)
+    log_metis_both_success_times = np.log(metis_both_success_times)
+    fit = np.polyfit(log_metis_both_success_times, log_jeha_both_success_times, 2)
+    print(f"\n\nPOLYFIT: {fit}\n\n")
+    def extrapolate(time):
+        return np.exp(fit[2]) * time**fit[1] * time**(fit[0]*np.log(time))
+
+    metis_success_jeha_fail_or_timeout_times = [get_call_by_goal(metis_calls, goal)["result"].time_ms for goal in metis_success_jeha_fail_or_timeout]
+    jeha_fake_long_times = len(metis_success_jeha_fail_or_timeout_times) * [8000.]
+    random.seed()
+    jeha_fake_random_times = [random.random() * 3000 + 10000 for _ in metis_success_jeha_fail_or_timeout_times]
+    # jeha_fake_extrapolated_times = [time**2.16 for time in metis_success_jeha_fail_or_timeout_times]
+    jeha_fake_extrapolated_times = [extrapolate(time) for time in metis_success_jeha_fail_or_timeout_times]
+
+    jeha_success_metis_fail_or_timeout_times = [get_call_by_goal(jeha_calls, goal)["result"].time_ms for goal in jeha_success_metis_fail_or_timeout]
+
+    # jeha_vs_metis_slowdown = [get_call_by_goal(jeha_calls, goal)["result"].time_ms / get_call_by_goal(metis_calls, goal)["result"].time_ms for goal in both_success]
+    # jeha_vs_metis_slowdown = sorted(jeha_vs_metis_slowdown)
+
+    max_time = max(np.max(jeha_both_success_times), np.max(metis_both_success_times))
+
+    hist_log_bins = np.logspace(np.log(1), np.log(max_time), 100)
+
+    if plot_scatter:
+        plt.scatter(metis_both_success_times, jeha_both_success_times, marker='.', label=label)
+        # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
+        # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_long_times, marker='x')
+        # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_random_times, marker='x')
+        plt.plot([0, max_time], [0, max_time], color='red', label='diagonal')
+        # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_extrapolated_times, marker='x')
+
+    if plot_hist:
+        plt.hist(metis_both_success_times, hist_log_bins, histtype='step', label=label + ' metis times (both successful)')
+        plt.hist(jeha_both_success_times, hist_log_bins, histtype='step', label=label + ' jeha times (both successful)')
+        plt.hist(metis_success_jeha_fail_or_timeout_times, hist_log_bins, histtype='step', label=label + ' metis times (only metis successful)')
+        plt.hist(jeha_success_metis_fail_or_timeout_times, hist_log_bins, histtype='step', label=label + ' jeha times (only jeha successful)')
 
 def plot_success_calls(metis_calls, jeha_calls, label):
     def plot_calls(calls, label):
@@ -279,11 +323,17 @@ if __name__ == "__main__":
         help="directory containing the files `commit` and `mirabelle.log`",
         type=dir_path,
     )
-    parser.add_argument("-p", "--plot", action="store_true", help="create plots")
+    parser.add_argument("-pc", "--plot-cactus", action="store_true", help="create cactus plot")
+    parser.add_argument("-ps", "--plot-scatter", action="store_true", help="create scatter plot")
+    parser.add_argument("-ph", "--plot-hist", action="store_true", help="create histograms")
     parser.add_argument("-t", "--timeout-ms", type=int, default=4000, help="consider all calls above this threshold (in ms) as timeouts")
     args = parser.parse_args()
 
-    if args.plot:
+
+    if sum(bool(arg) for arg in (args.plot_cactus, args.plot_scatter, args.plot_hist)) > 1:
+        raise RuntimeError("specify at most one of --plot-cactus, --plot-scatter and --plot-hist")
+
+    if args.plot_cactus or args.plot_scatter or args.plot_hist:
         from matplotlib import pyplot as plt
 
     if args.dir is not None:
@@ -311,13 +361,32 @@ if __name__ == "__main__":
         print(filename, commit)
         try:
             calls = parse_file(filename, args.timeout_ms)
-            summarize(calls, dirname + " " + commit, args.plot)
+            summarize(calls, dirname + " " + commit, args.plot_cactus, args.plot_scatter, args.plot_hist)
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
         print()
-    if args.plot:
+
+    if args.plot_cactus:
         plt.xlabel("time [ms]")
         plt.ylabel("problems solved (cumulative)")
         plt.legend()
         plt.title("metis vs. jeha")
+        plt.show()
+
+    if args.plot_scatter:
+        plt.xscale('log')
+        plt.yscale('log')
+
+        plt.xlabel("metis time [ms]")
+        plt.ylabel("jeha time [ms]")
+        plt.legend()
+        plt.title("metis vs. jeha times")
+        plt.show()
+
+    if args.plot_hist:
+        plt.xscale('log')
+        plt.xlabel('time [ms]')
+        plt.ylabel('count')
+        plt.legend()
+        plt.title('histograms')
         plt.show()
