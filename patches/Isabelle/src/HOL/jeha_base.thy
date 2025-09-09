@@ -55,6 +55,8 @@ ML_file \<open>Tools/Jeha/jeha_log.ML\<close>
 ML_file \<open>Tools/Jeha/jclause.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_argo.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_index.ML\<close>
+ML_file \<open>Tools/Jeha/jeha_isabelle_unify.ML\<close>
+ML_file \<open>Tools/Jeha/jeha_isabelle_more_unify.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_unify.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_subsumption.ML\<close>
 ML_file \<open>Tools/Jeha/jeha_simplify.ML\<close>
