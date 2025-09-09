@@ -98,30 +98,34 @@ logically:
   outer_clausify maxidx b s c = clauses of (if b then s else \<not>s) \<or> c
 Distribute the first logical symbol (\<and>, \<or>, \<longrightarrow>) over the clause (removing prefix
 of negations above and below) *)
-fun outer_clausify_non_quant ctxt maxidx b (@{term Not} $ s) c =
-      outer_clausify_non_quant ctxt maxidx (not b) s c
-  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
+(* fun outer_clausify_non_quant changed ctxt maxidx b (Const (@{const_name HOL.Not}, _) $ s) c = *)
+fun outer_clausify_non_quant _ ctxt maxidx b (@{term "HOL.Not"} $ s) c =
+      outer_clausify_non_quant { changed = true } ctxt maxidx (not b) s c
+  | outer_clausify_non_quant _ ctxt _ b (Const (@{const_name HOL.disj}, _) $ s $ t) c =
     if b
       then [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
       else
         [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
         , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
-  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
+  | outer_clausify_non_quant _ ctxt _ b (Const (@{const_name HOL.conj}, _) $ s $ t) c =
     if b
       then
         [ JClause.add_literal ctxt (JLit.of_term_signed b s) c
         , JClause.add_literal ctxt (JLit.of_term_signed b t) c
         ]
       else [fold (JClause.add_literal ctxt) [JLit.of_term_signed b s, JLit.of_term_signed b t] c]
-  | outer_clausify_non_quant ctxt maxidx b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
+  | outer_clausify_non_quant _ ctxt maxidx b (Const (@{const_name HOL.implies}, _) $ s $ t) c =
       (* rewrite as disjunction, additional not will be removed in JLit.mk_pred *)
-      outer_clausify_non_quant ctxt maxidx b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
+      outer_clausify_non_quant { changed = true } ctxt maxidx b (HOLogic.mk_disj (HOLogic.mk_not s, t)) c
   (* FIXME: Making HO Sup work p.7 says: never simplify \<longleftrightarrow>. What does this mean
   concretely? (Isabelle represents \<longleftrightarrow> as HOL.eq) *)
-  | outer_clausify_non_quant ctxt _ b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
+  | outer_clausify_non_quant _ ctxt _ b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
       [JClause.add_literal ctxt (s, t, b) c]
-  | outer_clausify_non_quant _ _ _ _ _ = []
+  | outer_clausify_non_quant { changed = true } ctxt _ b t c =
+      [JClause.add_literal ctxt (JLit.of_term_signed b t) c]
+  | outer_clausify_non_quant { changed = false } _ _ _ _ _ =
+      []
 
 
 fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
@@ -170,7 +174,7 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
           (Const (@{const_name HOL.All}, T) $ JTerm.negate_in_lambda P)
           c
   | outer_clausify ctxt maxidx b s c =
-      outer_clausify_non_quant ctxt maxidx b s c
+      outer_clausify_non_quant { changed = false } ctxt maxidx b s c
       |> map (fn c => (c, NONE))
 
 (*** Rules ***)
@@ -741,7 +745,8 @@ fun simp_bool_outer_claus ctxt (c, i) =
 
     val lit = JClause.lit_at i c
   in
-  if not (JLit.is_pred lit) then fail [] (K "not a predicate literal") else
+  if not (JLit.is_pred lit) then
+    fail [] (fn () => "not a predicate literal: " ^ JLit.pretty_lit ctxt lit) else
   let
     val maxidx = JClause.maxidx c
     val (s, b) = lit |> JLit.dest_pred ||> ml_bool_of
@@ -751,7 +756,7 @@ fun simp_bool_outer_claus ctxt (c, i) =
   in
     if null clausified then
       (* in particular if head of s is not a logical symbol *)
-      fail [] (K "no clausification results") else
+      fail [] (fn () => "no clausification results for " ^ JLit.pretty_lit ctxt lit) else
     clausified
     |> map_index
       (fn (index, (clause, quant_info)) =>
@@ -882,7 +887,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
               Jeha_Common.pretty_term ctxt t ^ " \<preceq> " ^ Jeha_Common.pretty_term ctxt t') else (* 5 *)
           if not u_eligible then fail NONE (K "u not eligible") else (* 6 *)
           (* according to the thesis, side condition 7 is skipped for performance reasons *)
-          if not (tt'_eligible ()) then fail NONE (K "t \<approx> t' not eligible") else (* 8 *)
+          if not (tt'_eligible ()) then fail NONE (fn () => ("t \<approx> t' not eligible in" ^ JClause.pretty_clause ctxt d)) else (* 8 *)
           (* FXIME 9. 10. *)
           JClause.combine ctxt (d' ()) (ct' ())
           |> JClause.norm_negative_predicate_literals ctxt
@@ -1785,7 +1790,7 @@ fun infer_neg_ext ctxt c cpos =
 (* FIXME: maximal context *)
 (* C \<or> f t\<^sub>1 \<dots> t\<^sub>n \<noteq> f s\<^sub>1 \<dots> s\<^sub>n *)
 (* --------------------------- *)
-(* C \<or> t\<^sub>1 \<noteq> s\<^sub>1 \<or> \<dots> \<or> t\<^sub>n \<noteq> s\<^sub>n *)
+(* C \<or> t\<^sub>n \<noteq> s\<^sub>n \<or> \<dots> \<or> t\<^sub>1 \<noteq> s\<^sub>1 *)
 fun infer_neg_cong_fun ctxt c cpos =
   let
     val tracer = mk_tracer ctxt Jeha_Common.trace_msg_neg_cong_fun "NegCongFun"
@@ -1920,6 +1925,20 @@ fun forward_simplify
               (if_cfg
                 Jeha_Common.rule_delete_resolved_lits
                 (Seq.single (simp_delete_resolved_lits ctxt))))
+        val neg_ext_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          if Config.get ctxt Jeha_Common.neg_ext_as_simpl
+            then
+              if_cfg
+                Jeha_Common.rule_neg_ext
+                (Seq.of_list (maps (infer_neg_ext ctxt c) (JClause.cposs_of c)))
+            else Seq.empty
+        val arg_cong_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          if Config.get ctxt Jeha_Common.arg_cong_as_simpl
+            then
+              if_cfg
+                Jeha_Common.rule_arg_cong
+                (Seq.of_list (maps (infer_arg_cong ctxt c) (JClause.cposs_of c)))
+            else Seq.empty
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
         [simp_fun_of_seq simp_bool_rewrites]
@@ -1929,7 +1948,9 @@ fun forward_simplify
         @ map simp_fun_of_seq
           ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
-          @ [dd_dr_rewrites] )
+          @ [dd_dr_rewrites]
+          @ [neg_ext_rewrites]
+          @ [arg_cong_rewrites] )
       end
     (* rewrite until not possible anymore *)
     val (simplifications, archive) =
@@ -2121,11 +2142,13 @@ fun infer_clauses ctxt active given_clause green_index =
       )
     , ( Jeha_Common.rule_arg_cong
       , Jeha_Common.trace_arg_cong
-      , (fn _ => (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
+      , (fn _ => if Config.get ctxt Jeha_Common.arg_cong_as_simpl then [] else
+          (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_neg_ext
       , Jeha_Common.trace_neg_ext
-      , (fn _ => (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
+      , (fn _ => if Config.get ctxt Jeha_Common.neg_ext_as_simpl then [] else
+          (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
       )
     , ( Jeha_Common.rule_neg_cong_fun
       , Jeha_Common.trace_neg_cong_fun

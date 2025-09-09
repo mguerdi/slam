@@ -172,6 +172,9 @@ sig
   datatype sup_variable_condition = None | FirstOrder | Approximate
   val get_sup_variable_condition : Proof.context -> sup_variable_condition
 
+  val arg_cong_as_simpl : bool Config.T
+  val neg_ext_as_simpl : bool Config.T
+
   (* These cases would normally be handled by FluidSup *)
   val sup_into_fluid : bool Config.T
   val sup_into_deeply_occuring : bool Config.T
@@ -403,6 +406,12 @@ fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get c
 val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>jeha_sup_into_fluid\<close> (K true)
 
 val sup_into_deeply_occuring = Attrib.setup_config_bool \<^binding>\<open>jeha_sup_into_deeply_occuring\<close> (K true)
+
+(* Note: disables ArgCong as an inference *)
+val arg_cong_as_simpl = Attrib.setup_config_bool \<^binding>\<open>jeha_arg_cong_as_simpl\<close> (K false)
+
+(* Note: disables NegExt as an inference *)
+val neg_ext_as_simpl = Attrib.setup_config_bool \<^binding>\<open>jeha_neg_ext_as_simpl\<close> (K false)
 
 fun validate_config ctxt =
   let
