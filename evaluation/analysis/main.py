@@ -289,15 +289,26 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
 
     max_time = max(np.max(jeha_both_success_times), np.max(metis_both_success_times))
 
-    hist_log_bins = np.logspace(np.log(1), np.log(max_time), 100)
+    hist_log_bins = np.logspace(np.log(1), np.log(max_time), num=50, base=np.e)
 
     if plot_scatter:
+        plt.rc("axes", axisbelow=True)
+        plt.grid(True, which="major", color="0.65")
+
         plt.scatter(metis_both_success_times, jeha_both_success_times, marker=".", label=label)
         # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
         # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_long_times, marker='x')
         # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_random_times, marker='x')
-        plt.plot([0, max_time], [0, max_time], color="red", label="diagonal")
+        
+        min_time_minus = .4
+        max_time_plus = max_time / .4
+
+        plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", label="diagonal")
         # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_extrapolated_times, marker='x')
+        plt.xlim(min_time_minus, max_time_plus)
+        plt.ylim(min_time_minus, max_time_plus)
+        print("MAX TIME", max_time)
+
 
     if plot_hist:
         plt.hist(
@@ -411,9 +422,9 @@ if __name__ == "__main__":
 
     if args.plot_cactus:
         plt.xlabel("time [ms]")
-        plt.ylabel("problems solved (cumulative)")
+        plt.ylabel("number of goals solved")
         plt.legend()
-        plt.title("metis vs. jeha")
+        # plt.title("metis vs. jeha")
         plt.show()
 
     if args.plot_scatter:
@@ -423,7 +434,7 @@ if __name__ == "__main__":
         plt.xlabel("metis time [ms]")
         plt.ylabel("jeha time [ms]")
         plt.legend()
-        plt.title("metis vs. jeha times")
+        # plt.title("metis vs. jeha times")
         plt.show()
 
     if args.plot_hist:
@@ -431,5 +442,5 @@ if __name__ == "__main__":
         plt.xlabel("time [ms]")
         plt.ylabel("count")
         plt.legend()
-        plt.title("histograms")
+        # plt.title("histograms")
         plt.show()
