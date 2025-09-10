@@ -158,10 +158,4 @@ val impl_literal_shallow_first_matchers = mk_impl_literal_matchers impl_shallow_
 fun literal_shallow_first_matchers ctxt =
   with_timeout ctxt oo impl_literal_shallow_first_matchers ctxt
 
-(* FIXME: hack for evaluation *)
-val smash_unifiers = shallow_first_smash_unifiers
-val matchers = shallow_first_matchers
-val literal_smash_unifiers = literal_shallow_first_smash_unifiers
-val literal_matchers = literal_shallow_first_matchers
-
 end
