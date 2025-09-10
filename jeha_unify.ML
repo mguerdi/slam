@@ -4,11 +4,17 @@ signature JEHA_UNIFY =
 sig
   (* from unify.ML *)
   val smash_unifiers: Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq
+  val shallow_first_smash_unifiers : Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq
   (* from more_unify.ML *)
   val matchers: Context.generic -> int -> (term * term) list -> Envir.env Seq.seq
+  val shallow_first_matchers: Context.generic -> int -> (term * term) list -> Envir.env Seq.seq
   (* unification and matching of (symmetric!) equality literals *)
   val literal_smash_unifiers : Context.generic -> (JLit.T * JLit.T) -> Envir.env -> Envir.env Seq.seq
+  val literal_shallow_first_smash_unifiers :
+    Context.generic -> (JLit.T * JLit.T) -> Envir.env -> Envir.env Seq.seq
   val literal_matchers :
+    Context.generic -> int -> (JLit.T * JLit.T) -> (JLit.lpos * Envir.env) Seq.seq
+  val literal_shallow_first_matchers :
     Context.generic -> int -> (JLit.T * JLit.T) -> (JLit.lpos * Envir.env) Seq.seq
 end
 
@@ -73,6 +79,13 @@ fun smash_unifiers ctxt tus env =
     |> with_timeout ctxt
   end
 
+(* Repeatedly call unification algorithm with increasing unification search bounds. *)
+fun shallow_first_smash_unifiers ctxt tus env =
+  (0 upto Config.get_generic ctxt Jeha_Common.unify_search_bound)
+  |> Seq.of_list
+  |> Seq.maps (fn search_bound =>
+    smash_unifiers (Config.put_generic Unify.search_bound search_bound ctxt) tus env)
+
 fun matchers ctxt maxidx pairs =
   let
     val maxidx = Int.max (maxidx, 0)
@@ -87,19 +100,34 @@ fun matchers ctxt maxidx pairs =
     |> with_timeout ctxt
   end
 
-fun literal_smash_unifiers ctxt ((s, t, b), (s', t', b')) env =
+(* Repeatedly call unification algorithm with increasing unification search bounds. *)
+fun shallow_first_matchers ctxt maxidx pairs =
+  (0 upto Config.get_generic ctxt Jeha_Common.unify_search_bound)
+  |> Seq.of_list
+  |> Seq.maps (fn search_bound =>
+    matchers (Config.put_generic Unify.search_bound search_bound ctxt) maxidx pairs)
+
+fun mk_literal_unifiers term_unifiers ctxt ((s, t, b), (s', t', b')) env =
   if not (b = b') then Seq.empty else
   Seq.interleave
     ( smash_unifiers ctxt [(s, s'), (t, t')] env
     , smash_unifiers ctxt [(s, t'), (t, s')] env )
 
-fun literal_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
+val literal_smash_unifiers = mk_literal_unifiers smash_unifiers
+
+val literal_shallow_first_smash_unifiers = mk_literal_unifiers shallow_first_smash_unifiers
+
+fun mk_literal_matchers term_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
   if not (b = b') then Seq.empty else
     ( [(s, s'), (t, t')]
     , [(s, t'), (t, s')] )
-    |> apply2 (matchers ctxt maxidx)
+    |> apply2 (term_matchers ctxt maxidx)
     |> (fn (left_matchers, right_matchers) =>
       (Seq.map (pair JLit.Left) left_matchers, Seq.map (pair JLit.Right) right_matchers))
     |> Seq.interleave
+
+val literal_matchers = mk_literal_matchers matchers
+
+val literal_shallow_first_matchers = mk_literal_matchers shallow_first_matchers
 
 end
