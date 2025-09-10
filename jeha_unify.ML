@@ -130,4 +130,10 @@ val literal_matchers = mk_literal_matchers matchers
 
 val literal_shallow_first_matchers = mk_literal_matchers shallow_first_matchers
 
+(* FIXME: hack for evaluation *)
+val smash_unifiers = shallow_first_smash_unifiers
+val matchers = shallow_first_matchers
+val literal_smash_unifiers = literal_shallow_first_smash_unifiers
+val literal_matchers = literal_shallow_first_matchers
+
 end
