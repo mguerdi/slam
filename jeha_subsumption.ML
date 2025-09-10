@@ -11,7 +11,7 @@ In the latter case backtrack to i <- i-1 and try the next l' for l\<^sub>i. *)
 signature JEHA_SUBSUMPTION =
 sig
   (* Extend environment to match second argument against third. *)
-  val literal_subsumes : Context.generic -> int -> (JLit.T * JLit.T) -> Envir.env option
+  val literal_subsumers : Context.generic -> int -> (JLit.T * JLit.T) -> Envir.env Seq.seq
   val subsumed_alternatives :
     Context.generic -> int -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
   (* Top level clause subsumption. *)
@@ -21,13 +21,16 @@ end;
 structure Jeha_Subsumption : JEHA_SUBSUMPTION =
 struct
 
-fun literal_subsumes ctxt maxidx ll' =
-  (* (writeln ("literals subumes:" ^ JLit.pretty_lit (Context.the_proof ctxt) (#1 ll') ^ " can match? " ^ JLit.pretty_lit (Context.the_proof ctxt) (#2 ll')); *)
-  case Seq.pull (Jeha_Unify.literal_matchers ctxt maxidx ll') of
-    NONE => (* (writeln "=> no"; *) NONE (* ) *)
-    (* throw away the others *)
-  | SOME ((_, env), _) => (* (writeln "=> yes"; *) SOME env (* ) *)
-  (* ) *)
+fun literal_subsumers ctxt maxidx ll' =
+  Seq.make (fn () =>
+    (* (writeln ("literals subumes:" ^ JLit.pretty_lit (Context.the_proof ctxt) (#1 ll') ^ " can match? " ^ JLit.pretty_lit (Context.the_proof ctxt) (#2 ll')); *)
+    case Seq.pull (Jeha_Unify.literal_matchers ctxt maxidx ll') of
+      NONE => (* (writeln "=> no"; *) NONE (* ) *)
+      (* throw away the others *)
+    | SOME ((lp, env), tail) => (* (writeln "=> yes"; *) SOME ((lp, env), tail) (* ) *)
+    (* ) *)
+  )
+  |> Seq.map #2
 
 (* all ways in which l can subsume a literal of d *)
 (* FIXME: lazify with make / pull if it isn't yet. *)
@@ -41,12 +44,14 @@ fun subsumed_alternatives ctxt maxidx (l, []) = Seq.empty
           |> subsumed_alternatives ctxt maxidx'
           (* d'' is d' but with one literal removed because it was subsumed by l *)
           |> Seq.map (fn (env, d'') => (env, l' :: d''))
+        val with_l' =
+          literal_subsumers ctxt maxidx (l, l')
+          |> Seq.take 2 (* FIXME: configurable? *)
+          |> Seq.map (fn env => (env, d'))
       in
-        case literal_subsumes ctxt maxidx (l, l') of
-          (* l can't subsume l' *)
-          NONE => skip_l' maxidx
-          (* l can subsume l', but still try the alternatives afterwards *)
-        | SOME env => Seq.cons (env, d') (skip_l' (Envir.maxidx_of env))
+        Seq.append
+          with_l'
+          (skip_l' (* FIXME: is this maxidx correct? *) maxidx)
       end
 
 (* read: "c subsumes d" *)
