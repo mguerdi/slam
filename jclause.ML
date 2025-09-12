@@ -93,6 +93,8 @@ sig
   val select_all_neg_lit : literal_selection_function
   val select_first_maximal_neg_lit : literal_selection_function
   val recompute_selected : Proof.context -> T -> T
+
+  val dist_to_neg_conj : T -> int
   (* Debuggging *)
   val is_eligible_tpos : term -> JTerm.tpos -> bool
   val check_clause : Proof.context -> T -> unit
@@ -112,6 +114,7 @@ type T =
   , origin: int Jeha_Log.inference
   , selected: cpos list
   (* , normalized: bool *)
+  , dist_to_neg_conj: int
   }
 
 type cpos = int
@@ -125,30 +128,30 @@ val maxidx = #maxidx
 
 val maxidx_of2 = Int.max o apply2 maxidx
 
-val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid, selected = [] }
+val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid, selected = [], dist_to_neg_conj = ~1 }
 
 (* NOTE: invalidates maxidx and selection *)
-fun map_literals f { literals, id, maxidx, origin, selected } =
-  { literals = f literals, id = id, maxidx = ~1, origin = origin, selected = [~1] }
+fun map_literals f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
+  { literals = f literals, id = id, maxidx = ~1, origin = origin, selected = [~1], dist_to_neg_conj = dist_to_neg_conj }
 
-fun unsafe_map_literals f { literals, id, maxidx, origin, selected } =
-  { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected }
+fun unsafe_map_literals f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
+  { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected, dist_to_neg_conj = dist_to_neg_conj }
 
 fun lit_at cp clause = nth (literals clause) cp
 
 fun dummy literals =
   map_literals (K literals) empty
 
-fun map_id f { literals, id, maxidx, origin, selected } =
-  { literals = literals, id = f id, maxidx = maxidx, origin = origin, selected = selected }
+fun map_id f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
+  { literals = literals, id = f id, maxidx = maxidx, origin = origin, selected = selected, dist_to_neg_conj = dist_to_neg_conj }
 
 fun refresh_id _ = map_id (K (JClause_Id.new ()))
 
 fun maxidx_of_literal_list ls =
   fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
 
-fun map_maxidx f { literals, id, maxidx, origin, selected } =
-  { literals = literals, id = id, maxidx = f maxidx, origin = origin, selected = selected }
+fun map_maxidx f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
+  { literals = literals, id = id, maxidx = f maxidx, origin = origin, selected = selected, dist_to_neg_conj = dist_to_neg_conj }
 
 fun set_maxidx maxidx = map_maxidx (K maxidx)
 
@@ -188,10 +191,21 @@ fun check_clause ctxt clause =
     check_type clause
   )
 
-fun set_origin ctxt origin { literals, id, maxidx, selected, ... } =
+fun set_origin ctxt origin { literals, id, maxidx, selected, dist_to_neg_conj, ... } =
   let
+    val dist_to_neg_conj =
+      case origin of
+        Jeha_Log.Axiom _ => 15 (* FIXME: should be Jeha_Passive.max_dist_to_neg_conj *)
+      | Jeha_Log.NegatedConjecture _ => 0
+      | _ => if Jeha_Log.is_simplification origin then dist_to_neg_conj else dist_to_neg_conj + 1
     val clause =
-      { literals = literals, id = id, maxidx = maxidx, selected = selected, origin = origin }
+      { literals = literals
+      , id = id
+      , maxidx = maxidx
+      , selected = selected
+      , origin = origin
+      , dist_to_neg_conj = dist_to_neg_conj
+      }
   in
     check_clause ctxt clause;
     clause
@@ -205,8 +219,14 @@ fun recalculate_maxidx clause =
 
 (* literal selection functions *)
 
-fun map_selected f { literals, id, maxidx, origin, selected } =
-  { literals = literals, id = id, maxidx = maxidx, origin = origin, selected = f selected }
+fun map_selected f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
+  { literals = literals
+  , id = id
+  , maxidx = maxidx
+  , origin = origin
+  , selected = f selected
+  , dist_to_neg_conj = dist_to_neg_conj
+  }
 
 fun set_selected selected = map_selected (K selected)
 
@@ -593,5 +613,7 @@ fun the_unit_lit c =
     else the_single (literals c)
 
 fun orient_unit lp = JLit.orient lp o the_unit_lit
+
+fun dist_to_neg_conj { dist_to_neg_conj, ... } = dist_to_neg_conj
 
 end;
