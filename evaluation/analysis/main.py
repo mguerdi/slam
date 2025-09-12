@@ -300,7 +300,7 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
         plt.rc("axes", axisbelow=True)
         plt.grid(True, which="major", color="0.65")
 
-        plt.scatter(metis_both_success_times, slam_both_success_times, marker=".", label=label)
+        plt.scatter(metis_both_success_times, slam_both_success_times, marker=".", label=label, s=1)
         # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_long_times, marker='x')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_random_times, marker='x')
@@ -378,6 +378,7 @@ if __name__ == "__main__":
     parser.add_argument("-pc", "--plot-cactus", action="store_true", help="create cactus plot")
     parser.add_argument("-ps", "--plot-scatter", action="store_true", help="create scatter plot")
     parser.add_argument("-ph", "--plot-hist", action="store_true", help="create histograms")
+    parser.add_argument("-s", "--save-plot", action="store_true", help="save plot to file")
     parser.add_argument(
         "-t",
         "--timeout-ms",
@@ -390,8 +391,26 @@ if __name__ == "__main__":
     if sum(bool(arg) for arg in (args.plot_cactus, args.plot_scatter, args.plot_hist)) > 1:
         raise RuntimeError("specify at most one of --plot-cactus, --plot-scatter and --plot-hist")
 
-    if args.plot_cactus or args.plot_scatter or args.plot_hist:
+    plot_any = args.plot_cactus or args.plot_scatter or args.plot_hist
+    if plot_any:
+        import matplotlib
         from matplotlib import pyplot as plt
+
+        plt.rc("axes", axisbelow=True)
+        rc_fonts = {
+            "font.family": "serif",
+            "font.size": 10,
+            'figure.figsize': (5, 3),
+            "text.usetex": True,
+            'text.latex.preamble':
+                r"""
+                \usepackage{libertine}
+                \usepackage[libertine]{newtxmath}
+                """,
+        }
+        matplotlib.rcParams.update(rc_fonts)
+        
+        plt.subplots(figsize=(4.5, 4.5)) # inches
 
     if args.dir is not None:
         if isinstance(args.dir, list):
@@ -418,8 +437,10 @@ if __name__ == "__main__":
         print(filename, commit)
         try:
             calls = parse_file(filename, args.timeout_ms)
+            label = dirname + " " + commit
+            # label = "commit " + commit
             summarize(
-                calls, dirname + " " + commit, args.plot_cactus, args.plot_scatter, args.plot_hist
+                calls, label, args.plot_cactus, args.plot_scatter, args.plot_hist
             )
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
@@ -430,7 +451,6 @@ if __name__ == "__main__":
         plt.ylabel("number of goals solved")
         plt.legend()
         # plt.title("metis vs. slam")
-        plt.show()
 
     if args.plot_scatter:
         plt.xscale("log")
@@ -440,7 +460,6 @@ if __name__ == "__main__":
         plt.ylabel("slam time [ms]")
         plt.legend()
         # plt.title("metis vs. slam times")
-        plt.show()
 
     if args.plot_hist:
         plt.xscale("log")
@@ -448,4 +467,9 @@ if __name__ == "__main__":
         plt.ylabel("count")
         plt.legend()
         # plt.title("histograms")
-        plt.show()
+
+    if plot_any:
+        if args.save_plot:
+            plt.savefig("plot.pdf")
+        else:
+            plt.show()
