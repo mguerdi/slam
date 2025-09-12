@@ -291,6 +291,11 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
 
     hist_log_bins = np.logspace(np.log(1), np.log(max_time), num=50, base=np.e)
 
+    metis_better = sum(1 for (metis_time, jeha_time) in zip(metis_both_success_times, jeha_both_success_times) if metis_time < jeha_time)
+    jeha_better = sum(1 for (jeha_time, metis_time) in zip(jeha_both_success_times, metis_both_success_times) if jeha_time < metis_time)
+    print("METIS BETTER:", metis_better)
+    print("JEHA BETTER:", jeha_better)
+
     if plot_scatter:
         plt.rc("axes", axisbelow=True)
         plt.grid(True, which="major", color="0.65")
