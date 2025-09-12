@@ -73,12 +73,28 @@ struct
   
   fun favor_free c =
     let
-      fun aterm_weight (Free _) = 0 
+      fun aterm_weight (Free _) = 0
         | aterm_weight _ = PENALTY_COEFF
       val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
       val weight = fold (fn (l, r, _) => add_term_weight l #> add_term_weight r) (JClause.literals c) 0
     in
       weight
+    end
+
+  fun favor_containing_free c =
+    let
+      fun is_free (Free _) = true
+        | is_free _ = false
+      val disj_is_free = fold_aterms (fn t => fn acc => acc orelse is_free t)
+      val contains_free =
+        fold
+          (fn (l, r, _) => disj_is_free l #> disj_is_free r)
+          (JClause.literals c)
+          false
+    in
+      if contains_free
+        then 0
+        else PENALTY_COEFF
     end
 
   fun favor_initial c =
@@ -87,15 +103,31 @@ struct
     | Jeha_Log.Axiom _ => 0
     | _ => PENALTY_COEFF
 
-  (* tries to imitate zip's default_fun *)
+  fun disfavor_var_var_neqs c =
+    if exists (fn (s, t, false) => is_Var s andalso is_Var t | _ => false) (JClause.literals c)
+      then PENALTY_COEFF
+      else 0
+
+  val max_dist_to_neg_conj = 15
+
+  (* favor_goal from Zipperposition *)
+  fun favor_small_dist_to_neg_conj c =
+    let
+      val dist_to_neg_conj = JClause.dist_to_neg_conj c
+    in
+      if JClause.is_false c then 0 else
+      if dist_to_neg_conj < 0
+        then max_dist_to_neg_conj (* FIXME: this should be an error *)
+        else Int.min (dist_to_neg_conj, max_dist_to_neg_conj)
+    end
+
+  (* `default_fun` in Zipperpositions clauseQueue.ml *)
   fun default_fun goal_symbols = combine
     [ (size_of_clause, 3)
     , (favor_all_ground_and_neg, 1)
-    , (favor_small_num_vars, 1)
+    , (favor_small_num_vars, 2)
     , (favor_positive_unit, 1)
-    (* FIXME: not the favor_goal from zip, which requires tracking distance to negated conjecture *)
-    , (favor_goal_symbols goal_symbols, 1)
-    , (favor_initial, 3)
+    , (favor_small_dist_to_neg_conj, 1)
     ]
 end
 

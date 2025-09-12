@@ -52,6 +52,7 @@ sig
   (* essentially a NONE value for temporary use *)
   | Invalid
 
+  val is_simplification : 'a inference -> bool
   val premises : 'a inference -> 'a list
   val premises_shift_substitution : int inference -> { id: int, shift: int, substitution: Envir.env } list
   val name_of : 'a inference -> string
@@ -106,6 +107,40 @@ datatype 'a inference =
   | EqualitySubsumption of { unit: 'a, disagreement: JClause_Pos.full_pos, substitution: Envir.env }
   (* essentially a NONE value for temporary use *)
   | Invalid
+
+fun is_simplification (Axiom _) = false
+  | is_simplification (NegatedConjecture _) = false
+  | is_simplification (Sup _) = false
+  | is_simplification FluidSup = false
+  | is_simplification (ERes _) = false
+  | is_simplification (EFact _) = false
+  | is_simplification (ArgCong _) = false
+  | is_simplification (BoolHoist _) = false
+  | is_simplification (FalseElim _) = false
+  | is_simplification (EqHoist _) = false
+  | is_simplification (NeqHoist _) = false
+  | is_simplification (ForallHoist _) = false
+  | is_simplification (ExistsHoist _) = false
+  | is_simplification (BoolRw _) = false
+  | is_simplification (ForallRw _) = false
+  | is_simplification (ExistsRw _) = false
+  | is_simplification (FluidBoolHoist _) = false
+  | is_simplification (FluidLoobHoist _) = false
+  | is_simplification Ext = false
+  | is_simplification (NegExt _) = false
+  | is_simplification (NegCongFun _) = false
+  | is_simplification Choice = false
+  | is_simplification (DeleteDuplicatedLits _) = true
+  | is_simplification (DeleteResolvedLits _) = true
+  | is_simplification (RewritePositiveLits _) = true
+  | is_simplification (RewriteNegativeLits _) = true
+  | is_simplification (PositiveSimplifyReflect _) = true
+  | is_simplification (NegativeSimplifyReflect _) = true
+  | is_simplification (SimpPosNegOuterClaus _) = true
+  | is_simplification (SimpBoolRw _) = true
+  | is_simplification (SimpFalseElim _) = true
+  | is_simplification Invalid = false
+  | is_simplification _ = false
 
 fun premises (Axiom _) = []
   | premises (NegatedConjecture _) = []
