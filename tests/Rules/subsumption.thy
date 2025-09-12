@@ -1,6 +1,6 @@
 theory subsumption
 
-imports JEHA_TEST_BASE.test_base HOL.List
+imports JEHA_TEST_BASE.test_base HOL.List ML_Unification.ML_Unification_HOL_Setup
 
 begin
 
@@ -185,6 +185,19 @@ ML_val \<open>
   val () = writeln ("matcher1: " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher1))
 \<close>
 
+(* decreasing unification depth helps! *)
+ML_val \<open>
+  val ct = @{term_schem "(?E :: (bool \<Rightarrow> bool) \<Rightarrow> bool) ?f"}
+  val dt = @{term_schem "(G :: (bool \<Rightarrow> bool) \<Rightarrow> bool) h"}
+  val ctxt = Config.put Unify.search_bound 0 @{context} 
+  val matchers = Unify.matchers (Context.Proof ctxt) [(ct, dt)]
+  (* val () = writeln ("matcher1: " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher1)) *)
+  val (matchers, _) = Seq.chop 1000 matchers
+  fun write_matcher (i: int, matcher) =
+    writeln ("matcher" ^ @{make_string} i ^ ": " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher))
+  val _ = map_index write_matcher matchers
+\<close>
+
 (* whereas here it's normal *)
 ML_val \<open>
   val ct = @{term_schem "?E ?f"}
@@ -198,6 +211,21 @@ ML_val \<open>
   ?f := h
   so ?E ?f becomes G h
 *)
+\<close>
+
+ML_val \<open>
+  val ct = @{term_schem "(?E :: (bool \<Rightarrow> bool) \<Rightarrow> bool) ?f"}
+  val dt = @{term_schem "(G :: (bool \<Rightarrow> bool) \<Rightarrow> bool) h"}
+  val u = Higher_Order_Pattern_Unification.unify
+  val unifiers =
+    Higher_Order_Pattern_Decomp_Unification.e_unify 
+      Higher_Order_Pattern_Unification.unify
+      First_Order_Unification.unify
+      []
+      @{context}
+      (ct, dt)
+      Envir.init
+  val unifier = Seq.pull unifiers
 \<close>
 
 end
