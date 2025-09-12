@@ -1,47 +1,26 @@
-# Evaluation
+# The slam tactic
 
-## Mirabelle
+## Running
 
-`~/Isabelle2023/bin/isabelle mirabelle -d ~/git/slam -d ~/git/slam/tests -O ~/mirabelle_output -A slam -s 1 -t 60 -T misc SLAM_TEST_GENERAL`
+`./Isabelle2025/bin/isabelle jedit -d $SLAM -d $SLAM/tests -l Pure`
 
-## Mirabelle with Docker containers:
+where `$SLAM` is the directory containing this README.
 
-In the top level folder of the git repository run
+The subdirectory `tests/General` contains several examples of how to use the tactic.
 
-`docker build --no-cache --tag="mguerdi/isabelle-afp" --file="evaluation/afp/Dockerfile" .`
+## Evaluation
 
-`docker build --no-cache --tag="mguerdi/isabelle-slam-patched" --file="evaluation/slam_patched/Dockerfile" .`
+The raw data are in the subdirectory `evaluation/analysis/runs`.
 
-### Local (rootless docker)
+To analyze them and to generate plots, use `evaluation/analysis/main.py`.
 
-`docker run -v sledgehammer_cache:/home/isabelle/sledgehammer_cache -v mirabelle-log:/home/isabelle/mirabelle_output mguerdi/isabelle-slam-patched:latest mirabelle -j8 -O "~/mirabelle_output" -A 'sledgehammer[provers=zipperposition, fact_filter=mepo, slices=8, max_proofs=8, minimize=false, exhaustive_preplay=true, cache_dir="/home/isabelle/sledgehammer_cache"]' FFT`
+Creating the plots requires the Python libraries `numpy` and `matplotlib` to be installed.
 
-The results are in `~/.local/share/docker/volumes/mirabelle-log/_data/mirabelle.log`.
+To reproduce the plot from the paper, for example:
 
-### Server (without rootless docker)
+```
+python main.py --plot-scatter --save-plot --dir runs/run46 --timeout-ms 4000
+```
 
-Create directories to mount as volumes
+To get help with using the script, run `python main.py --help`.
 
-`mkdir ~/sledgehammer_output`
-`mkdir ~/mirabelle_output`
-
-Make sure the user inside the docker container (e.g. uid=1000) can write into our user's (e.g. uid=1003) directories
-
-`chmod a+w sledgehammer_output`
-`chmod a+w mirabelle_output`
-
-Run mirabelle
-
-`docker run -v ~/sledgehammer_cache:/home/isabelle/sledgehammer_cache -v ~/mirabelle_log:/home/isabelle/mirabelle_output mguerdi/isabelle-slam-patched:latest mirabelle -j30 -O "~/mirabelle_output" -A 'sledgehammer[provers=zipperposition, fact_filter=mepo, slices=8, max_proofs=8, minimize=false, exhaustive_preplay=true, cache_dir="/home/isabelle/sledgehammer_cache"]' FFT`
-
-The results are in `~/mirabelle_log/mirabelle.log`.
-
-## Compare Metis and Slam
-
-FIXME
-
-To test on the theory FFT (chosen for no particular reason) use `dynamic_sledgehammer_without_prefer_dynamic.patch` with:
-
-`docker run -v mirabelle-log:/home/isabelle/mirabelle_output mguerdi/isabelle-slam-patched:latest mirabelle -j10 -O "~/mirabelle_output" -A "sledgehammer[provers=zipperposition, fact_filter=mepo, slices=8, max_proofs=8, minimize=false, exhaustive_preplay=true]" -s 50 FFT`
-
-Results of these two calls are in `./evaluation/test_fft`
