@@ -127,7 +127,7 @@ fun make_last cpos { th = th, skolems = skolems } =
     (* original function was 1-based *)
     val i = cpos + 1 + length skolems
   in
-    { th = Jeha_Proof_Util.make_prem_last i th, skolems = skolems }
+    { th = Slam_Proof_Util.make_prem_last i th, skolems = skolems }
   end
 
 (* Like make_last but rotate right by one instead of left. *)
@@ -135,11 +135,11 @@ fun move_last_to cpos { th = th, skolems = skolems } =
   let
     val i = cpos + 1 + length skolems
   in
-    { th = Jeha_Proof_Util.move_last_prem_to i th, skolems = skolems }
+    { th = Slam_Proof_Util.move_last_prem_to i th, skolems = skolems }
   end
 
 fun move_from_to (from: JClause.cpos) (to: JClause.cpos) =
-  map_hthm (Jeha_Proof_Util.move_prem_from_to (from + 1) (to + 1))
+  map_hthm (Slam_Proof_Util.move_prem_from_to (from + 1) (to + 1))
 
 (* \<not>C' \<Longrightarrow> t \<approx> t' *)
 (* see JLit.orient *)
@@ -299,7 +299,7 @@ fun hol_clause_pos_of_full_pos ((tpos, lpos, cpos), target_literal_is_positive) 
 
 fun proof_steps_of_inference *)
 
-(* Turn jeha clause [A, B, C] into formula \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False, avoiding double negations. *)
+(* Turn slam clause [A, B, C] into formula \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False, avoiding double negations. *)
 fun hol_of_clause ctxt close c =
   let
     val negated_literals = 
@@ -324,7 +324,7 @@ fun hol_of_clause ctxt close c =
         |> Thm.cterm_of ctxt
   end
 
-(* FIXME: Would be nice to move this to Jeha_Proof_Util but there it should use a 1-based notion of
+(* FIXME: Would be nice to move this to Slam_Proof_Util but there it should use a 1-based notion of
 green position which we don't have. *)
 fun abstract_over_green_subterm_raw full_pos (hol_clause: term) maxidx =
   let
@@ -419,7 +419,7 @@ fun mk_comp_no_flatten
         th2
     (* th_with_skolems1_in_middle = sk2 \<Longrightarrow> D \<Longrightarrow> sk1 \<Longrightarrow> A \<Longrightarrow> F *)
     val th_with_skolems1_left_of_skolems2 =
-      Jeha_Proof_Util.move_prems_left
+      Slam_Proof_Util.move_prems_left
         (length skolems2 + i)     (* from: sk1 is now where target prem was *)
         (length skolems1)         (* how many *)
         (length skolems2 + i - 1) (* how far: move over sk2 \<Longrightarrow> D *)
@@ -433,7 +433,7 @@ fun mk_comp_no_flatten
 val comp_no_flatten = mk_comp_no_flatten Drule.comp_no_flatten
 
 (* 1-based *)
-val comp_no_flatten_no_incr = mk_comp_no_flatten Jeha_Proof_Util.comp_no_flatten_no_incr
+val comp_no_flatten_no_incr = mk_comp_no_flatten Slam_Proof_Util.comp_no_flatten_no_incr
 
 (* Drule.compose, first argument is a thm, i.e. something that does not contain skolem premises,
 e.g. some helper lemma. *)
@@ -463,7 +463,7 @@ fun congruence_wrt_subterm_position ctxt eq (c as { skolems, ... }) subterm_posi
       (* Get's rid of the PROP f x premise *)
       |> (fn th => Drule.compose (thm_of c, 2, th)) 
       (* Move the skolem premises that are part of PROP f y above to the very left. *)
-      |> Jeha_Proof_Util.move_prems_left 2 (length skolems) 1
+      |> Slam_Proof_Util.move_prems_left 2 (length skolems) 1
   in
     { th = C_congruence_wrt_subterm_position, skolems = skolems } 
   end

@@ -1,5 +1,5 @@
-(* This should be in jclause.ML, but jeha_log.ML depends on cpos and full_pos, and jclause.ML
-depends on jeha_log.ML so we need this file to break the cycle *)
+(* This should be in jclause.ML, but slam_log.ML depends on cpos and full_pos, and jclause.ML
+depends on slam_log.ML so we need this file to break the cycle *)
 
 signature JCLAUSE_POS =
 sig

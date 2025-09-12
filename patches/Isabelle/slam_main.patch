@@ -1,0 +1,11 @@
+diff --git a/src/HOL/Main.thy b/src/HOL/Main.thy
+--- a/src/HOL/Main.thy
++++ b/src/HOL/Main.thy
+@@ -17,6 +17,7 @@
+     Conditionally_Complete_Lattices
+     Binomial
+     GCD
++    slam
+ begin
+ 
+ subsection \<open>Namespace cleanup\<close>

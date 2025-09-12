@@ -1,6 +1,6 @@
 theory positive_simplify_reflect
 
-imports JEHA_TEST_BASE.test_base
+imports SLAM_TEST_BASE.test_base
 
 begin
 
@@ -9,7 +9,7 @@ ML_val \<open>
   val C = mk @{prop "\<not>C' \<Longrightarrow> u (a :: 'a) c = u b c \<Longrightarrow> False"}
   val expected = mk @{prop "\<not>C' \<Longrightarrow> False"}
   val conclusion =
-    Jeha_Proof.reconstruct_positive_simplify_reflect
+    Slam_Proof.reconstruct_positive_simplify_reflect
       @{context}
       { unit = unit
       , unit_orientation = JLit.Left
@@ -23,7 +23,7 @@ ML_val \<open>
   val C = mk @{prop "\<not>C' \<Longrightarrow> u (a :: 'a) c = u b c \<Longrightarrow> False"}
   val expected = mk @{prop "\<not>C' \<Longrightarrow> False"}
   val conclusion =
-    Jeha_Proof.reconstruct_positive_simplify_reflect
+    Slam_Proof.reconstruct_positive_simplify_reflect
       @{context}
       { unit = unit
       , unit_orientation = JLit.Right
@@ -37,7 +37,7 @@ ML_val \<open>
   val C = mk @{prop "\<not>C' \<Longrightarrow> u (a :: 'a) c = u b c \<Longrightarrow> False"}
   val expected = mk @{prop "\<not>C' \<Longrightarrow> False"}
   val conclusion =
-    Jeha_Proof.reconstruct_positive_simplify_reflect
+    Slam_Proof.reconstruct_positive_simplify_reflect
       @{context}
       { unit = unit
       , unit_orientation = JLit.Left

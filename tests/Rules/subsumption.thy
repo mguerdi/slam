@@ -1,87 +1,87 @@
 theory subsumption
 
-imports JEHA_TEST_BASE.test_base HOL.List ML_Unification.ML_Unification_HOL_Setup
+imports SLAM_TEST_BASE.test_base HOL.List ML_Unification.ML_Unification_HOL_Setup
 
 begin
 
-declare [[jeha_trace]]
-declare [[jeha_disable_all]]
-declare [[jeha_rule_clause_subsumption]]
-declare [[jeha_trace_forward_simp]]
-declare [[jeha_trace_backward_simp]]
-declare [[jeha_trace_clause_subsumption]]
+declare [[slam_trace]]
+declare [[slam_disable_all]]
+declare [[slam_rule_clause_subsumption]]
+declare [[slam_trace_forward_simp]]
+declare [[slam_trace_backward_simp]]
+declare [[slam_trace_clause_subsumption]]
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+  val () = \<^assert> (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
   val d = JClause.of_term @{context} (@{term "b \<or> a"}, 1)
-  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+  val () = \<^assert> (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "?x \<or> b"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+  val () = \<^assert> (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "a \<or> ?x"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+  val () = \<^assert> (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "?x \<or> ?x"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+  val () = \<^assert> (not (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "a :: bool"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+  val () = \<^assert> (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "b :: bool"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d))
+  val () = \<^assert> (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "c :: bool"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+  val () = \<^assert> (not (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
 \<close>
 
 (* FIXME: shouldn't work in multiset subsumption *)
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "a \<or> a"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+  val () = \<^assert> (not (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term_schem "a \<or> a \<or> a"}, 0)
   val d = JClause.of_term @{context} (@{term "a \<or> b"}, 1)
-  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+  val () = \<^assert> (not (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term "a \<or> a \<or> a \<or> a"}, 1)
   val d = JClause.of_term @{context} (@{term_schem "a \<or> a \<or> a"}, 0)
-  val () = \<^assert> (not (Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
+  val () = \<^assert> (not (Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)))
 \<close>
 
 ML \<open>
   val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
   val d = JClause.of_term @{context} (@{term_schem "?x \<or> b"}, 1)
-  val () = writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of [c, d]))
+  val () = writeln (Slam_Common.pretty_terms @{context} (map JClause.term_of [c, d]))
   val symbols = Subsumption_Index.collect_symbols [c, d] 
   val index =
     Subsumption_Index.make_index symbols
@@ -92,7 +92,7 @@ ML \<open>
 ML \<open>
   val c = JClause.of_term @{context} (@{term "a \<or> b"}, 0)
   val d = JClause.of_term @{context} (@{term_schem "?x \<or> b"}, 1)
-  val () = writeln (Jeha_Common.pretty_terms @{context} (map JClause.term_of [c, d]))
+  val () = writeln (Slam_Common.pretty_terms @{context} (map JClause.term_of [c, d]))
   val symbols = Subsumption_Index.collect_symbols [c, d] 
   val index =
     Subsumption_Index.make_index symbols
@@ -101,7 +101,7 @@ ML \<open>
 \<close>
 
 lemma "(\<And>x. f x) \<Longrightarrow> f a \<or> False \<Longrightarrow> f b"
-  using [[jeha_rule_forall_hoist, jeha_rule_simp_false_elim, jeha_rule_sup]] by jeha
+  using [[slam_rule_forall_hoist, slam_rule_simp_false_elim, slam_rule_sup]] by slam
 
 ML_val \<open>
   (* potentially subsuming clause *)
@@ -118,11 +118,11 @@ ML_val \<open>
   }
   val c = JClause.of_term @{context} (ct, 0)
   val d = JClause.of_term @{context} (dt, 1)
-  val r = Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)
+  val r = Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)
 \<close>
 
 (* From simple_stuff.thy
-  theorem T0: "\<exists>F. \<forall>T :: bool. \<exists>(S :: bool\<Rightarrow>bool). F S = T" ... by jeha
+  theorem T0: "\<exists>F. \<forall>T :: bool. \<exists>(S :: bool\<Rightarrow>bool). F S = T" ... by slam
 
 output:
 (CS) :forward subsumption of 13918:jsk116__ (\<lambda>a. jsk116__ ?x_oc4) = True \<or> ?x_oc4 ?x_oc5 \<noteq> True (SimpFalseElim [13827]) 
@@ -134,7 +134,7 @@ ML_val \<open>
   val dt = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc4 :: (bool \<Rightarrow> bool) \<Rightarrow> bool)) = True \<or> ?x_oc4 ?x_oc5 \<noteq> True"}
   val c = JClause.of_term @{context} (ct, 0)
   val d = JClause.of_term @{context} (dt, 1)
-  val r = Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)
+  val r = Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)
   val () = \<^assert> r
 \<close>
 
@@ -144,7 +144,7 @@ ML_val \<open>
   val dt = @{term_schem "jsk116 (\<lambda>a. jsk116 (?x_oc4 :: 'b \<Rightarrow> bool)) = True \<or> ?x_oc4 ?x_oc5 \<noteq> True"}
   val c = JClause.of_term @{context} (ct, 0)
   val d = JClause.of_term @{context} (dt, 1)
-  val r = Jeha_Subsumption.subsumes (Context.Proof @{context}) (c, d)
+  val r = Slam_Subsumption.subsumes (Context.Proof @{context}) (c, d)
   val () = \<^assert> r
 \<close>
 
@@ -161,7 +161,7 @@ ML_val \<open>
   val SOME (matcher1, matchers) =
     Unify.matchers (Context.Proof @{context}) [(ct, dt)]
     |> Seq.pull
-  val () = writeln ("matcher1: " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher1))
+  val () = writeln ("matcher1: " ^ Slam_Common.pretty_tenv @{context} (Envir.term_env matcher1))
 (*
   ?E := \<lambda>a. a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (a (G h)))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
   ?f := \<lambda>a. a
@@ -170,7 +170,7 @@ ML_val \<open>
 (*
   val (matchers, _) = Seq.chop 1000 matchers
   fun write_matcher (i: int, matcher) =
-    writeln ("matcher" ^ @{make_string} i ^ ": " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher))
+    writeln ("matcher" ^ @{make_string} i ^ ": " ^ Slam_Common.pretty_tenv @{context} (Envir.term_env matcher))
   val _ = map_index write_matcher matchers
 *)
 \<close>
@@ -182,7 +182,7 @@ ML_val \<open>
   val SOME (matcher1, matchers) =
     Unify.matchers (Context.Proof @{context}) [(ct, dt)]
     |> Seq.pull
-  val () = writeln ("matcher1: " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher1))
+  val () = writeln ("matcher1: " ^ Slam_Common.pretty_tenv @{context} (Envir.term_env matcher1))
 \<close>
 
 (* decreasing unification depth helps! *)
@@ -191,10 +191,10 @@ ML_val \<open>
   val dt = @{term_schem "(G :: (bool \<Rightarrow> bool) \<Rightarrow> bool) h"}
   val ctxt = Config.put Unify.search_bound 0 @{context} 
   val matchers = Unify.matchers (Context.Proof ctxt) [(ct, dt)]
-  (* val () = writeln ("matcher1: " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher1)) *)
+  (* val () = writeln ("matcher1: " ^ Slam_Common.pretty_tenv @{context} (Envir.term_env matcher1)) *)
   val (matchers, _) = Seq.chop 1000 matchers
   fun write_matcher (i: int, matcher) =
-    writeln ("matcher" ^ @{make_string} i ^ ": " ^ Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher))
+    writeln ("matcher" ^ @{make_string} i ^ ": " ^ Slam_Common.pretty_tenv @{context} (Envir.term_env matcher))
   val _ = map_index write_matcher matchers
 \<close>
 
@@ -203,9 +203,9 @@ ML_val \<open>
   val ct = @{term_schem "?E ?f"}
   val dt = @{term_schem "G h"}
   val matcher =
-    Jeha_Unify.matchers (Context.Proof @{context}) 10 [(ct, dt)]
+    Slam_Unify.matchers (Context.Proof @{context}) 10 [(ct, dt)]
     |> Seq.hd
-  val () = writeln (Jeha_Common.pretty_tenv @{context} (Envir.term_env matcher))
+  val () = writeln (Slam_Common.pretty_tenv @{context} (Envir.term_env matcher))
 (*
   ?E := G,
   ?f := h

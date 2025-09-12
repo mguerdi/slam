@@ -18,10 +18,10 @@ imports
   SpecCheck.SpecCheck_Generators
 begin
 
-ML_file \<open>jeha_gen_term.ML\<close>
+ML_file \<open>slam_gen_term.ML\<close>
 
 ML \<open>
-  fun gen_fresh_tyvar ctxt maxidx = (* Jeha_Gen_Term.fresh_tvar () *)
+  fun gen_fresh_tyvar ctxt maxidx = (* Slam_Gen_Term.fresh_tvar () *)
     (maxidx + 1, TVar ((Name.aT, maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)));
   
   (* Generate a typable, closed random term. Rejection sampler with early abort
@@ -34,7 +34,7 @@ ML \<open>
         : (SpecCheck_Random.rand * (Type.tyenv * int)) * term =
     let
       val (t, ((_, typ_env, maxidx), s)) =
-        Jeha_Gen_Term.term binder_types typ ((ctxt, typ_env, maxidx), s)
+        Slam_Gen_Term.term binder_types typ ((ctxt, typ_env, maxidx), s)
     in
       ((s, (typ_env, maxidx)), t)
     end
@@ -110,8 +110,8 @@ ML_val \<open>
   val example_term = @{term_schem "?x3 (\<lambda>x xa. xa ?x10 (\<lambda>x. ?x18 ?x22 x (\<lambda>x xa. ?x29) x ?x30))"}
   val example_term = @{term_schem "?x4 (\<lambda>x xa. xa (xa (\<lambda>x xa xb. x (\<lambda>x xa. x))) (?x25 x) x) (\<lambda>x. ?x28)"}
   val vars = Term.add_vars example_term []
-  val bla = map (writeln o Jeha_Common.pretty_term (Jeha_Common.verbose_of @{context}) o Var) vars;
-  val _ = writeln (Jeha_Common.pretty_term (Jeha_Common.verbose_of @{context}) example_term);
+  val bla = map (writeln o Slam_Common.pretty_term (Slam_Common.verbose_of @{context}) o Var) vars;
+  val _ = writeln (Slam_Common.pretty_term (Slam_Common.verbose_of @{context}) example_term);
 \<close>
 
 ML \<open>
@@ -133,7 +133,7 @@ declare [[speccheck_max_success = 10]]
   val check_kbo = SpecCheck.check (show_termpair ctxt) boltzmann_term_pair_gen
   (* print some unifiable terms lambda expressions *)
   val _ = Lecker.test_group ctxt (SpecCheck_Random.new ()) [
-    SpecCheck_Property.prop (fn term_pair => (is_none o Seq.pull) ( Jeha_Unify.smash_unifiers (Context.Proof ctxt) [term_pair] Envir.init)) |> check_kbo "kbo"
+    SpecCheck_Property.prop (fn term_pair => (is_none o Seq.pull) ( Slam_Unify.smash_unifiers (Context.Proof ctxt) [term_pair] Envir.init)) |> check_kbo "kbo"
   ]
 
   (* val smash_unifiers: Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq *)

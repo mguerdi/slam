@@ -3,34 +3,34 @@ Reproduction of CONTEXT exception that only appears when running with mirabelle.
 ```
 theory misc
 
-imports "JEHA_TEST_BASE.test_base"
+imports "SLAM_TEST_BASE.test_base"
 
 begin
 
-declare [[jeha_trace]]
+declare [[slam_trace]]
 declare [[metis_trace]]
 
 (* This line is critical to the reproduction *)
-declare [[jeha_proof_reconstruction]]
+declare [[slam_proof_reconstruction]]
 
 lemma
   shows "(1 :: nat) + 1 = 2"
-  using Num.nat_1_add_1 by jeha (* 51 ms *)
+  using Num.nat_1_add_1 by slam (* 51 ms *)
 ```
 
 running mirabelle via
 
 ```
-> ~/Isabelle2023/bin/isabelle mirabelle -d ~/git/jeha -d ~/git/jeha/tests -O ~/mirabelle_output -A jeha -m 10000000 -s 0 -t 60 -T misc JEHA_TEST_GENERAL
+> ~/Isabelle2023/bin/isabelle mirabelle -d ~/git/slam -d ~/git/slam/tests -O ~/mirabelle_output -A slam -m 10000000 -s 0 -t 60 -T misc SLAM_TEST_GENERAL
 ```
 
 results in
 
 ```
 > cat ~/mirabelle_output/mirabelle.log
-0.jeha goal.by           16ms JEHA_TEST_GENERAL.misc 75:1669  exception: CONTEXT ("No content for theory certificate misc:44", [], [], ["\<lbrakk>PROP ?V; PROP ?V \<Longrightarrow> PROP ?W\<rbrakk> \<Longrightarrow> PROP ?W", "??.HOL.Trueprop (??.HOL.eq (??.Groups.plus_class.plus ??.Groups.one_class.one ??.Groups.one_class.one) (??.Num.numeral_class.numeral (??.Num.num.Bit0 ??.Num.num.One)))"], NONE)
-0.jeha goal.using        27ms JEHA_TEST_GENERAL.misc 75:1647  failed:
-0.jeha goal.using        27ms JEHA_TEST_GENERAL.misc 75:1647  Pure.protectI
+0.slam goal.by           16ms SLAM_TEST_GENERAL.misc 75:1669  exception: CONTEXT ("No content for theory certificate misc:44", [], [], ["\<lbrakk>PROP ?V; PROP ?V \<Longrightarrow> PROP ?W\<rbrakk> \<Longrightarrow> PROP ?W", "??.HOL.Trueprop (??.HOL.eq (??.Groups.plus_class.plus ??.Groups.one_class.one ??.Groups.one_class.one) (??.Num.numeral_class.numeral (??.Num.num.Bit0 ??.Num.num.One)))"], NONE)
+0.slam goal.using        27ms SLAM_TEST_GENERAL.misc 75:1647  failed:
+0.slam goal.using        27ms SLAM_TEST_GENERAL.misc 75:1647  Pure.protectI
 ```
 
 Search:

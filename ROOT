@@ -1,20 +1,20 @@
-chapter JEHA
+chapter SLAM
 
-session "JEHA" = HOL +
+session "SLAM" = HOL +
   description "
     an implementation of lambda-superposition with booleans
   "
   theories
-    jeha_base
-    jeha_lemma
-    jeha_tactic
-    jeha
-    (* jeha_sledgehammer *)
-    (* jeha_debug *)
+    slam_base
+    slam_lemma
+    slam_tactic
+    slam
+    (* slam_sledgehammer *)
+    (* slam_debug *)
 
-session "JEHA_MIRABELLE" in Mirabelle = JEHA +
+session "SLAM_MIRABELLE" in Mirabelle = SLAM +
   description "
-    mirabelle action for running jeha
+    mirabelle action for running slam
   "
   theories
-    Mirabelle_Jeha
+    Mirabelle_Slam

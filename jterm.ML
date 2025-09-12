@@ -118,7 +118,7 @@ fun subterm_at t [] = t
   that. Scoping broken?? *)
   | subterm_at (t as (_$_)) (i :: p) = subterm_at (nth (uncurry cons (strip_comb t)) i) p
   | subterm_at t pos =
-      raise JTERM (t, ("subterm_at: Can't get subterm of " ^ Jeha_Common.pretty_term @{context} t ^ " at tpos " ^ @{make_string} pos))
+      raise JTERM (t, ("subterm_at: Can't get subterm of " ^ Slam_Common.pretty_term @{context} t ^ " at tpos " ^ @{make_string} pos))
 
 fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
   | tposs_of (t as (_$_)) =
@@ -134,7 +134,7 @@ fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
   | tposs_of _ = [[]]
 
 (* NONE means no disagreement, the terms are the same *)
-fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Jeha_Common.map_some (cons 0) (disagreement_tpos_of2 (t, u))
+fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Slam_Common.map_some (cons 0) (disagreement_tpos_of2 (t, u))
   | disagreement_tpos_of2 (t as (_$_), u as (_$_)) =
     let
       val (head_args_t, head_args_u) = (apply2 (uncurry cons o strip_comb)) (t, u)
@@ -147,7 +147,7 @@ fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Jeha_Common.map_some (cons 
           (* prepend term position in the combination FIXME: just map_index pair and prepend in the case ... [()]*)
           map_index
             (fn (idx, disagreement_tpos_of2_subterm) =>
-              Jeha_Common.map_some (cons idx) disagreement_tpos_of2_subterm)
+              Slam_Common.map_some (cons idx) disagreement_tpos_of2_subterm)
             disagreement_tpos_of2_head_and_args
       in
         case (map_filter I disagreement_tpos_of2_comb) of
@@ -601,7 +601,7 @@ fun pretty_subterm' ctxt t p =
     val highlighted_subterm =
       \<^instantiate>\<open>subterm and 'a=a in term "<subterm>"\<close>
   in
-    Jeha_Common.pretty_term' ctxt (context highlighted_subterm)
+    Slam_Common.pretty_term' ctxt (context highlighted_subterm)
   end
 
 val pretty_subterm = Pretty.string_of ooo pretty_subterm'

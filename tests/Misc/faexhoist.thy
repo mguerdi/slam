@@ -1,6 +1,6 @@
 theory faexhoist
 
-imports "JEHA.jeha"
+imports "SLAM.slam"
 
 begin
 
@@ -10,7 +10,7 @@ ML_val \<open>
   val fresh_predicate = Var (("y_faexhoist", 1), fresh_typ --> @{typ bool});
   val forall_app_var = HOLogic.all_const fresh_typ $ fresh_predicate;
   \<^assert> (
-    (Jeha_Unify.smash_unifiers (Context.Proof ctxt) [(forall_app_var, @{term "\<forall>x . p x"})] Envir.init)
+    (Slam_Unify.smash_unifiers (Context.Proof ctxt) [(forall_app_var, @{term "\<forall>x . p x"})] Envir.init)
     |> Seq.pull
     |> is_some
   );

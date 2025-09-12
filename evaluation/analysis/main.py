@@ -116,14 +116,14 @@ def parse_file(filename, timeout_ms):
         goal = " ".join(line.split(" ")[3:5])
         tail = " ".join(line.split(" ")[7:])
         command = "(".join(tail.split("(")[:-1])
-        if "jeha" in command and "metis" in command:
-            raise RuntimeError("Line has both jeha and metis:\n" + line)
-        if "jeha" in command:
-            method = "jeha"
+        if "slam" in command and "metis" in command:
+            raise RuntimeError("Line has both slam and metis:\n" + line)
+        if "slam" in command:
+            method = "slam"
         elif "metis" in command:
             method = "metis"
         else:
-            raise RuntimeError("Line has neither jeha nor metis:\n" + line)
+            raise RuntimeError("Line has neither slam nor metis:\n" + line)
         result = Result("(" + (tail.split("(")[-1]), timeout_ms)
         calls.append({"goal": goal, "method": method, "command": command, "result": result})
     return calls
@@ -192,16 +192,16 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
     print(f"{len(always_failed_or_timed_out_goals)} goals failed or timed out (all calls)")
     print(f"{len(success_goals)} goals succeeded")
 
-    jeha_calls = [call for call in calls if call["method"] == "jeha"]
+    slam_calls = [call for call in calls if call["method"] == "slam"]
 
-    jeha_fails = [call["goal"] for call in jeha_calls if call["result"].is_failed()]
-    jeha_timeouts = [call["goal"] for call in jeha_calls if call["result"].is_timeout()]
-    jeha_success = [call["goal"] for call in jeha_calls if call["result"].is_success()]
+    slam_fails = [call["goal"] for call in slam_calls if call["result"].is_failed()]
+    slam_timeouts = [call["goal"] for call in slam_calls if call["result"].is_timeout()]
+    slam_success = [call["goal"] for call in slam_calls if call["result"].is_success()]
 
-    jeha_fails_or_timeouts = jeha_fails + jeha_timeouts
+    slam_fails_or_timeouts = slam_fails + slam_timeouts
 
-    # print(jeha_success[0])
-    # print(jeha_fails)
+    # print(slam_success[0])
+    # print(slam_fails)
 
     # From now on "metis" means the best-performing metis variant for any particular goal.
     metis_calls = get_best_metis(calls)
@@ -213,103 +213,103 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
     metis_fails_or_timeouts = metis_fails + metis_timeouts
 
     # print(metis_any_success[0])
-    print(f"jeha fails: {len(jeha_fails)}")
-    print(f"jeha timeouts: {len(jeha_timeouts)}")
-    print(f"jeha success: {len(jeha_success)}")
+    print(f"slam fails: {len(slam_fails)}")
+    print(f"slam timeouts: {len(slam_timeouts)}")
+    print(f"slam success: {len(slam_success)}")
     print(f"metis fails (no variant worked): {len(metis_fails)}")
     print(f"metis timeouts (no variant worked): {len(metis_timeouts)}")
     print(f"metis success (any variant worked): {len(metis_success)}")
 
-    jeha_success_metis_fail_or_timeout = set(jeha_success) - set(metis_success)
+    slam_success_metis_fail_or_timeout = set(slam_success) - set(metis_success)
 
-    print(f"jeha success, metis fail or timeout: {str(len(jeha_success_metis_fail_or_timeout))}")
+    print(f"slam success, metis fail or timeout: {str(len(slam_success_metis_fail_or_timeout))}")
 
     print(
         "\n".join(
             [
-                get_call_by_goal(jeha_calls, goal)["result"].as_string + "\t\t" + goal
-                for goal in jeha_success_metis_fail_or_timeout
+                get_call_by_goal(slam_calls, goal)["result"].as_string + "\t\t" + goal
+                for goal in slam_success_metis_fail_or_timeout
             ]
         )
     )
 
-    # print(jeha_success_metis_fail_or_timeout)
-    # print(sorted(list(jeha_success_metis_fail_or_timeout))[:10])
+    # print(slam_success_metis_fail_or_timeout)
+    # print(sorted(list(slam_success_metis_fail_or_timeout))[:10])
 
-    metis_success_jeha_fail_or_timeout = set(metis_success) - set(jeha_success)
-    print(f"metis success, jeha fail or timeout: {str(len(metis_success_jeha_fail_or_timeout))}")
-    print("10 easiest (to metis) problems where jeha fails:")
+    metis_success_slam_fail_or_timeout = set(metis_success) - set(slam_success)
+    print(f"metis success, slam fail or timeout: {str(len(metis_success_slam_fail_or_timeout))}")
+    print("10 easiest (to metis) problems where slam fails:")
     ten_easiest = sorted(
-        list(metis_success_jeha_fail_or_timeout),
+        list(metis_success_slam_fail_or_timeout),
         key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
     )[:10]
     print("\n".join(ten_easiest))
 
     if plot_cactus:
-        plot_success_calls(metis_calls, jeha_calls, label)
+        plot_success_calls(metis_calls, slam_calls, label)
 
-    both_success = list(set(metis_success).intersection(set(jeha_success)))
-    # get_call_by_goal(jeha_calls, goal)["result"].as_string + "\t\t" + goal
-    jeha_both_success_times = [
-        get_call_by_goal(jeha_calls, goal)["result"].time_ms for goal in both_success
+    both_success = list(set(metis_success).intersection(set(slam_success)))
+    # get_call_by_goal(slam_calls, goal)["result"].as_string + "\t\t" + goal
+    slam_both_success_times = [
+        get_call_by_goal(slam_calls, goal)["result"].time_ms for goal in both_success
     ]
     metis_both_success_times = [
         get_call_by_goal(metis_calls, goal)["result"].time_ms for goal in both_success
     ]
 
-    log_jeha_both_success_times = np.log(jeha_both_success_times)
+    log_slam_both_success_times = np.log(slam_both_success_times)
     log_metis_both_success_times = np.log(metis_both_success_times)
-    fit = np.polyfit(log_metis_both_success_times, log_jeha_both_success_times, 2)
+    fit = np.polyfit(log_metis_both_success_times, log_slam_both_success_times, 2)
     print(f"\n\nPOLYFIT: {fit}\n\n")
 
     def extrapolate(time):
         return np.exp(fit[2]) * time ** fit[1] * time ** (fit[0] * np.log(time))
 
-    metis_success_jeha_fail_or_timeout_times = [
+    metis_success_slam_fail_or_timeout_times = [
         get_call_by_goal(metis_calls, goal)["result"].time_ms
-        for goal in metis_success_jeha_fail_or_timeout
+        for goal in metis_success_slam_fail_or_timeout
     ]
-    jeha_fake_long_times = len(metis_success_jeha_fail_or_timeout_times) * [8000.0]
+    slam_fake_long_times = len(metis_success_slam_fail_or_timeout_times) * [8000.0]
     random.seed()
-    jeha_fake_random_times = [
-        random.random() * 3000 + 10000 for _ in metis_success_jeha_fail_or_timeout_times
+    slam_fake_random_times = [
+        random.random() * 3000 + 10000 for _ in metis_success_slam_fail_or_timeout_times
     ]
-    # jeha_fake_extrapolated_times = [time**2.16 for time in metis_success_jeha_fail_or_timeout_times]
-    jeha_fake_extrapolated_times = [
-        extrapolate(time) for time in metis_success_jeha_fail_or_timeout_times
-    ]
-
-    jeha_success_metis_fail_or_timeout_times = [
-        get_call_by_goal(jeha_calls, goal)["result"].time_ms
-        for goal in jeha_success_metis_fail_or_timeout
+    # slam_fake_extrapolated_times = [time**2.16 for time in metis_success_slam_fail_or_timeout_times]
+    slam_fake_extrapolated_times = [
+        extrapolate(time) for time in metis_success_slam_fail_or_timeout_times
     ]
 
-    # jeha_vs_metis_slowdown = [get_call_by_goal(jeha_calls, goal)["result"].time_ms / get_call_by_goal(metis_calls, goal)["result"].time_ms for goal in both_success]
-    # jeha_vs_metis_slowdown = sorted(jeha_vs_metis_slowdown)
+    slam_success_metis_fail_or_timeout_times = [
+        get_call_by_goal(slam_calls, goal)["result"].time_ms
+        for goal in slam_success_metis_fail_or_timeout
+    ]
 
-    max_time = max(np.max(jeha_both_success_times), np.max(metis_both_success_times))
+    # slam_vs_metis_slowdown = [get_call_by_goal(slam_calls, goal)["result"].time_ms / get_call_by_goal(metis_calls, goal)["result"].time_ms for goal in both_success]
+    # slam_vs_metis_slowdown = sorted(slam_vs_metis_slowdown)
+
+    max_time = max(np.max(slam_both_success_times), np.max(metis_both_success_times))
 
     hist_log_bins = np.logspace(np.log(1), np.log(max_time), num=50, base=np.e)
 
-    metis_better = sum(1 for (metis_time, jeha_time) in zip(metis_both_success_times, jeha_both_success_times) if metis_time < jeha_time)
-    jeha_better = sum(1 for (jeha_time, metis_time) in zip(jeha_both_success_times, metis_both_success_times) if jeha_time < metis_time)
+    metis_better = sum(1 for (metis_time, slam_time) in zip(metis_both_success_times, slam_both_success_times) if metis_time < slam_time)
+    slam_better = sum(1 for (slam_time, metis_time) in zip(slam_both_success_times, metis_both_success_times) if slam_time < metis_time)
     print("METIS BETTER:", metis_better)
-    print("JEHA BETTER:", jeha_better)
+    print("SLAM BETTER:", slam_better)
 
     if plot_scatter:
         plt.rc("axes", axisbelow=True)
         plt.grid(True, which="major", color="0.65")
 
-        plt.scatter(metis_both_success_times, jeha_both_success_times, marker=".", label=label)
+        plt.scatter(metis_both_success_times, slam_both_success_times, marker=".", label=label)
         # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
-        # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_long_times, marker='x')
-        # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_random_times, marker='x')
+        # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_long_times, marker='x')
+        # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_random_times, marker='x')
         
         min_time_minus = .4
         max_time_plus = max_time / .4
 
         plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", label="diagonal")
-        # plt.scatter(metis_success_jeha_fail_or_timeout_times, jeha_fake_extrapolated_times, marker='x')
+        # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_extrapolated_times, marker='x')
         plt.xlim(min_time_minus, max_time_plus)
         plt.ylim(min_time_minus, max_time_plus)
         print("MAX TIME", max_time)
@@ -323,26 +323,26 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
             label=label + " metis times (both successful)",
         )
         plt.hist(
-            jeha_both_success_times,
+            slam_both_success_times,
             hist_log_bins,
             histtype="step",
-            label=label + " jeha times (both successful)",
+            label=label + " slam times (both successful)",
         )
         plt.hist(
-            metis_success_jeha_fail_or_timeout_times,
+            metis_success_slam_fail_or_timeout_times,
             hist_log_bins,
             histtype="step",
             label=label + " metis times (only metis successful)",
         )
         plt.hist(
-            jeha_success_metis_fail_or_timeout_times,
+            slam_success_metis_fail_or_timeout_times,
             hist_log_bins,
             histtype="step",
-            label=label + " jeha times (only jeha successful)",
+            label=label + " slam times (only slam successful)",
         )
 
 
-def plot_success_calls(metis_calls, jeha_calls, label):
+def plot_success_calls(metis_calls, slam_calls, label):
     def plot_calls(calls, label):
         success = sorted(
             [call for call in calls if call["result"].is_success()], key=lambda call: call["result"]
@@ -354,7 +354,7 @@ def plot_success_calls(metis_calls, jeha_calls, label):
         # print("done plotting")
 
     plot_calls(metis_calls, label=label + " (metis)")
-    plot_calls(jeha_calls, label=label + " (jeha)")
+    plot_calls(slam_calls, label=label + " (slam)")
 
 
 # https://stackoverflow.com/questions/38834378/path-to-a-directory-as-argparse-argument
@@ -367,7 +367,7 @@ def dir_path(string):
 
 if __name__ == "__main__":
     # CLI
-    parser = argparse.ArgumentParser(prog="metis vs jeha analysis script")
+    parser = argparse.ArgumentParser(prog="metis vs slam analysis script")
     parser.add_argument(
         "-d",
         "--dir",
@@ -429,7 +429,7 @@ if __name__ == "__main__":
         plt.xlabel("time [ms]")
         plt.ylabel("number of goals solved")
         plt.legend()
-        # plt.title("metis vs. jeha")
+        # plt.title("metis vs. slam")
         plt.show()
 
     if args.plot_scatter:
@@ -437,9 +437,9 @@ if __name__ == "__main__":
         plt.yscale("log")
 
         plt.xlabel("metis time [ms]")
-        plt.ylabel("jeha time [ms]")
+        plt.ylabel("slam time [ms]")
         plt.legend()
-        # plt.title("metis vs. jeha times")
+        # plt.title("metis vs. slam times")
         plt.show()
 
     if args.plot_hist:

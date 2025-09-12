@@ -1,4 +1,4 @@
-package jeha
+package slam
 
 import isabelle._
 // import isabelle.{Path, Bytes /*, YXML */ }
@@ -9,18 +9,18 @@ val timing_report_pattern: Regex = "total elapsed time until contradiction: ([0-
 object Main {
   def main(args: Array[String]) = {
     // After running
-    // ~/Isabelle2023/bin/isabelle dump -d ~/git/jeha -d ~/git/jeha/tests -b JEHA_TEST_BASE -B JEHA_TEST_GENERAL
+    // ~/Isabelle2023/bin/isabelle dump -d ~/git/slam -d ~/git/slam/tests -b SLAM_TEST_BASE -B SLAM_TEST_GENERAL
 
-    val read_path = Path.explode("~/dump/JEHA_TEST_GENERAL.misc/PIDE/messages")
+    val read_path = Path.explode("~/dump/SLAM_TEST_GENERAL.misc/PIDE/messages")
     val xml = read_xml(read_path)
 
-    val write_path_text = Path.explode("~/tmp/isabelle/JEHA_TEST_GENERAL.misc.messages")
+    val write_path_text = Path.explode("~/tmp/isabelle/SLAM_TEST_GENERAL.misc.messages")
     val () = writeTextContent(write_path_text, xml)
 
-    val write_path_xml = Path.explode("~/tmp/isabelle/JEHA_TEST_GENERAL.misc.messages.xml")
+    val write_path_xml = Path.explode("~/tmp/isabelle/SLAM_TEST_GENERAL.misc.messages.xml")
     val () = writePseudoXml(write_path_xml, xml)
 
-    val write_path_timings = Path.explode("~/tmp/isabelle/JEHA_TEST_GENERAL.misc.timings")
+    val write_path_timings = Path.explode("~/tmp/isabelle/SLAM_TEST_GENERAL.misc.timings")
     val timings = joinLines(find_timing_reports(xml))
     val () = writeString(write_path_timings, timings)
   }

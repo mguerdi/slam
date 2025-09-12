@@ -5,7 +5,7 @@ import subprocess
 import itertools
 import re
 
-session = "JEHA_TEST_GENERAL"
+session = "SLAM_TEST_GENERAL"
 
 def sliding_window(iterable, n):
     "Collect data into overlapping fixed-length chunks or blocks."
@@ -23,7 +23,7 @@ isabelle_messages = output.stdout.decode("utf-8").split("\n")
 
 def get_filename_and_linenumber_and_elapsed_time(pair_of_lines):
     # Example output:
-    # > Output (line 19 of "~/git/jeha/tests/Rules/sup.thy"):
+    # > Output (line 19 of "~/git/slam/tests/Rules/sup.thy"):
     # > total elapsed time until contradiction: 38 ms
     if pair_of_lines[1].startswith("total elapsed time until contradiction:"):
         if not pair_of_lines[0].startswith("Output (line"):

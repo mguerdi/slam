@@ -5,8 +5,8 @@ diff --git a/src/HOL/Main.thy b/src/HOL/Main.thy
      Binomial
      GCD
      Divides
-+    jeha
-+    jeha_sledgehammer
++    slam
++    slam_sledgehammer
  begin
  
  subsection \<open>Namespace cleanup\<close>

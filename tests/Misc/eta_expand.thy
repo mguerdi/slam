@@ -1,21 +1,21 @@
 theory eta_expand
 
-imports "JEHA_TEST_BASE.test_base"
+imports "SLAM_TEST_BASE.test_base"
 
 begin
 
-declare [[jeha_trace]]
+declare [[slam_trace]]
 
-declare [[jeha_disable_all]]
-declare [[jeha_rule_sup]]
-declare [[jeha_rule_e_res]]
-declare [[jeha_rule_e_fact]]
-declare [[jeha_rule_arg_cong]]
+declare [[slam_disable_all]]
+declare [[slam_rule_sup]]
+declare [[slam_rule_e_res]]
+declare [[slam_rule_e_fact]]
+declare [[slam_rule_arg_cong]]
 
 
 lemma
   shows "x = y ==> (\<lambda> z. x) = (\<lambda> z . y)"
   (* by metis *) (* works *)
-  by (jeha ext)
+  by (slam ext)
 
 end

@@ -4,14 +4,14 @@ imports "test_base"
 
 begin
 
-declare [[jeha_trace]]
-declare [[jeha_trace_cheap_simp]]
+declare [[slam_trace]]
+declare [[slam_trace_cheap_simp]]
 
-declare [[jeha_disable_all]]
+declare [[slam_disable_all]]
 
-declare [[jeha_rule_simp_false_elim]]
-declare [[jeha_rule_simp_bool_rw]]
-declare [[jeha_rule_simp_outer_claus]]
+declare [[slam_rule_simp_false_elim]]
+declare [[slam_rule_simp_bool_rw]]
+declare [[slam_rule_simp_outer_claus]]
 
 (* FIXME: update *)
 
@@ -23,7 +23,7 @@ ML_val \<open>
   (* this is the result of cheap simplification *)
   val wrong = @{term "False = False"};
   (* cheap simplify *)
-  val simplified = Jeha.forward_simplify @{context} false [neg_conj, assum] c
+  val simplified = Slam.forward_simplify @{context} false [neg_conj, assum] c
 \<close>
 
 end

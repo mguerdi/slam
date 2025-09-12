@@ -38,13 +38,13 @@ ML_command \<open>
 declare [[speccheck_max_success = 10000]]
 ML_command \<open>
   check_dynamic @{context}
-  "ALL s t. not (type_checks t) orelse not (type_checks s) orelse (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
+  "ALL s t. not (type_checks t) orelse not (type_checks s) orelse (Slam_Order.kbo_fast (s, t) = Slam_Order_Reference.kbo (s, t))"
 \<close>
 
 declare [[speccheck_max_success = 10000]]
 ML_command \<open>
   check_dynamic @{context}
-  "ALL s t. (Jeha_Order.kbo_fast (s, t) = Jeha_Order_Reference.kbo (s, t))"
+  "ALL s t. (Slam_Order.kbo_fast (s, t) = Slam_Order_Reference.kbo (s, t))"
 \<close>
 
 (*
@@ -59,14 +59,14 @@ declare [[ML_print_depth = 100]]
 (* (O3) *) 
 ML_val \<open>
   val ft = (@{term "False"}, @{term "True"});
-  val fo_ft = apply2 Jeha_Order_Reference.to_fo_term ft;
-  writeln (Jeha_Order_Reference.pretty_fo_term @{context} (#1 fo_ft));
-  writeln (Jeha_Order_Reference.pretty_fo_term @{context} (#2 fo_ft));
-  val t_g_f = Jeha_Order_Reference.fo_kbo_greater fo_ft;
-  val f_g_t = Jeha_Order_Reference.fo_kbo_greater (swap fo_ft); 
-  val false_kbo_true = Jeha_Order_Reference.kbo ft;
+  val fo_ft = apply2 Slam_Order_Reference.to_fo_term ft;
+  writeln (Slam_Order_Reference.pretty_fo_term @{context} (#1 fo_ft));
+  writeln (Slam_Order_Reference.pretty_fo_term @{context} (#2 fo_ft));
+  val t_g_f = Slam_Order_Reference.fo_kbo_greater fo_ft;
+  val f_g_t = Slam_Order_Reference.fo_kbo_greater (swap fo_ft); 
+  val false_kbo_true = Slam_Order_Reference.kbo ft;
   \<^assert> (SOME GREATER = false_kbo_true);
-  \<^assert> (SOME GREATER = Jeha_Order_Reference.kbo (@{term "a"}, @{term "False"}));
+  \<^assert> (SOME GREATER = Slam_Order_Reference.kbo (@{term "a"}, @{term "False"}));
 \<close>
 
 ML_val \<open>
@@ -75,25 +75,25 @@ ML_val \<open>
   val t = Abs ("x", Ta, Abs ("y", Ta, Const ("HOL.eq", @{typ "'a \<Rightarrow> 'a \<Rightarrow> bool"}) $ Bound 0 $ Bound 1));
   val s = @{term "\<lambda>x::'a. \<lambda>y::'a. y = x"};
   \<^assert> (s = t);
-  val fo_t = Jeha_Order_Reference.to_fo_term t;
-  writeln (Jeha_Order_Reference.pretty_fo_term @{context} fo_t);
+  val fo_t = Slam_Order_Reference.to_fo_term t;
+  writeln (Slam_Order_Reference.pretty_fo_term @{context} fo_t);
   val u = @{term "\<lambda>x::'a. x"};
-  val fo_u = Jeha_Order_Reference.to_fo_term u;
-  val u_g_u = Jeha_Order_Reference.fo_kbo_greater (fo_u, fo_u);
-  val u_refl = Jeha_Order.kbo (u, u)
+  val fo_u = Slam_Order_Reference.to_fo_term u;
+  val u_g_u = Slam_Order_Reference.fo_kbo_greater (fo_u, fo_u);
+  val u_refl = Slam_Order.kbo (u, u)
 \<close>
 
 (* First order translation *)
 ML_val \<open>
   (* \<forall> \<iota> (\<lambda>x. p y y (\<lambda>u. f y y (\<forall> \<iota> (\<lambda>v. u)))) *)
   val example_term = @{term_pat "\<forall> x. p ?y ?y (\<lambda> u. f ?y ?y (\<forall> v. ?u))"};
-  val translated = Jeha_Order_Reference.to_fo_term example_term;
-  (* val _ = writeln (Jeha_Order_Reference.pretty_fo_term @{context} translated) *)
+  val translated = Slam_Order_Reference.to_fo_term example_term;
+  (* val _ = writeln (Slam_Order_Reference.pretty_fo_term @{context} translated) *)
   val ground_lambda = @{term "\<lambda>x. x"};
   val might_be_fluid = JTerm.might_be_fluid ground_lambda;
   \<^assert> (not might_be_fluid);
-  val ground_translated = Jeha_Order_Reference.to_fo_term ground_lambda;
-  (* val _ = writeln (Jeha_Order_Reference.pretty_fo_term @{context} ground_translated) *)
+  val ground_translated = Slam_Order_Reference.to_fo_term ground_lambda;
+  (* val _ = writeln (Slam_Order_Reference.pretty_fo_term @{context} ground_translated) *)
 \<close>
 
 (* Green subterm property, (O2) in o\<lambda>Sup paper *)
@@ -102,20 +102,20 @@ ML_val \<open>
   val green_subterm_1 = @{term_schem "?x :: 'a"};
   val green_subterm_2 = @{term_schem "(g :: 'd \<Rightarrow> 'e \<Rightarrow> 'b) ?y b"};
   val green_subterm_3 = @{term_schem "b :: 'e"};
-  val term_translated = Jeha_Order_Reference.to_fo_term term;
-  val _ = writeln ("term_translated:  " ^ Jeha_Order_Reference.pretty_fo_term @{context} term_translated);
-  val green_subterm_1_translated = Jeha_Order_Reference.to_fo_term green_subterm_1;
-  val green_subterm_2_translated = Jeha_Order_Reference.to_fo_term green_subterm_2;
-  val _ = writeln ("green_subterm_2: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_2_translated);
-  val green_subterm_3_translated = Jeha_Order_Reference.to_fo_term green_subterm_3;
-  val _ = writeln ("green_subterm_3: " ^ Jeha_Order_Reference.pretty_fo_term @{context} green_subterm_3_translated);
-  fun kbo_greater s t = Jeha_Order_Reference.fo_kbo_greater (s, t); 
+  val term_translated = Slam_Order_Reference.to_fo_term term;
+  val _ = writeln ("term_translated:  " ^ Slam_Order_Reference.pretty_fo_term @{context} term_translated);
+  val green_subterm_1_translated = Slam_Order_Reference.to_fo_term green_subterm_1;
+  val green_subterm_2_translated = Slam_Order_Reference.to_fo_term green_subterm_2;
+  val _ = writeln ("green_subterm_2: " ^ Slam_Order_Reference.pretty_fo_term @{context} green_subterm_2_translated);
+  val green_subterm_3_translated = Slam_Order_Reference.to_fo_term green_subterm_3;
+  val _ = writeln ("green_subterm_3: " ^ Slam_Order_Reference.pretty_fo_term @{context} green_subterm_3_translated);
+  fun kbo_greater s t = Slam_Order_Reference.fo_kbo_greater (s, t); 
   \<^assert> (kbo_greater term_translated green_subterm_1_translated);
   \<^assert> (kbo_greater term_translated green_subterm_2_translated);
   \<^assert> (kbo_greater term_translated green_subterm_3_translated);
   (* g ?y b > b *);
   \<^assert> (kbo_greater green_subterm_2_translated green_subterm_3_translated);
-  val kbo_gyb_b = Jeha_Order_Reference.kbo (green_subterm_2, green_subterm_3);
+  val kbo_gyb_b = Slam_Order_Reference.kbo (green_subterm_2, green_subterm_3);
 \<close>
 
 ML \<open>
@@ -204,23 +204,23 @@ check_dynamic @{context} "ALL t. loose_bvar (t, 0)"
 
 (* strictness of kbo *)
 ML_command \<open>
-check_dynamic @{context} "ALL s t. Jeha_Common.map_some rev_order (Jeha_Order.kbo_fast (t, s)) = Jeha_Order.kbo_fast (s, t)"
+check_dynamic @{context} "ALL s t. Slam_Common.map_some rev_order (Slam_Order.kbo_fast (t, s)) = Slam_Order.kbo_fast (s, t)"
 \<close>
 
 ML_command \<open>
-check_dynamic @{context} "ALL s t. (SOME EQUAL = Jeha_Order.kbo_fast (s, t)) = (s aconv t)"
+check_dynamic @{context} "ALL s t. (SOME EQUAL = Slam_Order.kbo_fast (s, t)) = (s aconv t)"
 \<close>
 
 ML_val \<open>
   val ms_ms_int_ord =
-    Jeha_Order.mk_multiset_order_of_strict
-      (Jeha_Order.mk_multiset_order_of_strict (SOME o int_ord));
+    Slam_Order.mk_multiset_order_of_strict
+      (Slam_Order.mk_multiset_order_of_strict (SOME o int_ord));
   val int_list_list_g =
     let
-      val int_list_eq = Jeha_Order.multiset_eq op=
-      val int_list_g = Jeha_Order.multiset_is_greater_reference op= op>
+      val int_list_eq = Slam_Order.multiset_eq op=
+      val int_list_g = Slam_Order.multiset_is_greater_reference op= op>
     in
-      Jeha_Order.multiset_is_greater_reference int_list_g int_list_eq
+      Slam_Order.multiset_is_greater_reference int_list_g int_list_eq
     end;
 
   val (l, r) = ([[1, 0], [3, 0]], [[2], [3]]);
@@ -242,16 +242,16 @@ ML \<open>
   (* "the standard way" *)
   fun ms_of_lit (s, t, true) = [[It s], [It t]]
     | ms_of_lit (s, t, false) = [[It s, Bot], [It t, Bot]]
-  val ms_lit_eq = apply2 ms_of_lit #> (Jeha_Order.multiset_eq (Jeha_Order.multiset_eq (bot_eq (op aconv))))
+  val ms_lit_eq = apply2 ms_of_lit #> (Slam_Order.multiset_eq (Slam_Order.multiset_eq (bot_eq (op aconv))))
   val ms_lit_g =
     apply2 ms_of_lit
     #>
-    Jeha_Order.multiset_is_greater_reference
-      (Jeha_Order.multiset_is_greater_reference
-        (bot_ord Jeha_Order.kbo #> curry op= (SOME GREATER))
+    Slam_Order.multiset_is_greater_reference
+      (Slam_Order.multiset_is_greater_reference
+        (bot_ord Slam_Order.kbo #> curry op= (SOME GREATER))
         (bot_eq (op aconv)))
-      (* (Jeha_Order.multiset_eq (bot_eq (op aconv))) *)
-      (Jeha_Order.multiset_eq (bot_eq (Jeha_Order.kbo #> curry op= (SOME EQUAL))))
+      (* (Slam_Order.multiset_eq (bot_eq (op aconv))) *)
+      (Slam_Order.multiset_eq (bot_eq (Slam_Order.kbo #> curry op= (SOME EQUAL))))
   fun are_equal_lit_ords (l, r) =
     case JLit.kbo (l, r) of
       SOME LESS => ms_lit_g (r, l)
@@ -261,15 +261,15 @@ ML \<open>
 \<close>
 
 ML \<open>
-  val ms_lit_generic_eq = apply2 ms_of_lit #> (Jeha_Order.multiset_eq (Jeha_Order.multiset_eq (bot_eq op=)))
+  val ms_lit_generic_eq = apply2 ms_of_lit #> (Slam_Order.multiset_eq (Slam_Order.multiset_eq (bot_eq op=)))
   fun ms_lit_generic_g cmp =
     apply2 ms_of_lit
     #>
-    Jeha_Order.multiset_is_greater_reference
-      (Jeha_Order.multiset_is_greater_reference
+    Slam_Order.multiset_is_greater_reference
+      (Slam_Order.multiset_is_greater_reference
         (bot_ord cmp #> curry op= (SOME GREATER))
         (bot_eq op=))
-      (Jeha_Order.multiset_eq (bot_eq op=))
+      (Slam_Order.multiset_eq (bot_eq op=))
   fun are_equal_lit_generic_ords cmp (l, r) =
     case JLit.kbo_generic cmp (l, r) of
       SOME LESS => ms_lit_generic_g cmp (r, l)
@@ -358,12 +358,12 @@ declare [[speccheck_max_success = 10]]
 (* multiset order *)
 
 ML \<open>
-  val int_list_eq = Jeha_Order.multiset_eq op=
-  val int_list_list_eq = Jeha_Order.multiset_eq int_list_eq
-  val int_list_g = Jeha_Order.multiset_is_greater_reference op> op=
-  val int_list_list_g = Jeha_Order.multiset_is_greater_reference int_list_g int_list_eq
-  val int_list_ord = Jeha_Order.mk_multiset_order_of_strict (SOME o int_ord)
-  val int_list_list_ord = Jeha_Order.mk_multiset_order_of_strict int_list_ord 
+  val int_list_eq = Slam_Order.multiset_eq op=
+  val int_list_list_eq = Slam_Order.multiset_eq int_list_eq
+  val int_list_g = Slam_Order.multiset_is_greater_reference op> op=
+  val int_list_list_g = Slam_Order.multiset_is_greater_reference int_list_g int_list_eq
+  val int_list_ord = Slam_Order.mk_multiset_order_of_strict (SOME o int_ord)
+  val int_list_list_ord = Slam_Order.mk_multiset_order_of_strict int_list_ord 
   fun are_equal (l, r) =
     case int_list_list_ord (l, r) of
       SOME LESS => int_list_list_g (r, l)
@@ -437,16 +437,16 @@ fun set_partial_ord pair =
 \<close>
 
 ML_command \<open>
-check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => SOME LESS <> set_partial_ord (max, x)) xs) (map_filter (fn (i, strict) => if strict then SOME (nth xs i) else NONE) (Jeha_Order.idxs_of_maximal_elements (set_partial_ord) xs))"
+check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => SOME LESS <> set_partial_ord (max, x)) xs) (map_filter (fn (i, strict) => if strict then SOME (nth xs i) else NONE) (Slam_Order.idxs_of_maximal_elements (set_partial_ord) xs))"
 \<close>
 
 ML_command \<open>
-check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => max >= x) xs) (map (fn (i, _) => nth xs i) (Jeha_Order.idxs_of_maximal_elements (SOME o int_ord) xs))"
+check_dynamic @{context} "ALL xs. forall (fn max => forall (fn x => max >= x) xs) (map (fn (i, _) => nth xs i) (Slam_Order.idxs_of_maximal_elements (SOME o int_ord) xs))"
 \<close>
 
 (* strict maximality test *)
 ML_val \<open>
-  val one_is_strict_maximal = Jeha_Order.is_maximal (SOME o int_ord) true 1 [0, 1]
+  val one_is_strict_maximal = Slam_Order.is_maximal (SOME o int_ord) true 1 [0, 1]
 \<close>
 
 end

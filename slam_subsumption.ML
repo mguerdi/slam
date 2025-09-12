@@ -1,0 +1,164 @@
+(* multiset subsumption *)
+
+(* Def. c subsumes d iff. \<exists> \<sigma>. c\<sigma> \<subseteq> d as multisets.
+i.e. \<exists> \<sigma>. \<forall> l\<sigma> \<in> c\<sigma>. \<exists>! l' \<in> d. l\<sigma> = l'
+Algorithm:
+Let c = {l\<^sub>1, l\<^sub>2, \<dots>}, d = {l\<^sub>1', l\<^sub>2', \<dots>}, i = 1.
+Find l\<^sub>j', \<sigma> s.t. l\<^sub>i\<sigma> = l\<^sub>j', remove l\<^sub>j' from d. Increase i.
+Repeat until either subsumed or for l\<^sub>i, no matching l' can be found.
+In the latter case backtrack to i <- i-1 and try the next l' for l\<^sub>i. *)
+
+signature SLAM_SUBSUMPTION =
+sig
+  (* Extend environment to match second argument against third. *)
+  val literal_subsumers : Context.generic -> int -> (JLit.T * JLit.T) -> Envir.env Seq.seq
+  val subsumed_alternatives :
+    Context.generic -> int -> (JLit.T * JLit.T list) -> (Envir.env * JLit.T list) Seq.seq
+  (* Top level clause subsumption. *)
+  val subsumes : Context.generic -> (JClause.T * JClause.T) -> bool
+end;
+
+structure Slam_Subsumption : SLAM_SUBSUMPTION =
+struct
+
+fun literal_subsumers ctxt maxidx ll' =
+  Seq.make (fn () =>
+    (* (writeln ("literals subumes:" ^ JLit.pretty_lit (Context.the_proof ctxt) (#1 ll') ^ " can match? " ^ JLit.pretty_lit (Context.the_proof ctxt) (#2 ll')); *)
+    case Seq.pull (Slam_Unify.literal_matchers ctxt maxidx ll') of
+      NONE => (* (writeln "=> no"; *) NONE (* ) *)
+      (* throw away the others *)
+    | SOME ((lp, env), tail) => (* (writeln "=> yes"; *) SOME ((lp, env), tail) (* ) *)
+    (* ) *)
+  )
+  |> Seq.map #2
+
+(* all ways in which l can subsume a literal of d *)
+(* FIXME: lazify with make / pull if it isn't yet. *)
+(* FIXME: tail recursive version? *)
+fun subsumed_alternatives ctxt maxidx (l, []) = Seq.empty
+  | subsumed_alternatives ctxt maxidx (l, l' :: d') = 
+      let
+        (* recursive call without l', keep l' around for later *)
+        fun skip_l' maxidx' =
+          (l, d')
+          |> subsumed_alternatives ctxt maxidx'
+          (* d'' is d' but with one literal removed because it was subsumed by l *)
+          |> Seq.map (fn (env, d'') => (env, l' :: d''))
+        val with_l' =
+          literal_subsumers ctxt maxidx (l, l')
+          |> Seq.take 2 (* FIXME: configurable? *)
+          |> Seq.map (fn env => (env, d'))
+      in
+        Seq.append
+          with_l'
+          (skip_l' (* FIXME: is this maxidx correct? *) maxidx)
+      end
+
+(* read: "c subsumes d" *)
+fun impl_subsumes ctxt _ ([], d) = true
+  | impl_subsumes ctxt maxidx (l :: ls, d) =
+      (*
+      (writeln ("impl_subsumes: \n"
+        ^ JClause.pretty_clause (Context.the_proof ctxt) (JClause.dummy (l :: ls))
+        ^ "\n maybe subsumes \n"
+        ^ JClause.pretty_clause (Context.the_proof ctxt) (JClause.dummy d));
+      *)
+      try_alternatives_with_backtracking ctxt (subsumed_alternatives ctxt maxidx (l, d)) ls
+      (* ) *)
+
+and try_alternatives_with_backtracking ctxt alternatives ls =
+  (* (writeln "pulling alternative"; *)
+  case Seq.pull alternatives of
+    NONE => (* (writeln "got NONE"; *) false (* ) *)
+  | SOME ((env, d_without_l'), alternatives) =>
+      let val subsumed =
+        let
+          (* apply the substitution (only to the subsuming clause) *)
+          (* 
+          val () = writeln "pulled"
+          val () = writeln ("norming " ^ JClause.pretty_clause (Context.the_proof ctxt) (JClause.dummy ls) ^ "with: \n\t"
+            ^ Slam_Common.pretty_tyenv (Context.the_proof ctxt) (Envir.type_env env) ^ "\n\t"
+            ^ Slam_Common.pretty_tenv (Context.the_proof ctxt) (Envir.term_env env))
+          *)
+          val ls = (map o JLit.map o JTerm.norm_beta_eta_qeta_env) env ls
+          (*
+          val () = writeln "normed"
+          *)
+        in
+          (* move on to next l in ls *)
+          (* FIXME: do we need to check that env is consistent with later envs, i.e. they combine to
+          form a valid substitution? No: the variables mapped by env are do not occur anymore after
+          it has been applied (what about the ones not mapped by env? Note: env is total w.r.t. l,
+          because its variables are distinct from those of l'. *)
+          impl_subsumes ctxt (Envir.maxidx_of env) (ls, d_without_l')
+        end
+      in
+        if subsumed
+         then true
+         (* backtrack, try the next l' *)
+         else try_alternatives_with_backtracking ctxt alternatives ls
+      end
+      (* ) *)
+
+val subsumption_ord = prod_ord int_ord int_ord
+
+fun subsumption_sort_key (l, r, sign) =
+  (if sign then 1 else ~1, size_of_term l + size_of_term r)
+
+fun subsumption_sort lits =
+  let
+    val keys = map subsumption_sort_key lits
+    val idxs = 0 upto (length lits - 1)
+    val idxs_sorted = sort (subsumption_ord o apply2 (nth keys)) idxs
+    val lits_sorted = map (nth lits) idxs_sorted
+    (* val () = writeln "done sorting" *)
+  in
+    lits_sorted 
+  end
+
+(* from Zipperposition SolidSubsumption.ml *)
+fun check_subsumption_possibility ctxt (c, d) maxidx =
+  let
+    val (neg_c, neg_d) = apply2 JClause.length_negative (c, d)
+    val (pos_c, pos_d) = apply2 JClause.length_positive (c, d)
+    val (c_lits, d_lits) = apply2 JClause.literals (c, d)
+    fun lit_can_match_some c_lit =
+      exists
+        (fn d_lit => is_some (Seq.pull (Slam_Unify.literal_matchers ctxt maxidx (c_lit, d_lit))))
+        d_lits
+  in
+  neg_c <= neg_d
+  andalso pos_c <= pos_d
+  andalso (not (neg_d >=3 orelse pos_d >= 3) orelse forall lit_can_match_some c_lits)
+  end
+
+(* FIXME: include >_size from "Superposition with Lambdas" *)
+fun subsumes ctxt (c, d) =
+  let
+    (* make vars of c (the pattern) distinct from those of d *)
+    val c = JClause.incr_indexes (JClause.maxidx d + 1) c
+    (*
+    val () = writeln ("c=" ^ JClause.pretty_clause (Context.the_proof ctxt) c)
+    val () = writeln ("d=" ^ JClause.pretty_clause (Context.the_proof ctxt) d)
+    *)
+    (* to ensure generate variables are fresh w.r.t. both clauses *)
+    val maxidx = JClause.maxidx_of2 (c, d)
+    (* val _ = writeln ("check if " ^ JClause.pretty_clause (Context.the_proof ctxt) c ^ " subsumes " ^ JClause.pretty_clause (Context.the_proof ctxt) d) *)
+  in
+  if not (check_subsumption_possibility ctxt (c, d) maxidx) then false else
+  let
+    val (c_lits, d_lits) = apply2 JClause.literals (c, d)
+    fun to_fixedT (TVar ((name, index), S)) = TFree ("?'" ^ name ^ @{make_string} index, S)
+      | to_fixedT T = T
+    fun to_fixed (Var ((name, index), T)) = Free ("?" ^ name ^ @{make_string} index, T)
+      | to_fixed t = t
+    val all_to_fixed = Term.map_types (Term.map_atyps to_fixedT) #> Term.map_aterms to_fixed
+
+    val d_lits = map (JLit.map all_to_fixed) d_lits
+    val (c_lits_sorted, d_lits_sorted) = apply2 subsumption_sort (c_lits, d_lits)
+  in
+    impl_subsumes ctxt maxidx (c_lits_sorted, d_lits_sorted)
+  end
+  end
+
+end;

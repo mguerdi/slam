@@ -1,6 +1,6 @@
 theory "index"
 
-imports "JEHA.jeha" SpecCheck.SpecCheck_Dynamic
+imports "SLAM.slam" SpecCheck.SpecCheck_Dynamic
 
 begin
 
@@ -14,9 +14,9 @@ structure Shrink = SpecCheck_Shrink
 structure Random = SpecCheck_Random
 \<close>
 
-ML_file \<open>../jeha_index.ML\<close>
+ML_file \<open>../slam_index.ML\<close>
 
-setup \<open> Jeha_Common.term_schem_setup \<close>
+setup \<open> Slam_Common.term_schem_setup \<close>
 
 ML \<open>
   val fps = [[], [1]]
@@ -33,13 +33,13 @@ ML \<open>
   val _ =
     Term_Index.fold
       (K true)
-      [Jeha_Fingerprint.FOFree "f", Jeha_Fingerprint.AnonymousVar]
-      (fn t => K (writeln (Jeha_Common.pretty_term @{context} t)))
+      [Slam_Fingerprint.FOFree "f", Slam_Fingerprint.AnonymousVar]
+      (fn t => K (writeln (Slam_Common.pretty_term @{context} t)))
       index
       ()
 \<close>
 
-ML_file \<open>../jeha_gen_term.ML\<close>
+ML_file \<open>../slam_gen_term.ML\<close>
 
 ML \<open>
   fun set_params gen = gen 2 2 (1, 1, 1, 0) 4 4
@@ -72,7 +72,7 @@ ML_val \<open>
           )
         else (writeln "VACUOUS"; true))
       handle ListPair.UnequalLengths => (writeln "CAUGHT"; true))
-      handle TERM msg => (writeln ("TERM: " ^ fst msg ^ " (s,t) = " ^ Jeha_Common.pretty_terms @{context} [s,t]); true))
+      handle TERM msg => (writeln ("TERM: " ^ fst msg ^ " (s,t) = " ^ Slam_Common.pretty_terms @{context} [s,t]); true))
       handle TYPE _ => (writeln "TYPE"; true)
     end
 

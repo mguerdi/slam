@@ -1,6 +1,6 @@
 theory preprocessing
 
-imports "JEHA_TEST_BASE.test_base"
+imports "SLAM_TEST_BASE.test_base"
 
 begin
 
@@ -8,6 +8,6 @@ begin
 
 (* FIXME *)
 lemma "(\<forall>x. P x) \<or> \<not> All P"
-by jeha
+by slam
 
 end

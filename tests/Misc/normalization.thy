@@ -1,6 +1,6 @@
 theory normalization
 
-imports "JEHA_TEST_BASE.test_base"
+imports "SLAM_TEST_BASE.test_base"
 
 begin
 
@@ -15,9 +15,9 @@ ML \<open>
   val befor = @{term_schem "((\<forall>(x::bool). ((?f10 x)                    = (\<lambda>(a::?'a12::type). x))) = False)"};
   val after = @{term        "((\<forall>(x::bool). ((\<lambda>(a::bool). (All ((=) a))) = (\<lambda>(a::bool). x))       ) = False)"};
   val after_normed = JTerm.norm_beta_eta_qeta_env (Envir.init) after;
-  val () = writeln (Jeha_Common.pretty_term @{context} befor);
-  val () = writeln (Jeha_Common.pretty_term @{context} after);
-  val () = writeln (Jeha_Common.pretty_term @{context} after_normed);
+  val () = writeln (Slam_Common.pretty_term @{context} befor);
+  val () = writeln (Slam_Common.pretty_term @{context} after);
+  val () = writeln (Slam_Common.pretty_term @{context} after_normed);
   (* FIXME: make an assertion *)
 \<close>
 
