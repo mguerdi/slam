@@ -349,20 +349,49 @@ fun matchcopy context vname =
         (*attempt projection on argument with given typ*)
         val Ts = map (curry (fastype env) rbinder) targs;
         fun projenv (head, (Us, bary), targ, tail) =
+          (* NOTE: head is always a bound variable *)
+          (* NOTE: Us ==> bary is always the type of targ *)
           let
+            (* Unify u's head's return type (which might be equal to u's type, if the head is fully
+            applied) with the return type of targ. *)
+            (* ?v targs =\<^sup>? uhead uargs *)
+            (*may raise exception CANTUNIFY*)
             val env =
               if unify_trace_types then test_unify_types context (base, bary) env
               else unify_types context (base, bary) env
           in
             Seq.make (fn () =>
               let
+                (* NOTE: env' is equal to env, except for greater maxidx *)
+                (* With Us = [U1, \<dots> Um] and Ts = [T1, \<dots>, Tn] produces
+                    E1, \<dots>, Em
+                where
+                    Ei = ?Gi B.(n-1) \<dots> B.0 *)
                 val (env', args) = make_args vname (Ts, env, Us);
                 (*higher-order projection: plug in targs for bound vars*)
+                (* replaces
+                  Ei = ?Gi B.(n-1) \<dots> B.0
+                by
+                  Ei = ?Gi t1 \<dots> tn
+                where the tj are the targs initially passed to mc. *)
                 fun plugin arg = list_comb (head_of arg, targs);
+                (* Long story short: given
+                  ?v t1 \<dots> tn =\<^sup>? u
+                choose i between 1 and n and create the new dpair
+                  ti (?G1 t1 \<dots> tn) \<dots> (?Gm t1 \<dots> tn) =\<^sup>? u,
+                which is equivalent to replacing ?v by the function
+                  \<lambda>x1 \<dots> xn. xi (?G1 x1 \<dots> xn) \<dots> (?Gm x1 \<dots> xn)
+                in
+                  ?v t1 \<dots> tn
+                and \<beta>-reducing. *)
                 val dp = (rbinder, list_comb (targ, map plugin args), u);
+                (* SIMPL the new dpair *)
                 val (env2, frigid, fflex) = SIMPL context (env', dp :: dpairs);
                 (*may raise exception CANTUNIFY*)
               in
+                (* and return
+                  B.(n-i) (?G1 B.(n-i) \<dots> B.0) \<dots> (?Gm B.(n-i) \<dots> B.0)
+                *)
                 SOME ((list_comb (head, args), (env2, frigid @ fflex)), tail)
               end handle CANTUNIFY => Seq.pull tail)
           end handle CANTUNIFY => tail;
@@ -373,26 +402,38 @@ fun matchcopy context vname =
           | make_projs _ = raise TERM ("make_projs", u::targs);
         (*try projections and imitation*)
         fun matchfun ((bvar,T,targ)::projs) =
+             (* Envir.strip_type (a \<Rightarrow> (b \<Rightarrow> c)) = [[a, b], c] *)
              (projenv(bvar, Envir.strip_type env T, targ, matchfun projs))
           | matchfun [] = (*imitation last of all*)
             (case uhead of
-         Const _ => Seq.map joinargs (copyargs uargs)
-             | Free _  => Seq.map joinargs (copyargs uargs)
-             | _ => Seq.empty)  (*if Var, would be a loop!*)
-    in
-      (case uhead of
-        Abs (a, T, body) =>
-          Seq.map (fn (body', ed') => (Abs (a, T, body'), ed'))
-            (mc ((a, T) :: rbinder, (map (incr_boundvars 1) targs) @ [Bound 0], body, ed))
-      | Var (w, _) =>
-          (*a flex-flex dpair: make variable for t*)
-          let
-            val (env', newhd) = Envir.genvar (#1 w) (env, Ts ---> base);
-            val tabs = Logic.combound (newhd, 0, length Ts);
-            val tsub = list_comb (newhd, targs);
-          in Seq.single (tabs, (env', (rbinder, tsub, u) :: dpairs)) end
-      | _ => matchfun (rev (make_projs (Ts, targs))))
-    end;
+              Const _ => Seq.map joinargs (copyargs uargs)
+              | Free _  => Seq.map joinargs (copyargs uargs)
+              | _ => Seq.empty)  (*if Var, would be a loop!*)
+      in
+        (* ?v targs =\<^sup>? u *)
+        (case uhead of
+          (* ?v targs =\<^sup>? \<lambda>a :: T. body *)
+          Abs (a, T, body) =>
+              (* ?v targs\<up> b0 =\<^sup>? body *)
+              (mc ((a, T) :: rbinder, (map (incr_boundvars 1) targs) @ [Bound 0], body, ed))
+              (* *)
+              |> Seq.map (fn (body', ed') => (Abs (a, T, body'), ed'))
+          (* ?v targs =\<^sup>? ?w *)
+        | Var (w, _) =>
+            (*a flex-flex dpair: make variable for t*)
+            let
+              val (env', newhd) = Envir.genvar (#1 w) (env, Ts ---> base);
+              val tabs = Logic.combound (newhd, 0, length Ts);
+              val tsub = list_comb (newhd, targs);
+            in Seq.single (tabs, (env', (rbinder, tsub, u) :: dpairs)) end
+          (* ?v targs =\<^sup>? f \<dots>  *)
+        | _ =>
+          (Ts, targs)
+          |> make_projs (* ([T1, T2], [t1, t2]) \<mapsto> [(b1, T1, t1), (b0, T2, t2)] *)
+          |> rev
+          |> matchfun
+        )
+      end;
   in mc end;
 
 
@@ -407,7 +448,8 @@ fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.
         NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
       | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
   in
-    Seq.map new_dset (matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
+    (matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
+    |> Seq.map new_dset
   end;
 
 
