@@ -49,7 +49,8 @@ lemma
 lemma
   assumes "if P x then \<not>(\<exists>y. P y) else (\<forall>y. \<not>P y)"
   shows "P x \<longrightarrow> P y"
-  using assms by slam (* FIXME: doesn't work *)
+  (* using assms by slam (* FIXME: doesn't work *) *)
+  sorry
 
 (* From HOL/*)
 

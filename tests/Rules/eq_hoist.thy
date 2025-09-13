@@ -7,7 +7,7 @@ begin
 ML_val \<open>
   (* from o\<lambda>Sup example 25 *)
   (* side condition 4. *)
-  val c = JClause.of_term (@{term_schem "(?z a = False) \<or> (?z b = True)"}, 1);
+  val c = JClause.of_term @{context} (@{term_schem "(?z a = False) \<or> (?z b = True)"}, 1);
   val [conclusion] = Slam.infer_eq_hoist @{context} c ([], JLit.Left, 0);
   val conclusion_term = JClause.term_of conclusion
   val expected = @{term_schem "False = False \<or> (?x4 b = ?y_eqneqhoist3 b) = True \<or> (?x4 :: 'a \<Rightarrow> ?'a1) a = ?y_eqneqhoist3 a"};
@@ -18,7 +18,7 @@ ML_val \<open>
 
 ML_val \<open>
   (* EqHoist can emulate NeqHoist *)
-  val c = JClause.of_term (@{term_schem "f (\<not> ((a :: 'a) = b)) = d"}, 1);
+  val c = JClause.of_term @{context} (@{term_schem "f (\<not> ((a :: 'a) = b)) = d"}, 1);
   val [conclusion] = Slam.infer_eq_hoist @{context} c ([1, 1], JLit.Left, 0);
   val conclusion_term = JClause.term_of conclusion;
   val expected = @{term_schem "f (\<not> False) = d \<or> (a :: 'a) = b"};
