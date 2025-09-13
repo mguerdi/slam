@@ -1,12 +1,6 @@
-(* Run using
-  Isabelle2023/bin/isabelle build -d ~/git/slam -d ~/git/slam/tests SESSIONS
-e.g.
-  Isabelle2023/bin/isabelle build -d ~/git/slam -d ~/git/slam/tests SLAM_TEST_GENERAL SLAM_TEST_RULES
-*)
-
 chapter SLAM_TESTS
 
-session "SLAM_TEST_BASE" = SLAM_MIRABELLE +
+session "SLAM_TEST_BASE" = SLAM +
   description "
     basic utilities for testing
   "

@@ -9,12 +9,4 @@ session "SLAM" = HOL +
     slam_lemma
     slam_tactic
     slam
-    (* slam_sledgehammer *)
-    (* slam_debug *)
 
-session "SLAM_MIRABELLE" in Mirabelle = SLAM +
-  description "
-    mirabelle action for running slam
-  "
-  theories
-    Mirabelle_Slam
