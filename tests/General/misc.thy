@@ -4,8 +4,6 @@ imports "SLAM_TEST_BASE.test_base" HOL.Num
 
 begin
 
-notation (output) "Pure.prop" ("#_" [1000] 1000)
-
 lemma funs_eq_then_comp_id_eq:
   shows "f = g \<Longrightarrow> (\<And> x. f x = (id o g) x)"
   (* by (metis fun.map_id) *)
