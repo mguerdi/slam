@@ -4,8 +4,6 @@ imports SLAM.slam HOL.Groups_Big HOL.Sledgehammer
 
 begin
 
-(*
-
 lemma sums_distrib:
   " (\<Sum>i\<in>A. i\<^sup>2  +         i * 2  +          1)
   = (\<Sum>i\<in>A. i\<^sup>2) + (\<Sum>i\<in>A. i * 2) + (\<Sum>i\<in>A. 1)"
@@ -36,42 +34,32 @@ lemma sums_distrib_restricted:
 
 lemma "(\<Sum>i\<in>A. (\<Sum>j\<in>A. f i j + g i j)) = (\<Sum>i\<in>A. \<Sum>j\<in>A. f i j) + (\<Sum>i\<in>A. \<Sum>j\<in>A. g i j)"
   (* by (metis (mono_tags, lifting) sum.cong sum.distrib) *)
-
-  (* This would easily work with NegCongFun. *)
-  (* But: How would it ever work without? FluidSup? Ext? *)
-  using sum.distrib [[slam_trace, slam_trace_forward_simp=false, slam_trace_neg_cong_fun, slam_debug_check_clauses]] by slam
-  (* sorry *)
+  using sum.distrib [[slam_trace, slam_trace_forward_simp=false]] by slam
 
 lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j) + h i)
       = (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j) * (\<Prod>j\<in>B. g i j)) + (\<Sum>i\<in>A. h i)"
-  by (metis (no_types, lifting) prod.cong prod.distrib sum.cong sum.distrib)
+  (* by (metis (no_types, lifting) prod.cong prod.distrib sum.cong sum.distrib) *)
   (* by (metis (mono_tags, lifting) prod.cong prod.distrib sum.cong sum.distrib) *)
-  (* This would easily work with NegCongFun. *)
-  (* using prod.distrib sum.distrib [[slam_trace, slam_trace_forward_simp=false]] *)
-  by slam
+  using prod.distrib sum.distrib [[slam_trace, slam_trace_forward_simp=false]] by slam
 
-*)
-
-(*
 lemma " P (\<Sum>i\<in>A. f i + h i + g i) (\<Prod>j\<in>B. f j * g j)
       = P ((\<Sum>i\<in>A. f i) + (\<Sum>i\<in>A. h i) + (\<Sum>i\<in>A. g i)) ((\<Prod>j\<in>B. f j) * (\<Prod>j\<in>B. g j))"
-  by (metis (mono_tags, lifting) sum.cong sum.distrib prod.distrib)
-*)
+  (* by (metis (mono_tags, lifting) sum.cong sum.distrib prod.distrib) *)
+  by (slam (mono_tags, lifting) sum.cong sum.distrib prod.distrib)
 
-(*
 lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j) + h i)
       = (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j) * (\<Prod>j\<in>B. g i j)) + (\<Sum>i\<in>A. h i)"
-  (* using [[metis_trace]] *) by (metis (no_types, lifting) prod.cong prod.distrib sum.cong sum.distrib)
   (* 10 "clauses actually used" *)
-*)
+  (* by (metis (no_types, lifting) prod.cong prod.distrib sum.cong sum.distrib) *)
+  by (slam (no_types, lifting) prod.cong prod.distrib sum.cong sum.distrib)
 
 lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j) + h i)
       = (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j) * (\<Prod>j\<in>B. g i j)) + (\<Sum>i\<in>A. h i)"
   using [[slam_trace]] by (slam prod.distrib sum.distrib)
 
 lemma "\<exists>h. (\<Sum>i\<in>A. f i + g i) = (\<Sum>i\<in>A. h i)"
-  by metis
-  (* using [[slam_trace]] by slam *)
+  (* by metis *)
+  using [[slam_trace, slam_trace_forward_simp=false]] by slam
 
 (* find_theorems "(?x + ?y)^2" *)
 thm Power.comm_semiring_1_class.power2_sum
@@ -271,10 +259,8 @@ lemma
 (*
 lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j))
       = (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j) * (\<Prod>j\<in>B. g i j))"
+  (* by (metis prod.distrib) *)
   by (slam prod.distrib)
-*)
-
-(*
 
 lemma "((x :: nat) + y)\<^sup>2 = x\<^sup>2 + 2 * x * y + y\<^sup>2"
   by (simp add: power2_sum)
@@ -300,6 +286,31 @@ lemma
   *)
   sorry
 
-*)
+lemma
+  fixes A :: "nat set"
+  shows "(\<Sum>i\<in>A. i\<^sup>2 + 1 + 2 * i) = (\<Sum>i\<in>A. i\<^sup>2 + i * 2) + (\<Sum>i\<in>A. 1)"
+  (* using [[slam_trace, slam_trace_forward_simp=false]] *)
+  (* by (slam Suc_1 ab_semigroup_add_class.add_ac(1) add.commute mult.commute sum.distrib) *)
+
+  (* sledgehammer suggests the following: *)
+
+  (* (the times are from the timing panel) *)
+
+  (* by (smt (z3) add.commute add.left_commute mult_2 mult_2_right sum.cong sum.distrib) (* 199 ms *) *)
+
+  (* by (metis (no_types, lifting) Suc_eq_plus1 add_Suc mult.commute sum.cong sum.distrib) (* 236 ms *) *)
+
+  (* fastest: *)
+  by (slam (no_types, lifting) Suc_eq_plus1 add_Suc mult.commute sum.cong sum.distrib) (* 120 ms *)
+
+  (* by (metis add.assoc add.commute mult_2 mult_2_right sum.distrib) *) (* very long *)
+  (* by (slam add.assoc add.commute mult_2 mult_2_right sum.distrib) (* very long *) *)
+
+  (* instantiated: *)
+  (* by (metis (lifting) ext add.assoc[of "_ ^ 2"] add.assoc[of "1" "_ ^ 2" "2 * _"] add.commute[of "1" "_ ^ 2 + _ + _"] add.commute[of "1" "_ ^ 2"] mult_2
+      mult_2_right sum.distrib[of "\<lambda>uu. uu\<^sup>2 + uu * 2" "\<lambda>uu. 1" A]) (* 50 ms *) *)
+
+  (* by (metis (no_types, lifting) Suc_eq_plus1 add_Suc mult.commute sum.cong sum.distrib) *)
+  (* by (slam add.assoc add.commute mult_2 mult_2_right sum.distrib) *)
 
 end
