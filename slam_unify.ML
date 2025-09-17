@@ -91,12 +91,32 @@ fun upto_exp first last =
     range
   end
 
+(* Repeatedly calls the argument unif with increasing depths. Tests max depth first to quickly
+identify if the problem is unifiable at all (within the maximal depth limit). *)
+fun mk_impl_shallow_first ctxt (unif: int -> 'a Seq.seq) : 'a Seq.seq =
+  let
+    val max_depth :: rev_depths =
+      rev (upto_exp 0 (Config.get_generic ctxt Slam_Common.unify_search_bound))
+    val depths = Seq.of_list (rev rev_depths)
+  in
+    Seq.make (fn () =>
+      (* FIXME: We need to make sure that the computation of this large-depth unifier can trigger the timeout! *)
+      case Seq.pull (unif max_depth) of
+        NONE => NONE
+      | SOME (unifier, rest) =>
+          Seq.append
+            (Seq.maps unif depths)
+            (Seq.append (Seq.single unifier) rest)
+          |> Seq.pull
+    )
+  end
+
 (* Repeatedly call unification algorithm with increasing unification search bounds. *)
 fun impl_shallow_first_smash_unifiers ctxt tus env =
-  (upto_exp 0 (Config.get_generic ctxt Slam_Common.unify_search_bound))
-  |> Seq.of_list
-  |> Seq.maps (fn search_bound =>
-    impl_smash_unifiers (Config.put_generic Unify.search_bound search_bound ctxt) tus env)
+  mk_impl_shallow_first
+    ctxt
+    (fn search_bound =>
+      impl_smash_unifiers (Config.put_generic Unify.search_bound search_bound ctxt) tus env)
 
 fun shallow_first_smash_unifiers ctxt = with_timeout ctxt oo impl_shallow_first_smash_unifiers ctxt
 
@@ -115,12 +135,12 @@ fun impl_matchers ctxt maxidx pairs =
 
 fun matchers ctxt = with_timeout ctxt oo impl_matchers ctxt
 
-(* Repeatedly call unification algorithm with increasing unification search bounds. *)
+(* Repeatedly call matching algorithm with increasing unification search bounds. *)
 fun impl_shallow_first_matchers ctxt maxidx pairs =
-  (upto_exp 0 (Config.get_generic ctxt Slam_Common.unify_search_bound))
-  |> Seq.of_list
-  |> Seq.maps (fn search_bound =>
-    impl_matchers (Config.put_generic Unify.search_bound search_bound ctxt) maxidx pairs)
+  mk_impl_shallow_first
+    ctxt
+    (fn search_bound =>
+      impl_matchers (Config.put_generic Unify.search_bound search_bound ctxt) maxidx pairs)
 
 fun shallow_first_matchers ctxt = with_timeout ctxt oo impl_shallow_first_matchers ctxt
 
@@ -157,5 +177,10 @@ val impl_literal_shallow_first_matchers = mk_impl_literal_matchers impl_shallow_
 
 fun literal_shallow_first_matchers ctxt =
   with_timeout ctxt oo impl_literal_shallow_first_matchers ctxt
+
+(* FIXME: for evaluation only *)
+
+val smash_unifiers = shallow_first_smash_unifiers
+val literal_matchers = literal_shallow_first_matchers
 
 end
