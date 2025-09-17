@@ -8,8 +8,8 @@ method calls have been inserted. (Like old-school mirabelle?)
 Evaluation:
 
 We use the replay feature as follows: If metis succeeds, try the same with
-jeha. If metis fails, try with jeha.
+slam. If metis fails, try with slam.
 
 This gives us a comparison of jeah performance against baseline metis and a the
-cases in which jeha is better than metis.
+cases in which slam is better than metis.
 

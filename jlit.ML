@@ -31,11 +31,11 @@ sig
   val map_at_lpos : lpos -> (term -> term) -> T -> T
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
-  val kbo : T * T -> Jeha_Order.partial_order
+  val kbo : T * T -> Slam_Order.partial_order
   val kbo_generic :
-    (('a * 'a) -> Jeha_Order.partial_order) ->
+    (('a * 'a) -> Slam_Order.partial_order) ->
     (('a * 'a * bool) * ('a * 'a * bool)) ->
-    Jeha_Order.partial_order
+    Slam_Order.partial_order
   val pretty_lit' : Proof.context -> T -> Pretty.T
   val pretty_lit : Proof.context -> T -> string
   val pretty_subterm' : Proof.context -> T -> lpos * JTerm.tpos -> Pretty.T
@@ -61,7 +61,7 @@ fun is_negativoid (l as (s, t, b)) =
     orelse JTerm.is_false t andalso not (JTerm.is_false s)
 
 fun is_negative_or_negativoid_cfg ctxt =
-  if Config.get ctxt (Jeha_Common.select_negativoid)
+  if Config.get ctxt (Slam_Common.select_negativoid)
     then is_negativoid
     else is_negative
 
@@ -175,11 +175,11 @@ fun kbo_generic_different_signs_greater cmp ((s, t, st_pos), (u, v, uv_pos)) =
   if not st_pos andalso uv_pos
     (* negative > positive iff. \<forall>\<dots>\<exists>\<dots> m \<ge> n *)
     then [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-          the_default false (Jeha_Common.map_some is_greater_equal (cmp (m, n)))))
+          the_default false (Slam_Common.map_some is_greater_equal (cmp (m, n)))))
   else if st_pos andalso not uv_pos
     (* positive > negative iff. \<forall>\<dots>\<exists>\<dots> m > n *)
     then [u, v] |> forall (fn n => [s, t] |> exists (fn m =>
-          the_default false (Jeha_Common.map_some is_greater (cmp (m, n)))))
+          the_default false (Slam_Common.map_some is_greater (cmp (m, n)))))
   else error "kbo_generic_different_signs_greater: same signs"
 
 (* see notes in info/master/kbo/build/main.pdf *)
@@ -192,11 +192,11 @@ fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
         then SOME LESS
       else NONE
   (* fall back to multiset comparison *)
-  else Jeha_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
+  else Slam_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
 
-val kbo = kbo_generic Jeha_KBO.ord
+val kbo = kbo_generic Slam_KBO.ord
 
-fun pretty_lit' ctxt = Jeha_Common.pretty_term' ctxt o term_of
+fun pretty_lit' ctxt = Slam_Common.pretty_term' ctxt o term_of
 
 val pretty_lit = Pretty.string_of oo pretty_lit'
 
@@ -219,7 +219,7 @@ fun as_oriented_for_pretty lit lp =
   end
 
 (* lp points to the lhs of the rewrite rule *)
-fun pretty_oriented' ctxt lit lp = Jeha_Common.pretty_term' ctxt (as_oriented_for_pretty lit lp)
+fun pretty_oriented' ctxt lit lp = Slam_Common.pretty_term' ctxt (as_oriented_for_pretty lit lp)
 
 val pretty_oriented = Pretty.string_of ooo pretty_oriented'
 

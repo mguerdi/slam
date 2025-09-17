@@ -1,6 +1,6 @@
 theory eligibility
 
-imports "JEHA_TEST_BASE.test_base"
+imports "SLAM_TEST_BASE.test_base"
 
 begin
 
@@ -16,20 +16,20 @@ ML_val \<open>
 
   val lits = #literals c;
 
-  val is_maximal_left = Jeha_Order.is_maximal JLit.kbo false (nth lits 0) lits;
+  val is_maximal_left = Slam_Order.is_maximal JLit.kbo false (nth lits 0) lits;
   \<^assert> is_maximal_left;
 
-  val is_maximal_right = Jeha_Order.is_maximal JLit.kbo false (nth lits 1) lits;
+  val is_maximal_right = Slam_Order.is_maximal JLit.kbo false (nth lits 1) lits;
   \<^assert> (not is_maximal_right);
 
-  val is_strict_maximal_left = Jeha_Order.is_maximal JLit.kbo true (nth lits 0) lits;
+  val is_strict_maximal_left = Slam_Order.is_maximal JLit.kbo true (nth lits 0) lits;
   \<^assert> is_strict_maximal_left;
 
   val lit_kbo_with_itself = JLit.kbo (nth lits 0, nth lits 0);
   \<^assert> (SOME EQUAL = lit_kbo_with_itself);
 
   val is_strict_maximal_in_singleton =
-    Jeha_Order.is_maximal JLit.kbo true (nth lits 0) [nth lits 0, nth lits 1];
+    Slam_Order.is_maximal JLit.kbo true (nth lits 0) [nth lits 0, nth lits 1];
   \<^assert> is_strict_maximal_in_singleton;
 \<close>
 
@@ -85,7 +85,7 @@ ML_val \<open>
   val () = \<^assert> (not (JClause.is_eligible_cpos C 0))
 \<close>
 
-declare [[jeha_literal_selection_function="select_all_neg_lit"]]
+declare [[slam_literal_selection_function="select_all_neg_lit"]]
 
 ML_val \<open>
   val C = JClause.of_term @{context} (@{term "(a :: 'a) \<noteq> b \<or> (c :: 'a) = d"}, 0)

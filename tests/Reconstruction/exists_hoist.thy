@@ -1,6 +1,6 @@
 theory exists_hoist
 
-imports JEHA_TEST_BASE.test_base
+imports SLAM_TEST_BASE.test_base
 
 begin
 
@@ -16,7 +16,7 @@ ML_val \<open>
   val expected = mk @{term_schem
     "A \<Longrightarrow> B True = B' \<Longrightarrow> D \<Longrightarrow> (f :: 'a \<Rightarrow> 'b \<Rightarrow> bool) ?fresh_x c \<noteq> False \<Longrightarrow> False"}
   val conclusion =
-    Jeha_Proof.reconstruct_exists_hoist
+    Slam_Proof.reconstruct_exists_hoist
       @{context}
       { premise = premise
       , subterm = ([1], JLit.Left, 1)
@@ -31,7 +31,7 @@ ML_val \<open>
   val expected = mk @{term_schem
     "A ?y \<Longrightarrow> B True = B' \<Longrightarrow> (f :: 'a \<Rightarrow> 'b \<Rightarrow> bool) ?fresh_x c \<noteq> False \<Longrightarrow> False"}
   val conclusion =
-    Jeha_Proof.reconstruct_exists_hoist
+    Slam_Proof.reconstruct_exists_hoist
       @{context}
       { premise = premise
       , subterm = ([1], JLit.Left, 1)
@@ -46,7 +46,7 @@ ML_val \<open>
   val expected = mk @{term_schem
     "A \<Longrightarrow> B True = B' \<Longrightarrow> (f :: 'a \<Rightarrow> 'b \<Rightarrow> bool) ?fresh_x c \<noteq> False \<Longrightarrow> False"}
   val conclusion =
-    Jeha_Proof.reconstruct_exists_hoist
+    Slam_Proof.reconstruct_exists_hoist
       @{context}
       { premise = premise
       , subterm = ([1], JLit.Left, 1)
@@ -61,7 +61,7 @@ ML_val \<open>
   val expected = mk @{term_schem
     "B True = B' \<Longrightarrow> (f :: ?'a \<Rightarrow> 'b \<Rightarrow> bool) ?fresh_x c \<noteq> False \<Longrightarrow> False"}
   val conclusion =
-    Jeha_Proof.reconstruct_exists_hoist
+    Slam_Proof.reconstruct_exists_hoist
       @{context}
       { premise = premise
       , subterm = ([1], JLit.Left, 0)

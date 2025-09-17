@@ -1,6 +1,6 @@
 theory unification
 
-imports "JEHA_TEST_BASE.test_base"
+imports "SLAM_TEST_BASE.test_base"
 
 begin
 
@@ -10,14 +10,14 @@ ML_val \<open>
   val ctxt = Context.Proof @{context};
   (* matching *)
   \<^assert> (is_some (Seq.pull
-    (Jeha_Unify.matchers ctxt ~1 [(pattern, term)])));
+    (Slam_Unify.matchers ctxt ~1 [(pattern, term)])));
   \<^assert> (not (is_some (Seq.pull
-    (Jeha_Unify.matchers ctxt ~1 [(term, pattern)]))));
+    (Slam_Unify.matchers ctxt ~1 [(term, pattern)]))));
   (* unification *)
   \<^assert> (is_some (Seq.pull
-    (Jeha_Unify.smash_unifiers ctxt [(term, pattern)] Envir.init)));
+    (Slam_Unify.smash_unifiers ctxt [(term, pattern)] Envir.init)));
   \<^assert> (is_some (Seq.pull
-    (Jeha_Unify.smash_unifiers ctxt [(pattern, term)] Envir.init)));
+    (Slam_Unify.smash_unifiers ctxt [(pattern, term)] Envir.init)));
 \<close>
 
 (* Isabelles Unify.matchers doesn't handle maxidx corretly when only types are unified *) 
@@ -32,15 +32,15 @@ ML_val \<open>
   val maxidx = fold (maxidx_of_term #> curry Int.max) [pattern, term] ~1;
   val SOME (wrong_matcher, _) = Seq.pull (Unify.matchers ctxt [(pattern, term)]);
   \<^assert> (not (maxidx <= Envir.maxidx_of wrong_matcher));
-  val SOME (right_matcher, _) = Seq.pull (Jeha_Unify.matchers ctxt maxidx [(pattern, term)]);
+  val SOME (right_matcher, _) = Seq.pull (Slam_Unify.matchers ctxt maxidx [(pattern, term)]);
   \<^assert> (maxidx <= Envir.maxidx_of right_matcher);
 \<close>
 
 (* Notes on Unify.matchers
 
-  (* in Jeha_Unify.matchers *)
+  (* in Slam_Unify.matchers *)
   val v = Var (("maxidxforcer", maxidx), dummyT)
-  val pairs = map (apply2 Jeha_Unify.give_to_undefined) ((v, Term.dummy) :: [(pattern, term)])
+  val pairs = map (apply2 Slam_Unify.give_to_undefined) ((v, Term.dummy) :: [(pattern, term)])
 
   (* in Unify.matchers *)
   val context = (Context.Proof @{context})
@@ -94,7 +94,7 @@ ML_val \<open>
   (* \<^assert> (Envir.typ_env *)
 \<close>
 
-declare [[jeha_trace, jeha_trace_rewrite_positive_lits, jeha_trace_sup]]
+declare [[slam_trace, slam_trace_rewrite_positive_lits, slam_trace_sup]]
 
 (* A case of the overapproximation of fluid subterms preventing a rewrite  *)
 ML_val \<open>
@@ -112,14 +112,14 @@ ML_val \<open>
   val unit_clause = JClause.of_term @{context} (unit_term, 1)
   val lp = JLit.Left
 
-  val rw = Jeha.impl_simp_rewrite_lits true @{context} (unit_clause, lp) (target_clause, subterm)
+  val rw = Slam.impl_simp_rewrite_lits true @{context} (unit_clause, lp) (target_clause, subterm)
   (*
   tenv:[?x21::?'a19 \<Rightarrow> ?'a19 := \<lambda>a::?'a19. id (\<lambda>b::?'a3. a) ((?x_ac22::?'a19 \<Rightarrow> ?'a3) a),
   ?x_ac22::?'a19 := ?x::?'a19, ?maxidxforcer24 := _] and tyenv:[?'a20 := ?'a19, ?'a22 := ?'a19]
   *)
 
   (* superposition works *)
-  val sup = Jeha.infer_sup @{context} (unit_clause, (lp, 0)) (target_clause, subterm)
+  val sup = Slam.infer_sup @{context} (unit_clause, (lp, 0)) (target_clause, subterm)
 \<close>
 
 end

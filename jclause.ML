@@ -23,8 +23,8 @@ sig
   val maxidx_of2 : T * T -> int
   val set_maxidx : int -> T -> T
   val recalculate_maxidx : T -> T
-  val set_origin : Proof.context -> int Jeha_Log.inference -> T -> T
-  val origin : T -> int Jeha_Log.inference
+  val set_origin : Proof.context -> int Slam_Log.inference -> T -> T
+  val origin : T -> int Slam_Log.inference
   val lit_at : cpos -> T -> JLit.T
   (* law: JLit.term_of (lit_at cp c) = JTerm.subterm_at (as_tpos c) (term_of c) *)
   val as_tpos : int -> cpos -> JTerm.tpos
@@ -65,7 +65,7 @@ sig
   val norm_beta_eta_qeta : Proof.context -> T -> T
   val norm_negative_predicate_literals : Proof.context -> T -> T
   val incr_indexes : int -> T -> T
-  val kbo : T * T -> Jeha_Order.partial_order
+  val kbo : T * T -> Slam_Order.partial_order
 
   val is_eligible_cpos : T -> cpos -> bool
   val is_eligible_full_pos : T -> full_pos -> bool
@@ -111,7 +111,7 @@ type T =
   { literals: JLit.T list
   , id : int
   , maxidx : int
-  , origin: int Jeha_Log.inference
+  , origin: int Slam_Log.inference
   , selected: cpos list
   (* , normalized: bool *)
   , dist_to_neg_conj: int
@@ -128,7 +128,7 @@ val maxidx = #maxidx
 
 val maxidx_of2 = Int.max o apply2 maxidx
 
-val empty = { literals = [], id = ~1, maxidx = ~1, origin = Jeha_Log.Invalid, selected = [], dist_to_neg_conj = ~1 }
+val empty = { literals = [], id = ~1, maxidx = ~1, origin = Slam_Log.Invalid, selected = [], dist_to_neg_conj = ~1 }
 
 (* NOTE: invalidates maxidx and selection *)
 fun map_literals f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
@@ -186,7 +186,7 @@ fun check_type clause =
   end
 
 fun check_clause ctxt clause =
-  if not (Config.get ctxt Jeha_Common.debug_check_clauses) then () else (
+  if not (Config.get ctxt Slam_Common.debug_check_clauses) then () else (
     check_maxidx clause;
     check_type clause
   )
@@ -195,9 +195,9 @@ fun set_origin ctxt origin { literals, id, maxidx, selected, dist_to_neg_conj, .
   let
     val dist_to_neg_conj =
       case origin of
-        Jeha_Log.Axiom _ => 15 (* FIXME: should be Jeha_Passive.max_dist_to_neg_conj *)
-      | Jeha_Log.NegatedConjecture _ => 0
-      | _ => if Jeha_Log.is_simplification origin then dist_to_neg_conj else dist_to_neg_conj + 1
+        Slam_Log.Axiom _ => 15 (* FIXME: should be Slam_Passive.max_dist_to_neg_conj *)
+      | Slam_Log.NegatedConjecture _ => 0
+      | _ => if Slam_Log.is_simplification origin then dist_to_neg_conj else dist_to_neg_conj + 1
     val clause =
       { literals = literals
       , id = id
@@ -240,7 +240,7 @@ fun select_none _ _ = []
 
 fun is_selectable ctxt lit =
   JLit.is_negative_or_negativoid_cfg ctxt lit
-    andalso (Config.get ctxt Jeha_Common.select_flex_sided orelse not (JLit.is_flex_sided lit))
+    andalso (Config.get ctxt Slam_Common.select_flex_sided orelse not (JLit.is_flex_sided lit))
 
 fun select_all_neg_lit (ctxt : Proof.context) lits =
   lits
@@ -261,7 +261,7 @@ fun select_first_maximal_neg_lit ctxt lits =
       (* FIXME: maybe the blocker disallowing for selection of literals with a variable-headed side
       is really important? *)
       |> filter (fn (cpos, lit) => is_selectable ctxt lit)
-    val max_neg_lits = Jeha_Order.idxs_of_maximal_elements (JLit.kbo o apply2 #2) neg_lits_cposs
+    val max_neg_lits = Slam_Order.idxs_of_maximal_elements (JLit.kbo o apply2 #2) neg_lits_cposs
   in
     case max_neg_lits of
       (* index into neg_lits_cposs! *)
@@ -289,7 +289,7 @@ fun literal_selection_function_from_name name = case name of
         )
 
 fun get_literal_selection_function ctxt =
-  Config.get ctxt Jeha_Common.literal_selection_function
+  Config.get ctxt Slam_Common.literal_selection_function
   |> literal_selection_function_from_name
   |> (fn f => f ctxt)
 
@@ -341,13 +341,13 @@ fun pretty_clause' ctxt c =
   let
     val origin = #origin c
     val premises = case origin of
-      Jeha_Log.Invalid => "[Invalid]"
-    | _ => @{make_string} (Jeha_Log.premises origin)
+      Slam_Log.Invalid => "[Invalid]"
+    | _ => @{make_string} (Slam_Log.premises origin)
   in
     Pretty.block
       [ Pretty.str (@{make_string} (#id c) ^ ":")
       , Syntax.pretty_term ctxt (term_of c)
-      , Pretty.str (" (" ^ (Jeha_Log.name_of origin) ^ " " ^ premises ^ ")")
+      , Pretty.str (" (" ^ (Slam_Log.name_of origin) ^ " " ^ premises ^ ")")
       ]
   end
 
@@ -430,7 +430,7 @@ fun pretty_oriented' ctxt c (lp, cp) =
           end
     val t = term_of_lits (literals c)
   in
-    Jeha_Common.pretty_term' ctxt (term_of_lits (literals c))
+    Slam_Common.pretty_term' ctxt (term_of_lits (literals c))
   end
 
 val pretty_oriented = Pretty.string_of ooo pretty_oriented'
@@ -498,7 +498,7 @@ fun incr_indexes increment clause =
   |> map_literals (map (JLit.map (Logic.incr_indexes ([], increment))))
   |> set_maxidx (increment + maxidx clause)
 
-val kbo = Jeha_Order.mk_multiset_order_of_strict JLit.kbo o apply2 literals
+val kbo = Slam_Order.mk_multiset_order_of_strict JLit.kbo o apply2 literals
 
 (* Eligibility without selection functions:
 Definition 22 (Eligibility) A literal L is (strictly) \<ge>-eligible w.r.t. a substitution \<sigma> in C for
@@ -512,13 +512,13 @@ The \<ge>-eligible positions of clause C w.r.t a substitution \<sigma> are induc
 (E4) ...
 *)
 
-(* unfortunately we can't define these functions in JTerm because they depend on Jeha_Order
-FIXME: create BASIC_JTERM, have Jeha_Order depend on that, then use include / open in JTERM / JTerm
+(* unfortunately we can't define these functions in JTerm because they depend on Slam_Order
+FIXME: create BASIC_JTERM, have Slam_Order depend on that, then use include / open in JTERM / JTerm
 to define JTerm.kbo etc. *)
 
 fun is_eligible_tpos_in_eq (Const (@{const_name "HOL.eq"}, _) $ s $ t) (i :: tpos) =
   let 
-    val s_t_comp = Jeha_KBO.ord (s, t)
+    val s_t_comp = Slam_KBO.ord (s, t)
   in
     not (s_t_comp = SOME EQUAL) andalso
       case i of
@@ -553,7 +553,7 @@ fun is_eligible_cpos c cpos =
     val selected = selected c
   in
     if selected = []
-      then Jeha_Order.is_maximal JLit.kbo strict literal literals
+      then Slam_Order.is_maximal JLit.kbo strict literal literals
       else member (op =) selected cpos
   end
 
@@ -576,7 +576,7 @@ fun is_eligible_full_pos c (tpos, lpos, cpos) =
     val literal = nth (literals c) cpos
     val (s, t, _) = JLit.orient lpos literal
     fun s_leq_t () =
-      let val s_t_comp = Jeha_KBO.ord (s, t) in
+      let val s_t_comp = Slam_KBO.ord (s, t) in
         (SOME LESS = s_t_comp) orelse (SOME EQUAL = s_t_comp)
       end
   in

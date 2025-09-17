@@ -1,6 +1,6 @@
 theory reconstruct_fa_rw
 
-imports "JEHA.jeha"
+imports "SLAM.slam"
 
 begin
 

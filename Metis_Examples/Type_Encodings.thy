@@ -12,7 +12,7 @@ theory Type_Encodings
 imports Main
 begin
 
-declare [[jeha_new_skolem]]
+declare [[slam_new_skolem]]
 
 text \<open>Setup for testing Metis exhaustively\<close>
 
@@ -49,46 +49,46 @@ val type_encs =
    "mono_tags??",
    "mono_args"]
 
-fun jeha_exhaust_tac ctxt ths =
+fun slam_exhaust_tac ctxt ths =
   let
     fun tac [] st = all_tac st
       | tac (type_enc :: type_encs) st =
         st |> ((if null type_encs then all_tac else resolve_tac ctxt @{thms fork} 1)
-               THEN Metis_Tactic.jeha_tac [type_enc]
+               THEN Metis_Tactic.slam_tac [type_enc]
                     ATP_Problem_Generate.combsN ctxt ths 1
                THEN COND (has_fewer_prems 2) all_tac no_tac
                THEN tac type_encs)
   in tac type_encs end
 \<close>
 
-method_setup jeha_exhaust = \<open>
+method_setup slam_exhaust = \<open>
   Attrib.thms >>
-    (fn ths => fn ctxt => SIMPLE_METHOD (jeha_exhaust_tac ctxt ths))
+    (fn ths => fn ctxt => SIMPLE_METHOD (slam_exhaust_tac ctxt ths))
 \<close> "exhaustively run Metis with all type encodings"
 
 text \<open>Miscellaneous tests\<close>
 
 lemma "x = y \<Longrightarrow> y = x"
-by jeha_exhaust
+by slam_exhaust
 
 lemma "[a] = [Suc 0] \<Longrightarrow> a = 1"
-by (jeha_exhaust last.simps One_nat_def)
+by (slam_exhaust last.simps One_nat_def)
 
 lemma "map Suc [0] = [Suc 0]"
-by (jeha_exhaust list.map)
+by (slam_exhaust list.map)
 
 lemma "map Suc [1 + 1] = [Suc 2]"
-by (jeha_exhaust list.map nat_1_add_1)
+by (slam_exhaust list.map nat_1_add_1)
 
 lemma "map Suc [2] = [Suc (1 + 1)]"
-by (jeha_exhaust list.map nat_1_add_1)
+by (slam_exhaust list.map nat_1_add_1)
 
 definition "null xs = (xs = [])"
 
 lemma "P (null xs) \<Longrightarrow> null xs \<Longrightarrow> xs = []"
-by (jeha_exhaust null_def)
+by (slam_exhaust null_def)
 
 lemma "(0::nat) + 0 = 0"
-by (jeha_exhaust add_0_left)
+by (slam_exhaust add_0_left)
 
 end

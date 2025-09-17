@@ -19,7 +19,7 @@ ML_val \<open>
   val SOME ((unifier, ff_pairs), unifiers) = Seq.pull unifiers
   val [(l, r)] = ff_pairs;
   (* val SOME for_x = Envir.lookup unifier (("x", 0), @{typ "'a \<Rightarrow> 'b"})
-  val _ = writeln (Jeha_Common.pretty_term @{context} for_x) *)
+  val _ = writeln (Slam_Common.pretty_term @{context} for_x) *)
 \<close>
 
 end 

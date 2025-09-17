@@ -1,6 +1,6 @@
 theory leo3
 
-imports "JEHA.jeha"
+imports "SLAM.slam"
 
 begin
 
@@ -13,7 +13,7 @@ lemma leo3_surjective_cantor_theorem:
   (* sledgehammer *)
   (* suggested by sledgehammer but fails *)
   (* by metis *)
-  (* using [[ jeha_trace = false ]] by jeha *)
+  (* using [[ slam_trace = false ]] by slam *)
   oops
 
 end

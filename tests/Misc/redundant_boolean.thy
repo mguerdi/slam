@@ -1,6 +1,6 @@
 theory redundant_boolean
 
-imports "JEHA.jeha"
+imports "SLAM.slam"
 
 begin
 

@@ -1,6 +1,6 @@
 theory hclause
                               
-imports JEHA_TEST_BASE.test_base
+imports SLAM_TEST_BASE.test_base
 
 begin
 
@@ -14,7 +14,7 @@ ML \<open>
 declare [[show_types]]
 
 ML_val \<open>
-  val _ = Jeha_Proof.hclause_of_axiom @{context} @{thm mem_Collect_eq}
+  val _ = Slam_Proof.hclause_of_axiom @{context} @{thm mem_Collect_eq}
 \<close>
 
 ML_val \<open>

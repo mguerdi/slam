@@ -1,11 +1,11 @@
 theory simple_stuff
 
-imports Main JEHA.jeha
+imports Main SLAM.slam
 
 begin
 
 theorem T0: "\<exists>F. \<forall>T :: bool. \<exists>(S :: bool\<Rightarrow>bool). F S = T"
-  using [[jeha_trace, (* jeha_trace_forward_simp=false,*) jeha_trace_clause_subsumption, jeha_max_number_of_steps=30]] by jeha
+  using [[slam_trace, (* slam_trace_forward_simp=false,*) slam_trace_clause_subsumption, slam_max_number_of_steps=30]] by slam
 (*
 zipperposition: One-line proof reconstruction failed: by metis
 
@@ -37,10 +37,10 @@ axiomatization where
 theorem T1: "\<exists>(F::(i\<Rightarrow>bool)\<Rightarrow>i). \<forall>T::i. (\<exists>(S::i\<Rightarrow>bool). F S = T)"
   (* nitpick[satisfy, user_axioms, show_all] *)
   (* by (metis A1 A2) *)
-  (* (* using [[jeha_trace, *) using [[jeha_max_number_of_steps=1500]] by (jeha A1 A2) *)
+  (* (* using [[slam_trace, *) using [[slam_max_number_of_steps=1500]] by (slam A1 A2) *)
   (* sledgehammer(A1 A2) *)
-  (* using [[jeha_trace, jeha_max_number_of_steps=100]] by (jeha A1 A2) *)
+  (* using [[slam_trace, slam_max_number_of_steps=100]] by (slam A1 A2) *)
   (* by metis *)
-  using [[jeha_trace, jeha_max_number_of_steps=1500, jeha_trace_forward_simp=false, jeha_literal_selection_function="select_none", jeha_sup_variable_condition="none"]] by (jeha A1 A2)
+  using [[slam_trace, slam_max_number_of_steps=1500, slam_trace_forward_simp=false, slam_literal_selection_function="select_none", slam_sup_variable_condition="none"]] by (slam A1 A2)
 
 end

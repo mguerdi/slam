@@ -1,19 +1,19 @@
 (* Run using
-  Isabelle2023/bin/isabelle build -d ~/git/jeha -d ~/git/jeha/tests SESSIONS
+  Isabelle2023/bin/isabelle build -d ~/git/slam -d ~/git/slam/tests SESSIONS
 e.g.
-  Isabelle2023/bin/isabelle build -d ~/git/jeha -d ~/git/jeha/tests JEHA_TEST_GENERAL JEHA_TEST_RULES
+  Isabelle2023/bin/isabelle build -d ~/git/slam -d ~/git/slam/tests SLAM_TEST_GENERAL SLAM_TEST_RULES
 *)
 
-chapter JEHA_TESTS
+chapter SLAM_TESTS
 
-session "JEHA_TEST_BASE" = JEHA_MIRABELLE +
+session "SLAM_TEST_BASE" = SLAM_MIRABELLE +
   description "
     basic utilities for testing
   "
   theories
     test_base
 
-session "JEHA_TEST_GENERAL" in General = JEHA_TEST_BASE +
+session "SLAM_TEST_GENERAL" in General = SLAM_TEST_BASE +
   description "
     general examples
   "
@@ -25,7 +25,7 @@ session "JEHA_TEST_GENERAL" in General = JEHA_TEST_BASE +
     misc
     SAT_Examples
 
-session "JEHA_TEST_RULES" in Rules = JEHA_TEST_BASE +
+session "SLAM_TEST_RULES" in Rules = SLAM_TEST_BASE +
   description "
     specific rules
   "
@@ -36,7 +36,7 @@ session "JEHA_TEST_RULES" in Rules = JEHA_TEST_BASE +
     subsumption
     sup
 
-session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
+session "SLAM_TEST_MISC" in Misc = SLAM_TEST_BASE +
   description "
     miscellaneous tests
   "
@@ -70,7 +70,7 @@ session "JEHA_TEST_MISC" in Misc = JEHA_TEST_BASE +
     (* index.thy *)
     (* smash_unify_fluid.thy *)
 
-session "JEHA_TEST_RECONSTRUCTION" in Reconstruction = JEHA_TEST_BASE +
+session "SLAM_TEST_RECONSTRUCTION" in Reconstruction = SLAM_TEST_BASE +
   description "
     proof reconstruction unit tests
   "
@@ -96,7 +96,7 @@ session "JEHA_TEST_RECONSTRUCTION" in Reconstruction = JEHA_TEST_BASE +
     simp_outer_claus
     sup
 
-session "JEHA_CASE_STUDIES" in Casestudy = JEHA_TEST_BASE +
+session "SLAM_CASE_STUDIES" in Casestudy = SLAM_TEST_BASE +
   description "
     case studies
   "

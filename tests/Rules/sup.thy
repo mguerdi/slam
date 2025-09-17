@@ -1,32 +1,30 @@
 theory sup
 
-imports "JEHA.jeha" HOL.HOL
+imports "SLAM.slam" HOL.HOL
 
 begin
 
-declare [[jeha_trace]]
+declare [[slam_trace]]
 
-declare [[jeha_disable_all]]
-declare [[jeha_rule_sup]]
-declare [[jeha_rule_e_res]]
-declare [[jeha_rule_e_fact]]
+declare [[slam_disable_all]]
+declare [[slam_rule_sup]]
+declare [[slam_rule_e_res]]
+declare [[slam_rule_e_fact]]
 
 lemma transitivity:
   shows "x = y \<Longrightarrow> y = z \<Longrightarrow> x = z"
-  by (jeha) (* 59 ms *)
+  by (slam) (* 8 ms *)
 
 lemma congruence:
   shows "x = y \<Longrightarrow> f x = f y"
-  by (jeha) (* 35 ms *)
+  by (slam) (* 5 ms *)
 
 lemma deep_congruence:
   shows "x = y \<Longrightarrow> v = w  \<Longrightarrow> f (g (h x) w) = f (g (h y) v)"
-  by (jeha) (* 71 ms *)
+  by (slam) (* 6 ms *)
 
 lemma beta_reduction:
   shows "ev = (\<lambda> g x. g x) \<Longrightarrow> f = (\<lambda> x. x) \<Longrightarrow> ev f x = x"
-  (* FIXME remove after missing reconstruction have been implemented *)
-  using [[jeha_proof_reconstruction=argo]]
-  using [[jeha_rule_clause_subsumption, jeha_rule_arg_cong]] by jeha
+  using [[slam_rule_clause_subsumption, slam_rule_arg_cong]] by slam (* 49 ms *)
 
 end
