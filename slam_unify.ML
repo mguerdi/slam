@@ -180,7 +180,6 @@ fun literal_shallow_first_matchers ctxt =
 
 (* FIXME: for evaluation only *)
 
-val smash_unifiers = shallow_first_smash_unifiers
 val literal_matchers = literal_shallow_first_matchers
 
 end
