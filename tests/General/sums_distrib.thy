@@ -219,8 +219,9 @@ lemma
   shows
     "\<exists>h. \<forall>x. (h I b + (\<Sum>i\<in>I. (x i)\<^sup>2) + 2 * b * (\<Sum>i\<in>I. x i)) = (\<Sum>i\<in>I. (b + x i)\<^sup>2)"
   apply (intro exI allI)
-  sledgehammer[vampire] (power2_sum sum.distrib sum_distrib_left plus_right_remove)
+  (* sledgehammer[vampire] (power2_sum sum.distrib sum_distrib_left plus_right_remove) *)
   (* using assms [[slam_trace, slam_trace_forward_simp=false]] by (slam power2_sum sum.distrib sum_distrib_left plus_right_remove) *)
+  sorry
 
 lemma
   fixes "b" :: int (* "'b ::{comm_ring_1}" *)
@@ -285,6 +286,7 @@ lemma
     by (slam sum.distrib mult.commute[of "2"])
   *)
   sorry
+*)
 
 lemma
   fixes A :: "nat set"

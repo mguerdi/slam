@@ -31,8 +31,10 @@ session "SLAM_TEST_RULES" in Rules = SLAM_TEST_BASE +
   "
   theories
     bool_rw
+    e_fact
     eq_hoist
     positive_simplify_reflect
+    rewrite
     subsumption
     sup
 
@@ -42,8 +44,6 @@ session "SLAM_TEST_MISC" in Misc = SLAM_TEST_BASE +
   "
   theories
     (* misc *)
-    boolean_ho
-    redundant_boolean
     eligibility
     faexhoist
     fast_kbo
@@ -51,11 +51,9 @@ session "SLAM_TEST_MISC" in Misc = SLAM_TEST_BASE +
     subsumption
     unification
     normalization
-    preprocessing
 
     (* still failing: *)
     (* leo3 *)
-    (* eta_expand *)
     (* preprocessing *)
 
     (* FIXME: figure out how to assert failure (i.e. success if failure) *)

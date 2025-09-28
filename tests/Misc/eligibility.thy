@@ -80,15 +80,15 @@ ML_val \<open>
 \<close>
 
 ML_val \<open>
-  val C = JClause.of_term @{context} (@{term "(a :: 'a) \<noteq> b \<or> (c :: 'a) = d"}, 0)
+  val ctxt = Config.put Slam_Common.literal_selection_function "select_none" @{context}
+  val C = JClause.of_term ctxt (@{term "(a :: 'a) \<noteq> b \<or> (c :: 'a) = d"}, 0)
   val () = \<^assert> (JClause.is_eligible_cpos C 1)
   val () = \<^assert> (not (JClause.is_eligible_cpos C 0))
 \<close>
 
-declare [[slam_literal_selection_function="select_all_neg_lit"]]
-
 ML_val \<open>
-  val C = JClause.of_term @{context} (@{term "(a :: 'a) \<noteq> b \<or> (c :: 'a) = d"}, 0)
+  val ctxt = Config.put Slam_Common.literal_selection_function "select_all_neg_lit" @{context}
+  val C = JClause.of_term ctxt (@{term "(a :: 'a) \<noteq> b \<or> (c :: 'a) = d"}, 0)
   val () = \<^assert> (JClause.is_eligible_cpos C 0)
   val () = \<^assert> (not (JClause.is_eligible_cpos C 1))
 \<close>
