@@ -44,6 +44,7 @@ session "SLAM_TEST_MISC" in Misc = SLAM_TEST_BASE +
   "
   theories
     (* misc *)
+    ball
     eligibility
     faexhoist
     fast_kbo
