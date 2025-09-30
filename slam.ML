@@ -1005,7 +1005,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
       end
   in
     if is_pos_eq
-      then fail [] (K "not a positive literal")
+      then fail [] (K "not a negative literal")
       else map_filter build_conclusion unifiers
   end
 
