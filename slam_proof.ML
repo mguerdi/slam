@@ -244,7 +244,7 @@ fun reconstruct_efact {premise, left_literal, right_literal} =
       |> HClause.orient_lit_at left_literal
       |> HClause.orient_lit_at right_literal
     val (u, v, true) = HClause.dest_lit_cterm_at right_literal_cpos premise
-    val (_, v', false) = HClause.dest_lit_cterm_at left_literal_cpos premise
+    val (_, v', true) = HClause.dest_lit_cterm_at left_literal_cpos premise
     val left_literal_left_of_right_literal_in_premise = left_literal_cpos < right_literal_cpos
     (* \<not>C' \<Longrightarrow> u /\<approx> v' \<Longrightarrow> u /\<approx> v \<Longrightarrow> False *)
     val C =
