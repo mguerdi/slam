@@ -178,8 +178,4 @@ val impl_literal_shallow_first_matchers = mk_impl_literal_matchers impl_shallow_
 fun literal_shallow_first_matchers ctxt =
   with_timeout ctxt oo impl_literal_shallow_first_matchers ctxt
 
-(* FIXME: for evaluation only *)
-
-val literal_matchers = literal_shallow_first_matchers
-
 end

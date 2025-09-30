@@ -365,32 +365,6 @@ fun congruence_wrt_tpos ctxt (equality : thm) tpos_term_maxidx =
   end
 *)
 
-(* C = \<not>C' \<Longrightarrow> A \<Longrightarrow> A \<Longrightarrow> False *)
-(* ============================= *)
-(*      \<not>C' \<Longrightarrow> A \<Longrightarrow> False      *)
-fun merge_duplicated_lit_last { th = C, skolems = skolems } =
-  let
-    val length_of_C'_and_skolems = Thm.nprems_of C - 2
-    val () = \<^assert> (length_of_C'_and_skolems - length skolems >= 0)
-    val A = Thm.dest_arg (Thm.cprem_of C (Thm.nprems_of C))
-    val A' = Thm.dest_arg (Thm.cprem_of C (Thm.nprems_of C - 1))
-    val () = \<^assert> (A aconvc A')
-    val lemma = \<^instantiate>\<open>P = A in lemma \<open>(P \<Longrightarrow> P \<Longrightarrow> False) \<Longrightarrow> P \<Longrightarrow> False\<close> by auto\<close>
-                                            (* ^^^^^^^^^^^^^^ *)
-                                            (*      |         *)
-    val D = Drule.comp_no_flatten (C, length_of_C'_and_skolems) 1 lemma
-      (* See also: comp_hhf_tac (Pure/Isar/proof_context.ML) *)
-      (* Thm.bicompose
-        (SOME ctxt)
-        {flatten = false,  match = false, incremented = false}
-        (false, C, 1)
-        1
-        lemma
-      |> Seq.hd *)
-  in
-    { th = D, skolems = skolems }
-  end
-
 fun skolem_constant_variables { th, skolems } =
   map (fn cpos => negated_lit_trueprop_cterm_at_raw cpos th) (0 upto (length skolems - 1))
 
@@ -439,6 +413,32 @@ val comp_no_flatten_no_incr = mk_comp_no_flatten Slam_Proof_Util.comp_no_flatten
 e.g. some helper lemma. *)
 fun compose (th_left, i, { th, skolems }) =
   { th = Drule.compose (th_left, i + length skolems, th), skolems = skolems }
+
+(* C = \<not>C' \<Longrightarrow> A \<Longrightarrow> A \<Longrightarrow> False *)
+(* ============================= *)
+(*      \<not>C' \<Longrightarrow> A \<Longrightarrow> False      *)
+fun merge_duplicated_lit_last premise =
+  let
+    val length_of_C' = nprems_of premise - 2
+    val () = \<^assert> (length_of_C' >= 0)
+    val A = Thm.dest_arg (negated_lit_trueprop_cterm_at (nprems_of premise - 1) premise)
+    val A' = Thm.dest_arg (negated_lit_trueprop_cterm_at (nprems_of premise - 2) premise)
+    val () = \<^assert> (A aconvc A')
+    val lemma = of_lemma \<^instantiate>\<open>P = A in lemma \<open>(P \<Longrightarrow> P \<Longrightarrow> False) \<Longrightarrow> P \<Longrightarrow> False\<close> by auto\<close>
+                                                     (* ^^^^^^^^^^^^^^ *)
+                                                     (*      |         *)
+    val D = comp_no_flatten_no_incr (premise, length_of_C') 1 lemma
+      (* See also: comp_hhf_tac (Pure/Isar/proof_context.ML) *)
+      (* Thm.bicompose
+        (SOME ctxt)
+        {flatten = false,  match = false, incremented = false}
+        (false, C, 1)
+        1
+        lemma
+      |> Seq.hd *)
+  in
+    D
+  end
 
 (* From (t, t'), \<not>C\<langle>t\<rangle>\<^sub>p \<Longrightarrow> False and p build
   t = t' \<Longrightarrow> \<not>C\<langle>t'\<rangle>\<^sub>p \<Longrightarrow> False

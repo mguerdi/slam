@@ -529,11 +529,12 @@ fun is_eligible_tpos_in_eq (Const (@{const_name "HOL.eq"}, _) $ s $ t) (i :: tpo
 
 fun is_eligible_tpos _ [] = true
   (* subterms of fully applied equalities *)
-  (* FIXME: what about partially applied equalities? see pdf comment in o\<lambda>Sup Definition 22 *)
   | is_eligible_tpos
       (t as ((Const (@{const_name "HOL.eq"}, _)) $ _ $ _))
       (tpos as (_ :: _))
     = is_eligible_tpos_in_eq t tpos
+  (* partially applied equalities have no eligible subterms (other than themselves) *)
+  | is_eligible_tpos ((Const (@{const_name "HOL.eq"}, _)) $ _) (_ :: _) = false
   (* general case *)
   | is_eligible_tpos t (i :: tpos) =
       if not (JTerm.is_green_tpos [i] t) then error "non green position in is_eligible_tpos" else
