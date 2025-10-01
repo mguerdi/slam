@@ -144,11 +144,15 @@ fun impl_shallow_first_matchers ctxt maxidx pairs =
 
 fun shallow_first_matchers ctxt = with_timeout ctxt oo impl_shallow_first_matchers ctxt
 
-fun mk_impl_literal_unifiers term_unifiers ctxt ((s, t, b), (s', t', b')) env =
-  if not (b = b') then Seq.empty else
-  Seq.interleave
-    ( term_unifiers ctxt [(s, s'), (t, t')] env
-    , term_unifiers ctxt [(s, t'), (t, s')] env )
+fun mk_impl_literal_unifiers term_unifiers ctxt lit_pair env =
+  let
+    val ((s, t, b), (s', t', b')) = apply2 JLit.dest lit_pair
+  in
+    if not (b = b') then Seq.empty else
+    Seq.interleave
+      ( term_unifiers ctxt [(s, s'), (t, t')] env
+      , term_unifiers ctxt [(s, t'), (t, s')] env )
+  end
 
 val impl_literal_smash_unifiers = mk_impl_literal_unifiers impl_smash_unifiers
 
@@ -160,14 +164,18 @@ val impl_literal_shallow_first_smash_unifiers =
 fun literal_shallow_first_smash_unifiers ctxt =
   with_timeout ctxt oo impl_literal_shallow_first_smash_unifiers ctxt
 
-fun mk_impl_literal_matchers term_matchers ctxt maxidx ((s, t, b), (s', t', b')) =
-  if not (b = b') then Seq.empty else
-    ( [(s, s'), (t, t')]
-    , [(s, t'), (t, s')] )
-    |> apply2 (term_matchers ctxt maxidx)
-    |> (fn (left_matchers, right_matchers) =>
-      (Seq.map (pair JLit.Left) left_matchers, Seq.map (pair JLit.Right) right_matchers))
-    |> Seq.interleave
+fun mk_impl_literal_matchers term_matchers ctxt maxidx lit_pair =
+  let
+    val ((s, t, b), (s', t', b')) = apply2 JLit.dest lit_pair
+  in
+    if not (b = b') then Seq.empty else
+      ( [(s, s'), (t, t')]
+      , [(s, t'), (t, s')] )
+      |> apply2 (term_matchers ctxt maxidx)
+      |> (fn (left_matchers, right_matchers) =>
+        (Seq.map (pair JLit.Left) left_matchers, Seq.map (pair JLit.Right) right_matchers))
+      |> Seq.interleave
+  end
 
 val impl_literal_matchers = mk_impl_literal_matchers impl_matchers
 

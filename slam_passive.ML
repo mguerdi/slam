@@ -32,12 +32,14 @@ struct
       weight_funs_and_coeffs
       0
 
+  fun add_size_of_term t acc = acc + size_of_term t
+
   fun size_of_clause c =
-    fold (fn (l, r, _) => fn acc => acc + size_of_term l + size_of_term r) (JClause.literals c) 0
+    fold (JLit.fold add_size_of_term) (JClause.literals c) 0
 
   fun number_of_distinct_vars c =
     Vars.empty
-    |> fold (fn (l, r, _) => Vars.add_vars l #> Vars.add_vars r) (JClause.literals c)
+    |> fold (JLit.fold Vars.add_vars) (JClause.literals c)
     |> Vars.size
 
   fun favor_small_num_vars c =
@@ -53,11 +55,11 @@ struct
     end
     
   fun all_ground_and_neg c =
-    forall (fn (lit as (l, r, _)) =>
-      JLit.is_negative lit andalso JTerm.is_ground l andalso JTerm.is_ground r) (JClause.literals c)
+    forall (fn lit =>
+      JLit.is_negative lit andalso JLit.both_sides JTerm.is_ground lit) (JClause.literals c)
 
   fun favor_all_ground_and_neg c = if all_ground_and_neg c then 0 else PENALTY_COEFF
-  
+
   fun favor_positive_unit c = if JClause.is_positive_unit c then 0 else PENALTY_COEFF
 
   (* basic goal-oriented selection heuristic *)
@@ -66,7 +68,7 @@ struct
       fun aterm_weight t =
         if Slam_Symbol_Table.aterm_defined goal_symbols t then 0 else PENALTY_COEFF
       val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
-      val weight = fold (fn (l, r, _) => add_term_weight l #> add_term_weight r) (JClause.literals c) 0
+      val weight = fold (JLit.fold add_term_weight) (JClause.literals c) 0
     in
       weight
     end
@@ -76,7 +78,7 @@ struct
       fun aterm_weight (Free _) = 0
         | aterm_weight _ = PENALTY_COEFF
       val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
-      val weight = fold (fn (l, r, _) => add_term_weight l #> add_term_weight r) (JClause.literals c) 0
+      val weight = fold (JLit.fold add_term_weight) (JClause.literals c) 0
     in
       weight
     end
@@ -88,7 +90,7 @@ struct
       val disj_is_free = fold_aterms (fn t => fn acc => acc orelse is_free t)
       val contains_free =
         fold
-          (fn (l, r, _) => disj_is_free l #> disj_is_free r)
+          (JLit.fold disj_is_free)
           (JClause.literals c)
           false
     in
@@ -104,7 +106,7 @@ struct
     | _ => PENALTY_COEFF
 
   fun disfavor_var_var_neqs c =
-    if exists (fn (s, t, false) => is_Var s andalso is_Var t | _ => false) (JClause.literals c)
+    if exists (fn lit => JLit.is_negative lit andalso JLit.both_sides is_Var lit) (JClause.literals c)
       then PENALTY_COEFF
       else 0
 

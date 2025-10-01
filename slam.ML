@@ -121,7 +121,8 @@ fun outer_clausify_non_quant _ ctxt maxidx b (@{term "HOL.Not"} $ s) c =
   (* FIXME: Making HO Sup work p.7 says: never simplify \<longleftrightarrow>. What does this mean
   concretely? (Isabelle represents \<longleftrightarrow> as HOL.eq) *)
   | outer_clausify_non_quant _ ctxt _ b (Const (@{const_name HOL.eq}, _) $ s $ t) c =
-      [JClause.add_literal ctxt (s, t, b) c]
+      (* FIXME: Is JLit.mk going to be deterministic enough? *)
+      [JClause.add_literal ctxt (JLit.mk (s, t, b)) c]
   | outer_clausify_non_quant { changed = true } ctxt _ b t c =
       [JClause.add_literal ctxt (JLit.of_term_signed b t) c]
   | outer_clausify_non_quant { changed = false } _ _ _ _ _ =
@@ -202,12 +203,13 @@ fun trace_concl ctxt (tracer: (unit -> string) -> unit) =
 (* Syntactic tautology deletion 1 (TD1) (Schulz) *)
 fun contains_syntactic_equation [] = false
   | contains_syntactic_equation c =
-      exists (fn (s, t, is_positive) => is_positive andalso s aconv t) c
+      exists (fn lit =>
+        let val (s, t, is_positive) = JLit.dest lit in is_positive andalso s aconv t end) c
 
 (* Syntactic tautology deletion 2 (TD2) (Schulz) *)
 fun contains_syntactic_complementaries [] = false
-  | contains_syntactic_complementaries (l as (s, t, b) :: ls) =
-      exists (curry JLit.aconv (s, t, not b)) ls orelse contains_syntactic_complementaries ls
+  | contains_syntactic_complementaries (l :: ls) =
+      exists (curry JLit.aconv (JLit.negate l)) ls orelse contains_syntactic_complementaries ls
 
 (* FIXME: implement semantic tautology deletion? *)
 
@@ -255,7 +257,12 @@ fun simp_delete_resolved_lits ctxt c =
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
 
     (* literal of the from s \<noteq> s *)
-    fun is_false_disequation (s, t, is_positive) = not is_positive andalso s aconv t
+    fun is_false_disequation l =
+      let
+        val (s, t, is_positive) = JLit.dest l
+      in
+        not is_positive andalso s aconv t
+      end
     val cposs =
       c
       |> JClause.literals
@@ -330,7 +337,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           terms. Why? Need a TVar maxidxforcer? *)
           |> JClause.set_maxidx (Envir.maxidx_of matcher)
           |> JClause.recalculate_maxidx
-        val rewriting_clause = JClause.dummy [(from, to, true)]
+        val rewriting_clause = JClause.dummy [JLit.mk (from, to, true)]
         val rewriting_smaller_than_rewritten = (fn () =>
           SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
       in
@@ -454,7 +461,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
     val unit_clause = JClause.incr_indexes unit_shift unit_clause
     val maxidx = JClause.maxidx_of2 (unit_clause, target_clause)
     val (s, t, false) = JClause.orient_unit unit_lp unit_clause (* Schulz: s, t *)
-    val (u, v, true) = JClause.lit_at target_cp target_clause (* Schulz: \<sigma>(s), \<sigma>(t) *)
+    val (u, v, true) = JLit.dest (JClause.lit_at target_cp target_clause) (* Schulz: \<sigma>(s), \<sigma>(t) *)
     val matcher =
       [(s, u), (t, v)]
       |> Slam_Unify.matchers (Context.Proof ctxt) maxidx
@@ -517,8 +524,8 @@ fun literal_can_match_single_disagreement
     val unit_lit =
       unit_lit |> JLit.map (Logic.incr_indexes ([], unit_shift))
     val maxidx = unit_maxidx + target_maxidx + 1
-    val (lhs, rhs, true) = unit_lit (* Schulz: s, t *)
-    val (target_lhs, target_rhs, _) = target_lit (* Schulz: u[], u[]*)
+    val (lhs, rhs, true) = JLit.dest unit_lit (* Schulz: s, t *)
+    val (target_lhs, target_rhs, _) = JLit.dest target_lit (* Schulz: u[], u[]*)
     (* Schulz: longest possbile p *)
     val longest_prefix_of_disagreements =
       find_single_green_disagreement ctxt (target_lhs, target_rhs)
@@ -788,7 +795,7 @@ fun simp_bool_outer_claus ctxt (c, i) =
 (* EqOuterClaus and NeqOuterClaus inferences *)
 fun infer_eq_neq_outer_claus ctxt c i =
   let
-    val (s, t, b) = JClause.lit_at i c
+    val (s, t, b) = JLit.dest (JClause.lit_at i c)
   in
     if (Runtime.exn_trace (fn () =>
           not (fastype_of s = @{typ bool} andalso fastype_of t = @{typ bool})
@@ -983,7 +990,7 @@ fun infer_eres (ctxt : Proof.context) c cp =
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () =>
       "start: " ^ JClause.pretty_clause ctxt c ^ ", literal: " ^ @{make_string} cp)
-    val (u, u', is_pos_eq) = JClause.lit_at cp c
+    val (u, u', is_pos_eq) = JLit.dest (JClause.lit_at cp c)
     val unifiers =
       Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
     val (unifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) unifiers
@@ -1039,8 +1046,8 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         c
         |> JClause.delete_lit_at ctxt (Int.max (cp, cp'))
         |> JClause.delete_lit_at ctxt (Int.min (cp, cp'))
-        |> JClause.add_literal ctxt (v, v', false)
-        |> JClause.add_literal ctxt (u, v', true)
+        |> JClause.add_literal ctxt (JLit.mk (v, v', false))
+        |> JClause.add_literal ctxt (JLit.mk (u, v', true))
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ()
@@ -1079,7 +1086,7 @@ fun infer_arg_cong ctxt c cpos =
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () =>
       "start: " ^ JClause.pretty_clause ctxt c ^ ", literal: " ^ @{make_string} cpos)
-    val (s, s', b) = JClause.lit_at cpos c
+    val (s, s', b) = JLit.dest (JClause.lit_at cpos c)
   in
   if not b then fail [] (K "negative literal") else
   let
@@ -1112,6 +1119,7 @@ fun infer_arg_cong ctxt c cpos =
           (s, s')
           |> apply2 (fn t => list_comb (t, fresh_variables))
           |> (fn (x, y) => (x, y, true))
+          |> JLit.mk
 
         val new_clause =
           c
@@ -1552,7 +1560,7 @@ fun impl_eq_neq_hoist positive ctxt c u_pos =
     val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
     val fresh_x = Var (("x", maxidx + 1), fresh_typ) (* x *)
     val fresh_y = Var (("y_eqneqhoist", maxidx + 1), fresh_typ) (* y *)
-    val x_eq_y_lit = (fresh_x, fresh_y, true)
+    val x_eq_y_lit = JLit.mk (fresh_x, fresh_y, true)
     val pattern =
       (fresh_x, fresh_y)
       |> HOLogic.mk_eq
@@ -1592,7 +1600,7 @@ fun impl_forall_exists_hoist is_forall ctxt c u_pos =
     (* \<forall> y / \<exists> y*)
     val pattern = quantifier $ fresh_predicate
     (* y x = T / y x = \<bottom>*)
-    val new_lit = (fresh_predicate $ fresh_x, hol_bool_of is_forall, true)
+    val new_lit = JLit.mk (fresh_predicate $ fresh_x, hol_bool_of is_forall, true)
     (* \<top> / \<bottom> *)
     val insert_for_u = hol_bool_of (not is_forall)
   in
@@ -1752,7 +1760,7 @@ fun infer_neg_ext ctxt c cpos =
   if not (JClause.is_eligible_cpos c cpos) then fail [] (K "literal not eligible") else
   let val lit = JClause.lit_at cpos c in
   if JLit.is_positive lit then fail [] (K "not a negative literal") else
-  let val (s, s', false) = lit in
+  let val (s, s', false) = JLit.dest lit in
   if null (Term.binder_types (fastype_of s)) then fail [] (K "not of function type") else
   let
     val x = Free ("x_neg_ext", domain_type (fastype_of s))
@@ -1766,7 +1774,7 @@ fun infer_neg_ext ctxt c cpos =
     val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
       JTerm.make_skolem_constant choice_witness
 
-    val new_literal = (s $ skolem_constant_with_args, s' $ skolem_constant_with_args, false)
+    val new_literal = JLit.mk (s $ skolem_constant_with_args, s' $ skolem_constant_with_args, false)
 
     val new_clause =
       c
@@ -1801,7 +1809,7 @@ fun infer_neg_cong_fun ctxt c cpos =
   let val lit = JClause.lit_at cpos c in
   if JLit.is_positive lit then fail [] (K "not a negative literal") else
   let
-    val (f_ss, g_ts, false) = lit
+    val (f_ss, g_ts, false) = JLit.dest lit
     val ((f, ss), (g, ts)) = apply2 strip_comb (f_ss, g_ts)
   in
   if not (f aconv g) then fail [] (K "unequal heads") else
