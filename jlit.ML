@@ -86,19 +86,22 @@ val is_flex_sided = any_side JTerm.is_variable_headed
 
 val is_flex_flex = both_sides JTerm.is_variable_headed
 
-fun map f (Lit { lhs, rhs, pol }) = Lit { lhs = f lhs, rhs = f rhs, pol = pol }
+(* forgets orientation *)
+fun map f (Lit { lhs, rhs, pol }) = mk (f lhs, f rhs, pol)
+
+fun unsafe_map f (Lit { lhs, rhs, pol }) = Lit { lhs = f lhs, rhs = f rhs, pol = pol }
 
 fun lposs_of _ = [Left, Right]
 
-fun mk_eq lhs rhs = Lit { lhs = lhs, rhs = rhs, pol = true }
+fun mk_eq lhs rhs = mk (lhs, rhs, true)
 
-fun mk_neq lhs rhs = Lit { lhs = lhs, rhs = rhs, pol = false }
+fun mk_neq lhs rhs = mk (lhs, rhs, true)
 
 (* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
 (* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
 (see similar comment in dest_pred) *)
 fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
-  | mk_pred t b = Lit { lhs = t, rhs = if b then @{term True} else @{term False}, pol = true }
+  | mk_pred t b = mk (t, if b then @{term True} else @{term False}, true)
 
 fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ lhs $ rhs) = Lit { lhs = lhs, rhs = rhs, pol = b }
   | of_term_signed b (Const (@{const_name HOL.Not}, _) $ t) = of_term_signed (not b) t
@@ -119,6 +122,7 @@ fun aconv_as (Lit { lhs = s, rhs = t, pol = b }, Lit { lhs = s', rhs = t', pol =
 
 val aconv = is_some o aconv_as
 
+(* FIXME: maintain orientation invariant *)
 fun swap (Lit { lhs = lhs, rhs = rhs, pol = pol }) = Lit { lhs = rhs, rhs = lhs, pol = pol }
 
 fun negate (Lit { lhs = lhs, rhs = rhs, pol = pol }) = (Lit { lhs = lhs, rhs = rhs, pol = not pol })
@@ -158,11 +162,14 @@ fun norm_negative_pred ctxt (l as Lit { pol = true, ... }) = l
       else if JTerm.is_truth_value s andalso JTerm.is_truth_value t andalso JTerm.ml_bool_of s andalso JTerm.ml_bool_of t
         then l
       else if JTerm.is_truth_value s
+        (* FIXME: maintain orientation invariant *)
         then Lit { lhs = JTerm.negate_hol_bool s, rhs = t, pol = true }
       else if JTerm.is_truth_value t
+        (* FIXME: maintain orientation invariant *)
         then Lit { lhs = s, rhs = JTerm.negate_hol_bool t, pol = true }
       else l
 
+(* FIXME: use unsafe_map if preservation of orientation can be guaranteed *)
 fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 
 fun term_of (Lit { lhs = s, rhs = t, pol = b }) =
@@ -180,8 +187,9 @@ fun term_at_lpos (Lit { lhs, ... }) Left = lhs
 fun orient Left (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
   | orient Right (Lit { lhs, rhs, pol, ... }) = (rhs, lhs, pol)
 
-fun map_at_lpos Left f (Lit { lhs, rhs, pol }) = Lit { lhs = f lhs, rhs = rhs, pol = pol }
-  | map_at_lpos Right f (Lit { lhs, rhs, pol }) = Lit { lhs = lhs, rhs = f rhs, pol = pol }
+(* forgets orientation *)
+fun map_at_lpos Left f (Lit { lhs, rhs, pol }) = mk (f lhs, rhs, pol)
+  | map_at_lpos Right f (Lit { lhs, rhs, pol }) = mk (lhs, f rhs, pol)
 
 fun occurs_deeply_in x = any_side (JTerm.occurs_deeply_in x)
 
