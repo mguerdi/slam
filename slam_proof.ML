@@ -150,11 +150,10 @@ fun reconstruct_arg_cong_one_var ctxt var premise =
     val (s, s', true) = HClause.dest_lit_cterm_at 0 premise
     val T = Thm.ctyp_of_cterm var
     val rT = s |> Thm.ctyp_of_cterm |> Thm.dest_ctyp1 
-    val lemma = \<^instantiate>\<open>s and s' and x=var and 'a=T and 'b=rT in
-      lemma \<open>(s :: 'a \<Rightarrow> 'b) x \<noteq> s' x \<Longrightarrow> s \<noteq> s'\<close> by auto\<close>
+    val lemma = HClause.of_lemma (\<^instantiate>\<open>s and s' and x=var and 'a=T and 'b=rT in
+      lemma \<open>(s :: 'a \<Rightarrow> 'b) x \<noteq> s' x \<Longrightarrow> s \<noteq> s'\<close> by auto\<close>)
   in
-    (* FIXME: skolems *)
-    HClause.map_hthm (Slam_Proof_Util.comp_no_flatten_no_incr (lemma, 1) 1) premise
+    HClause.comp_no_flatten_no_incr (lemma, 1) 1 premise
   end
 
 fun reconstruct_arg_cong ctxt { premise, literal, vars } =

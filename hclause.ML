@@ -138,8 +138,9 @@ fun move_last_to cpos { th = th, skolems = skolems } =
     { th = Slam_Proof_Util.move_last_prem_to i th, skolems = skolems }
   end
 
-fun move_from_to (from: JClause.cpos) (to: JClause.cpos) =
-  map_hthm (Slam_Proof_Util.move_prem_from_to (from + 1) (to + 1))
+fun move_from_to (from: JClause.cpos) (to: JClause.cpos) { th = th, skolems = skolems } =
+  { th = Slam_Proof_Util.move_prem_from_to (from + 1 + length skolems) (to + 1 + length skolems) th
+  , skolems = skolems }
 
 (* \<not>C' \<Longrightarrow> t \<approx> t' *)
 (* see JLit.orient *)
