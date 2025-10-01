@@ -305,7 +305,7 @@ fun hol_of_clause ctxt close c =
   let
     val negated_literals = 
       JClause.literals c
-      |> map (fn (s, t, b) => (s, t, not b)) (* avoid double negations *)
+      |> map JLit.negate (* avoid double negations *)
       |> map JLit.term_of
       |> map HOLogic.mk_Trueprop
     (* FIXME: remove *)
