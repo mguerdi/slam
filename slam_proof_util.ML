@@ -41,12 +41,11 @@ fun norm_negative_predicate_literals ctxt th =
       let
         fun do_guard st =
           let
-            (* negated literal *)
-            val (s, t, b) = JLit.of_term (HOLogic.dest_Trueprop (the_single (Thm.prems_of st)))
-            val lit = (s, t, not b)
+            val negated_lit = JLit.of_term (HOLogic.dest_Trueprop (the_single (Thm.prems_of st)))
+            val lit = JLit.negate negated_lit
             val normed_lit = JLit.norm_negative_pred ctxt lit
           in
-            if lit = normed_lit
+            if JLit.dest lit = JLit.dest normed_lit
               then all_tac st
               else no_tac st
           end
