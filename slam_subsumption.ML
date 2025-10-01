@@ -102,8 +102,12 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
 
 val subsumption_ord = prod_ord int_ord int_ord
 
-fun subsumption_sort_key (l, r, sign) =
-  (if sign then 1 else ~1, size_of_term l + size_of_term r)
+fun subsumption_sort_key l =
+  let
+    val (l, r, sign) = JLit.dest l
+  in
+    (if sign then 1 else ~1, size_of_term l + size_of_term r)
+  end
 
 fun subsumption_sort lits =
   let

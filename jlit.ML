@@ -1,6 +1,11 @@
 signature JLIT =
 sig
   type T
+  val mk : term * term * bool -> T 
+  val dest : T -> term * term * bool
+  val fold : (term -> 'a -> 'a) -> T -> 'a -> 'a
+  val any_side : (term -> bool) -> T -> bool
+  val both_sides : (term -> bool) -> T -> bool
   (* left or right side of an equational literal *)
   datatype lpos = Left | Right
   val is_positive : T -> bool
@@ -15,6 +20,7 @@ sig
   val aconv : T * T -> bool
   val aconv_as : T * T -> lpos option
   val swap : T -> T
+  val negate : T -> T
   val swap_lpos : lpos -> lpos
   (* make predicate literal, by equating the term to the boolean *)
   val mk_eq : term -> term -> T
@@ -48,44 +54,53 @@ end;
 structure JLit : JLIT =
 struct
 
-type T = term * term * bool
+datatype T = Lit of { lhs: term, rhs: term, pol: bool }
 datatype lpos = Left | Right
 
-fun is_positive (_, _, b) = b
+fun mk (lhs, rhs, is_positive) = Lit { lhs = lhs, rhs = rhs, pol = is_positive }
+
+(* FIXME: deprecate? *)
+fun dest (Lit { lhs, rhs, pol }) = (lhs, rhs, pol)
+
+fun fold f (Lit { lhs, rhs, ... }) = f lhs #> f rhs
+
+fun any_side p (Lit { lhs, rhs, ... }) = p lhs orelse p rhs
+
+fun both_sides p (Lit { lhs, rhs, ... }) = p lhs andalso p rhs
+
+fun is_positive (Lit { pol, ... }) = pol
 
 val is_negative = not o is_positive
 
-fun is_negativoid (l as (s, t, b)) =
+fun is_negativoid (l as Lit { lhs, rhs, ... }) =
   is_negative l
-    orelse JTerm.is_false s andalso not (JTerm.is_false t)
-    orelse JTerm.is_false t andalso not (JTerm.is_false s)
+    orelse JTerm.is_false lhs andalso not (JTerm.is_false rhs)
+    orelse JTerm.is_false rhs andalso not (JTerm.is_false lhs)
 
 fun is_negative_or_negativoid_cfg ctxt =
   if Config.get ctxt (Slam_Common.select_negativoid)
     then is_negativoid
     else is_negative
 
-fun is_flex_sided (s, t, _) =
-  JTerm.is_variable_headed s orelse JTerm.is_variable_headed t
+val is_flex_sided = any_side JTerm.is_variable_headed
 
-fun is_flex_flex (s, t, _) =
-  JTerm.is_variable_headed s andalso JTerm.is_variable_headed t
+val is_flex_flex = both_sides JTerm.is_variable_headed
 
-fun map f (s, t, b) = (f s, f t, b)
+fun map f (Lit { lhs, rhs, pol }) = Lit { lhs = f lhs, rhs = f rhs, pol = pol }
 
 fun lposs_of _ = [Left, Right]
 
-fun mk_eq s t = (s, t, true)
+fun mk_eq lhs rhs = Lit { lhs = lhs, rhs = rhs, pol = true }
 
-fun mk_neq s t = (s, t, false)
+fun mk_neq lhs rhs = Lit { lhs = lhs, rhs = rhs, pol = false }
 
 (* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
 (* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
 (see similar comment in dest_pred) *)
 fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
-  | mk_pred t b = (t, if b then @{term True} else @{term False}, true)
+  | mk_pred t b = Lit { lhs = t, rhs = if b then @{term True} else @{term False}, pol = true }
 
-fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ s $ t) = (s, t, b)
+fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ lhs $ rhs) = Lit { lhs = lhs, rhs = rhs, pol = b }
   | of_term_signed b (Const (@{const_name HOL.Not}, _) $ t) = of_term_signed (not b) t
   (* FIXME: might need to revert this because mk_pred removes negations from t. *)
   | of_term_signed b t = mk_pred t b
@@ -96,7 +111,7 @@ fun of_term t =
     then error "can only turn boolean terms into literals"
     else of_term_signed true t
 
-fun aconv_as ((s, t, b), (s', t', b')) =
+fun aconv_as (Lit { lhs = s, rhs = t, pol = b }, Lit { lhs = s', rhs = t', pol = b' }) =
   if b <> b' then NONE
   else if Term.aconv (s, s') andalso Term.aconv (t, t') then SOME Left
   else if Term.aconv (s, t') andalso Term.aconv (t, s') then SOME Right
@@ -104,20 +119,21 @@ fun aconv_as ((s, t, b), (s', t', b')) =
 
 val aconv = is_some o aconv_as
 
-fun swap (s, t, b) = (t, s, b)
+fun swap (Lit { lhs = lhs, rhs = rhs, pol = pol }) = Lit { lhs = rhs, rhs = lhs, pol = pol }
+
+fun negate (Lit { lhs = lhs, rhs = rhs, pol = pol }) = (Lit { lhs = lhs, rhs = rhs, pol = not pol })
 
 fun swap_lpos Left = Right
   | swap_lpos Right = Left
 
-fun is_pred (s, t, true) = exists JTerm.is_truth_value [s, t]
-  | is_pred _ = false
+fun is_pred lit = is_positive lit andalso any_side JTerm.is_truth_value lit
 
-fun dest_pred (s, t, true) =
+fun dest_pred (Lit { lhs = lhs, rhs = rhs, pol = true }) =
   (* FIXME: what about when both are truth values? do we prefer an orientation? *)
-  if JTerm.is_truth_value t
-    then (s, t)
-  else if JTerm.is_truth_value s
-    then (t, s)
+  if JTerm.is_truth_value rhs
+    then (lhs, rhs)
+  else if JTerm.is_truth_value lhs
+    then (rhs, lhs)
   else error "neither is HOL.True or HOL.False"
   (* FIXME: allow disequations? (see similar comment above mk_pred) *)
   | dest_pred _ = error "disequation"
@@ -133,8 +149,8 @@ The function below disallows the non-simplifications w.r.t. the current literal 
 its implementaiton) 
 *)
 (* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
-fun norm_negative_pred ctxt (l as (_, _, true)) = l
-  | norm_negative_pred ctxt (l as (s, t, false)) =
+fun norm_negative_pred ctxt (l as Lit { pol = true, ... }) = l
+  | norm_negative_pred ctxt (l as Lit { lhs = s, rhs = t, pol = false }) =
       if JTerm.is_truth_value s andalso JTerm.ml_bool_of s andalso JTerm.is_variable_headed t
         then l
       else if JTerm.is_truth_value t andalso JTerm.ml_bool_of t andalso JTerm.is_variable_headed s
@@ -142,14 +158,15 @@ fun norm_negative_pred ctxt (l as (_, _, true)) = l
       else if JTerm.is_truth_value s andalso JTerm.is_truth_value t andalso JTerm.ml_bool_of s andalso JTerm.ml_bool_of t
         then l
       else if JTerm.is_truth_value s
-        then (JTerm.negate_hol_bool s, t, true)
+        then Lit { lhs = JTerm.negate_hol_bool s, rhs = t, pol = true }
       else if JTerm.is_truth_value t
-        then (s, JTerm.negate_hol_bool t, true)
+        then Lit { lhs = s, rhs = JTerm.negate_hol_bool t, pol = true }
       else l
 
 fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 
-fun term_of (s, t, b) = (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
+fun term_of (Lit { lhs = s, rhs = t, pol = b }) =
+  (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 
 (* law: term_at_lpos lp (s, t, b) = JTerm.subterm_at (as_tpos b lp) (term_of (s, t, b)) *)
 fun as_tpos true Left = [1]
@@ -157,18 +174,18 @@ fun as_tpos true Left = [1]
   | as_tpos false Left = [1, 1]
   | as_tpos false Right = [1, 2]
 
-fun term_at_lpos (l, _, _) Left = l
-  | term_at_lpos (_, r, _) Right = r
+fun term_at_lpos (Lit { lhs, ... }) Left = lhs
+  | term_at_lpos (Lit { rhs, ... }) Right = rhs
 
-fun orient Left (l, r, b) = (l, r, b)
-  | orient Right (l, r, b) = (r, l, b)
+fun orient Left (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
+  | orient Right (Lit { lhs, rhs, pol, ... }) = (rhs, lhs, pol)
 
-fun map_at_lpos Left f (l, r, b) = (f l, r, b)
-  | map_at_lpos Right f (l, r, b) = (l, f r, b)
+fun map_at_lpos Left f (Lit { lhs, rhs, pol }) = Lit { lhs = f lhs, rhs = rhs, pol = pol }
+  | map_at_lpos Right f (Lit { lhs, rhs, pol }) = Lit { lhs = lhs, rhs = f rhs, pol = pol }
 
-fun occurs_deeply_in x (l, r, _) = JTerm.occurs_deeply_in x l orelse JTerm.occurs_deeply_in x r
+fun occurs_deeply_in x = any_side (JTerm.occurs_deeply_in x)
 
-fun maxidx_of (s, t, _) = Int.max (apply2 maxidx_of_term (s, t))
+fun maxidx_of (Lit { lhs, rhs, ... }) = Int.max (apply2 maxidx_of_term (lhs, rhs))
 
 fun kbo_generic_different_signs_greater cmp ((s, t, st_pos), (u, v, uv_pos)) =
   (* different signs => never equal *)
@@ -194,16 +211,16 @@ fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
   (* fall back to multiset comparison *)
   else Slam_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
 
-val kbo = kbo_generic Slam_KBO.ord
+val kbo = kbo_generic Slam_KBO.ord o apply2 dest
 
 fun pretty_lit' ctxt = Slam_Common.pretty_term' ctxt o term_of
 
 val pretty_lit = Pretty.string_of oo pretty_lit'
 
-fun pretty_subterm' ctxt ((s, t, positive) : T) (lp, tp) =
+fun pretty_subterm' ctxt lit (lp, tp) =
   let
-    val as_term = term_of (s, t, positive)
-    val lp_as_tp = as_tpos positive lp @ tp
+    val as_term = term_of lit
+    val lp_as_tp = as_tpos (is_positive lit) lp @ tp
   in
     JTerm.pretty_subterm' ctxt as_term lp_as_tp
   end

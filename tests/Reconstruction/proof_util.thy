@@ -4,10 +4,6 @@ imports SLAM_TEST_BASE.test_base
 
 begin
 
-ML \<open>
-  val mk = Skip_Proof.make_thm @{theory}
-\<close>
-
 ML_val \<open>
   val C = mk @{prop "A \<Longrightarrow> B \<Longrightarrow> C \<Longrightarrow> D \<Longrightarrow> E"}
   val expected = mk @{prop "B \<Longrightarrow> C \<Longrightarrow> A \<Longrightarrow> D \<Longrightarrow> E"}

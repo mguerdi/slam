@@ -294,7 +294,7 @@ struct
   fun insert_unit c index : (int * JLit.lpos) T =
     let
       val id = JClause.id c
-      val [(lhs, rhs, b)] = JClause.literals c
+      val [(lhs, rhs, b)] = map (JLit.dest) (JClause.literals c)
       val top_level_term_positions =
         [(JLit.Left, lhs), (JLit.Right, rhs)]
     in
@@ -430,8 +430,7 @@ struct
 
   val add_term_symbols_with_max_depth = add_term_symbols_with_depth (curry Int.max)
 
-  fun add_lit_symbols_with_max_depth (s, t, _) =
-    add_term_symbols_with_max_depth s #> add_term_symbols_with_max_depth t
+  val add_lit_symbols_with_max_depth = JLit.fold add_term_symbols_with_max_depth
 
   val max_depth_in_positive =
     JClause.literals
@@ -477,7 +476,7 @@ struct
         , @{term "HOL.Not"}
         ]
       val add_term_symbols = add_term_symbols_with_depth (K (K 0))
-      fun add_lit_symbols (s, t, _) = add_term_symbols s #> add_term_symbols t
+      val add_lit_symbols = JLit.fold add_term_symbols
       val add_clause = JClause.literals #> Basics.fold add_lit_symbols
       val symbols =
         Termtab.empty

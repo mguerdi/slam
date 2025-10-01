@@ -35,4 +35,9 @@ ML \<open>
   val mk = Skip_Proof.make_thm @{theory}
 \<close>
 
+ML \<open>
+  fun mkh t = { th = Skip_Proof.make_thm @{theory} t, skolems = [] }
+  val eqh = (op aconvc) o apply2 HClause.cprop_without_skolem_prems
+\<close>
+
 end
