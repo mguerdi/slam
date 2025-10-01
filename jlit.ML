@@ -54,13 +54,31 @@ end;
 structure JLit : JLIT =
 struct
 
-datatype T = Lit of { lhs: term, rhs: term, pol: bool }
+(* a known orientation *)
+datatype orientation = LeftGreater | RightGreater | Equal
+
+fun impl_swap_orientation LeftGreater = RightGreater
+  | impl_swap_orientation RightGreater = LeftGreater
+  | impl_swap_orientation Equal = Equal
+
+val swap_orientation = Lazy.map (Option.map impl_swap_orientation)
+
+datatype T = Lit of { lhs: term, rhs: term, pol: bool, orientation: orientation option Lazy.lazy }
 datatype lpos = Left | Right
 
-fun mk (lhs, rhs, is_positive) = Lit { lhs = lhs, rhs = rhs, pol = is_positive }
+fun compute_orientation_lazy lhs rhs = Lazy.lazy (fn () =>
+  case Slam_KBO.ord (lhs, rhs) of
+    SOME GREATER => SOME LeftGreater
+  | SOME EQUAL => SOME Equal
+  | SOME LESS => SOME RightGreater
+  | NONE => NONE
+)
+
+fun mk (lhs, rhs, is_positive) =
+  Lit { lhs = lhs, rhs = rhs, pol = is_positive, orientation = compute_orientation_lazy lhs rhs }
 
 (* FIXME: deprecate? *)
-fun dest (Lit { lhs, rhs, pol }) = (lhs, rhs, pol)
+fun dest (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
 
 fun fold f (Lit { lhs, rhs, ... }) = f lhs #> f rhs
 
@@ -87,9 +105,10 @@ val is_flex_sided = any_side JTerm.is_variable_headed
 val is_flex_flex = both_sides JTerm.is_variable_headed
 
 (* forgets orientation *)
-fun map f (Lit { lhs, rhs, pol }) = mk (f lhs, f rhs, pol)
+fun map f (Lit { lhs, rhs, pol, ... }) = mk (f lhs, f rhs, pol)
 
-fun unsafe_map f (Lit { lhs, rhs, pol }) = Lit { lhs = f lhs, rhs = f rhs, pol = pol }
+fun unsafe_map f (Lit { lhs, rhs, pol, orientation }) =
+  Lit { lhs = f lhs, rhs = f rhs, pol = pol, orientation = orientation }
 
 fun lposs_of _ = [Left, Right]
 
@@ -103,7 +122,7 @@ fun mk_neq lhs rhs = mk (lhs, rhs, true)
 fun mk_pred (@{term Not} $ t) b = mk_pred t (not b)
   | mk_pred t b = mk (t, if b then @{term True} else @{term False}, true)
 
-fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ lhs $ rhs) = Lit { lhs = lhs, rhs = rhs, pol = b }
+fun of_term_signed b (Const (@{const_name HOL.eq}, _) $ lhs $ rhs) = mk (lhs, rhs, b)
   | of_term_signed b (Const (@{const_name HOL.Not}, _) $ t) = of_term_signed (not b) t
   (* FIXME: might need to revert this because mk_pred removes negations from t. *)
   | of_term_signed b t = mk_pred t b
@@ -114,7 +133,7 @@ fun of_term t =
     then error "can only turn boolean terms into literals"
     else of_term_signed true t
 
-fun aconv_as (Lit { lhs = s, rhs = t, pol = b }, Lit { lhs = s', rhs = t', pol = b' }) =
+fun aconv_as (Lit { lhs = s, rhs = t, pol = b, ... }, Lit { lhs = s', rhs = t', pol = b', ... }) =
   if b <> b' then NONE
   else if Term.aconv (s, s') andalso Term.aconv (t, t') then SOME Left
   else if Term.aconv (s, t') andalso Term.aconv (t, s') then SOME Right
@@ -122,17 +141,18 @@ fun aconv_as (Lit { lhs = s, rhs = t, pol = b }, Lit { lhs = s', rhs = t', pol =
 
 val aconv = is_some o aconv_as
 
-(* FIXME: maintain orientation invariant *)
-fun swap (Lit { lhs = lhs, rhs = rhs, pol = pol }) = Lit { lhs = rhs, rhs = lhs, pol = pol }
+fun swap (Lit { lhs, rhs, pol, orientation }) =
+  Lit { lhs = rhs, rhs = lhs, pol = pol, orientation = swap_orientation orientation }
 
-fun negate (Lit { lhs = lhs, rhs = rhs, pol = pol }) = (Lit { lhs = lhs, rhs = rhs, pol = not pol })
+fun negate (Lit { lhs, rhs, pol, orientation }) =
+  (Lit { lhs = lhs, rhs = rhs, pol = not pol, orientation = orientation })
 
 fun swap_lpos Left = Right
   | swap_lpos Right = Left
 
 fun is_pred lit = is_positive lit andalso any_side JTerm.is_truth_value lit
 
-fun dest_pred (Lit { lhs = lhs, rhs = rhs, pol = true }) =
+fun dest_pred (Lit { lhs, rhs, pol = true, ... }) =
   (* FIXME: what about when both are truth values? do we prefer an orientation? *)
   if JTerm.is_truth_value rhs
     then (lhs, rhs)
@@ -154,7 +174,7 @@ its implementaiton)
 *)
 (* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
 fun norm_negative_pred ctxt (l as Lit { pol = true, ... }) = l
-  | norm_negative_pred ctxt (l as Lit { lhs = s, rhs = t, pol = false }) =
+  | norm_negative_pred ctxt (l as Lit { lhs = s, rhs = t, pol = false, ... }) =
       if JTerm.is_truth_value s andalso JTerm.ml_bool_of s andalso JTerm.is_variable_headed t
         then l
       else if JTerm.is_truth_value t andalso JTerm.ml_bool_of t andalso JTerm.is_variable_headed s
@@ -162,17 +182,15 @@ fun norm_negative_pred ctxt (l as Lit { pol = true, ... }) = l
       else if JTerm.is_truth_value s andalso JTerm.is_truth_value t andalso JTerm.ml_bool_of s andalso JTerm.ml_bool_of t
         then l
       else if JTerm.is_truth_value s
-        (* FIXME: maintain orientation invariant *)
-        then Lit { lhs = JTerm.negate_hol_bool s, rhs = t, pol = true }
+        then mk (JTerm.negate_hol_bool s, t, true)
       else if JTerm.is_truth_value t
-        (* FIXME: maintain orientation invariant *)
-        then Lit { lhs = s, rhs = JTerm.negate_hol_bool t, pol = true }
+        then mk (s, JTerm.negate_hol_bool t, true)
       else l
 
-(* FIXME: use unsafe_map if preservation of orientation can be guaranteed *)
+(* FIXME: use unsafe_map if we have stability under substitutions *)
 fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 
-fun term_of (Lit { lhs = s, rhs = t, pol = b }) =
+fun term_of (Lit { lhs = s, rhs = t, pol = b, ... }) =
   (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (s, t))
 
 (* law: term_at_lpos lp (s, t, b) = JTerm.subterm_at (as_tpos b lp) (term_of (s, t, b)) *)
@@ -188,8 +206,8 @@ fun orient Left (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
   | orient Right (Lit { lhs, rhs, pol, ... }) = (rhs, lhs, pol)
 
 (* forgets orientation *)
-fun map_at_lpos Left f (Lit { lhs, rhs, pol }) = mk (f lhs, rhs, pol)
-  | map_at_lpos Right f (Lit { lhs, rhs, pol }) = mk (lhs, f rhs, pol)
+fun map_at_lpos Left f (Lit { lhs, rhs, pol, ... }) = mk (f lhs, rhs, pol)
+  | map_at_lpos Right f (Lit { lhs, rhs, pol, ... }) = mk (lhs, f rhs, pol)
 
 fun occurs_deeply_in x = any_side (JTerm.occurs_deeply_in x)
 
