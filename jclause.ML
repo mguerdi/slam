@@ -84,7 +84,6 @@ sig
   val is_positive_unit : T -> bool
   val is_negative_unit : T -> bool
   val the_unit_lit : T -> JLit.T
-  val orient_unit : JLit.lpos -> T -> term * term * bool
   val maxidx_of_literal_list : JLit.T list -> int
   (* literal selection *)
   val selected : T -> int list
@@ -575,7 +574,7 @@ fun is_potentially_eligible_positive_cpos c =
 fun is_eligible_full_pos c (tpos, lpos, cpos) =
   let
     val literal = nth (literals c) cpos
-    val (s, t, _) = JLit.orient lpos literal
+    val (s, t, _) = JLit.dest (JLit.orient lpos literal)
     fun s_leq_t () =
       let val s_t_comp = Slam_KBO.ord (s, t) in
         (SOME LESS = s_t_comp) orelse (SOME EQUAL = s_t_comp)
@@ -612,8 +611,6 @@ fun the_unit_lit c =
   if not (is_unit c)
     then error ("the_unit_lit: not a unit" ^ @{make_string} c)
     else the_single (literals c)
-
-fun orient_unit lp = JLit.orient lp o the_unit_lit
 
 fun dist_to_neg_conj { dist_to_neg_conj, ... } = dist_to_neg_conj
 

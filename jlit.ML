@@ -33,7 +33,7 @@ sig
   val term_of : T -> term
   val as_tpos : bool -> lpos -> JTerm.tpos
   val term_at_lpos : T -> lpos -> term
-  val orient : lpos -> T -> term * term * bool
+  val orient : lpos -> T -> T
   val map_at_lpos : lpos -> (term -> term) -> T -> T
   val occurs_deeply_in : term -> T -> bool
   val maxidx_of : T -> int
@@ -204,8 +204,11 @@ fun as_tpos true Left = [1]
 fun term_at_lpos (Lit { lhs, ... }) Left = lhs
   | term_at_lpos (Lit { rhs, ... }) Right = rhs
 
-fun orient Left (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
-  | orient Right (Lit { lhs, rhs, pol, ... }) = (rhs, lhs, pol)
+fun orient Left lit = lit
+  | orient Right lit = swap lit
+
+fun dest_orient Left (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
+  | dest_orient Right (Lit { lhs, rhs, pol, ... }) = (rhs, lhs, pol)
 
 (* forgets orientation *)
 fun map_at_lpos Left f (Lit { lhs, rhs, pol, ... }) = mk (f lhs, rhs, pol)
@@ -257,7 +260,7 @@ val pretty_subterm = Pretty.string_of ooo pretty_subterm'
 
 fun as_oriented_for_pretty lit lp =
   let
-    val (s, t, b) = orient lp lit
+    val (s, t, b) = dest (orient lp lit)
     val a = fastype_of s
   in
     \<^instantiate>\<open>'a=a and s and t in term \<open><s \<approx>> t>\<close>\<close>

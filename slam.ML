@@ -305,7 +305,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
   (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
   val unit_shift = JClause.maxidx target_clause + 1
   val unit_clause = JClause.incr_indexes unit_shift unit_clause
-  val (from, to, true) = JClause.orient_unit lp unit_clause (* Schulz: (s, t) *)
+  val (from, to, true) =
+    JLit.dest (JLit.orient lp (JClause.the_unit_lit  unit_clause)) (* Schulz: (s, t) *)
 
   val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
   val matchers =
@@ -460,7 +461,8 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
     val unit_shift = (JClause.maxidx target_clause + 1)
     val unit_clause = JClause.incr_indexes unit_shift unit_clause
     val maxidx = JClause.maxidx_of2 (unit_clause, target_clause)
-    val (s, t, false) = JClause.orient_unit unit_lp unit_clause (* Schulz: s, t *)
+    val (s, t, false) =
+      JLit.dest (JLit.orient unit_lp (JClause.the_unit_lit unit_clause)) (* Schulz: s, t *)
     val (u, v, true) = JLit.dest (JClause.lit_at target_cp target_clause) (* Schulz: \<sigma>(s), \<sigma>(t) *)
     val matcher =
       [(s, u), (t, v)]
@@ -855,7 +857,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
     val d = JClause.incr_indexes left_premise_shift d
     val env = Envir.empty (JClause.maxidx_of2 (c, d))
     val rewriting_literal = JClause.lit_at cp d (* t \<approx> t' *)
-    val (t, t', is_pos_eq) = JLit.orient lp rewriting_literal
+    val (t, t', is_pos_eq) = JLit.dest (JLit.orient lp rewriting_literal)
     val u = JClause.subterm_at_full_pos c u_pos
   in
     if not is_pos_eq then fail [] (K "not positive") else
@@ -884,7 +886,7 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           fun d' () = JClause.delete_lit_at ctxt cp d
           (* this relies on normalization not destroying green / top level positions, i.e.
           (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
-          val (t, t', _) = JLit.orient lp (JClause.lit_at cp d)
+          val (t, t', _) = JLit.dest (JLit.orient lp (JClause.lit_at cp d))
           fun ct' () = JClause.map_at_full_pos u_pos (K t') c (* FIXME: recompute selected *)
           fun t_comp_t' () = Slam_KBO.ord (t, t')
         in
@@ -1022,8 +1024,8 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_e_fact "EFact"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c)
-    val (u', v', is_pos') = JLit.orient lp' (JClause.lit_at cp' c)
-    val (u, v, is_pos) = JLit.orient lp (JClause.lit_at cp c)
+    val (u', v', is_pos') = JLit.dest (JLit.orient lp' (JClause.lit_at cp' c))
+    val (u, v, is_pos) = JLit.dest (JLit.orient lp (JClause.lit_at cp c))
     val () = tracer (fn () =>
       Slam_Common.pretty_term ctxt u ^ " ?= " ^ Slam_Common.pretty_term ctxt u')
     val unifiers =
@@ -1034,9 +1036,9 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
       let
         val () = tracer (fn () => "build_conclusion")
         val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
-        val (u', v', _) = JLit.orient lp' (JClause.lit_at cp' c)
+        val (u', v', _) = JLit.dest (JLit.orient lp' (JClause.lit_at cp' c))
         val uv_literal = JClause.lit_at cp c
-        val (u, v, _) = JLit.orient lp uv_literal
+        val (u, v, _) = JLit.dest (JLit.orient lp uv_literal)
         val u_v_comp = Slam_KBO.ord (u, v)
         val uv_maximal = Slam_Order.is_maximal JLit.kbo false uv_literal (JClause.literals c)
       in
@@ -1204,7 +1206,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () =>
       "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} (lp, cp))
-    val (s, s', b) = JClause.lit_at cp c |> JLit.orient lp
+    val (s, s', b) = JClause.lit_at cp c |> JLit.orient lp |> JLit.dest
     val unifiers =
       if not b then fail Seq.empty (K "not a positive literal") else
       if as_simplification
@@ -1316,7 +1318,8 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
       case u_pos of
         ([], lpos, cpos) =>
           let
-            val (_, other_side, is_positive) = c |> JClause.lit_at cpos |> JLit.orient lpos
+            val (_, other_side, is_positive) =
+              c |> JClause.lit_at cpos |> JLit.orient lpos |> JLit.dest
           in
             is_positive andalso
               (other_side = @{term True}
@@ -1415,7 +1418,8 @@ fun impl_simp_bool_rw
       case u_pos of
         ([], lpos, cpos) =>
           let
-            val (_, other_side, is_positive) = c |> JClause.lit_at cpos |> JLit.orient lpos
+            val (_, other_side, is_positive) =
+              c |> JClause.lit_at cpos |> JLit.orient lpos |> JLit.dest
           in
             is_positive andalso
               (other_side = @{term True}
@@ -1638,7 +1642,10 @@ fun impl_fa_ex_rw
   if
       (case u_pos of
         ([], lpos, cpos) =>
-          let val (_, other_side, is_positive) = c |> JClause.lit_at cpos |> JLit.orient lpos in
+          let
+            val (_, other_side, is_positive) =
+              c |> JClause.lit_at cpos |> JLit.orient lpos |> JLit.dest
+          in
             if is_positive andalso is_forall andalso other_side = @{term True} then true else
             if is_positive andalso not is_forall andalso other_side = @{term False} then true else
             false (* don't fail *)
@@ -1664,7 +1671,8 @@ fun impl_fa_ex_rw
       case u_pos of
         ([], lpos, cpos) =>
           let
-            val (_, other_side, is_positive) = c |> JClause.lit_at cpos |> JLit.orient lpos
+            val (_, other_side, is_positive) =
+              c |> JClause.lit_at cpos |> JLit.orient lpos |> JLit.dest
           in
             is_positive andalso
               (other_side = @{term True}
