@@ -188,6 +188,8 @@ fun norm_negative_pred ctxt (l as Lit { pol = true, ... }) = l
       else l
 
 (* FIXME: use unsafe_map if we have stability under substitutions *)
+(* FIXME: if the substitution is empty, or the terms are ground, skip, and in particular preserve
+orientation! *)
 fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 
 fun term_of (Lit { lhs = s, rhs = t, pol = b, ... }) =
