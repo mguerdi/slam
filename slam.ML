@@ -315,8 +315,9 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
   (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
   val unit_shift = JClause.maxidx target_clause + 1
   val unit_clause = JClause.incr_indexes unit_shift unit_clause
-  val (from, to, true) =
-    JLit.dest (JLit.orient lp (JClause.the_unit_lit  unit_clause)) (* Schulz: (s, t) *)
+
+  val from_eq_to = JLit.orient lp (JClause.the_unit_lit unit_clause)
+  val (from, to, true) = JLit.dest from_eq_to (* Schulz: (s, t) *)
 
   val target_term = JClause.subterm_at_full_pos target_clause j (* Schulz: u *)
   val matchers =
@@ -330,10 +331,12 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
       val () = tracer (K "build_conclusion")
       val msg = (fn () => "rewriting in " ^ JClause.pretty_subterm ctxt target_clause j
         ^ " with " ^ JClause.pretty_oriented ctxt unit_clause (lp, 0))
-      val (from, to) = apply2 (JTerm.norm_beta_eta_qeta_env matcher) (from, to)
+      val from_eq_to = JLit.norm_beta_eta_qeta_env matcher from_eq_to
+      val from_cmp_to = JLit.kbo_compare_left_to_right from_eq_to
+      val (from, to, true) = JLit.dest from_eq_to
     in
       (* NOTE: subst_term is only for Pattern.match, not Unify.matchers! *)
-      if SOME GREATER <> Slam_KBO.ord (from, to) then
+      if SOME GREATER <> from_cmp_to then
         fail NONE (fn () =>
           "s\<sigma> !\<succ> t\<sigma>: "
           ^ Slam_Common.pretty_term ctxt from
@@ -348,7 +351,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp) (target_clause, j as 
           terms. Why? Need a TVar maxidxforcer? *)
           |> JClause.set_maxidx (Envir.maxidx_of matcher)
           |> JClause.recalculate_maxidx
-        val rewriting_clause = JClause.dummy [JLit.mk (from, to, true)]
+        val rewriting_clause = JClause.dummy [from_eq_to]
         val rewriting_smaller_than_rewritten = (fn () =>
           SOME LESS = JClause.kbo (rewriting_clause, rewritten_clause))
       in
@@ -896,12 +899,13 @@ fun infer_sup ctxt (d, (lp, cp)) (c, u_pos) =
           fun d' () = JClause.delete_lit_at ctxt cp d
           (* this relies on normalization not destroying green / top level positions, i.e.
           (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
-          val (t, t', _) = JLit.dest (JLit.orient lp (JClause.lit_at cp d))
-          fun ct' () = JClause.map_at_full_pos u_pos (K t') c (* FIXME: recompute selected *)
-          fun t_comp_t' () = Slam_KBO.ord (t, t')
+          val t_eq_t' = JLit.orient lp (JClause.lit_at cp d)
+          val (t, t', _) = JLit.dest t_eq_t'
+          fun ct' () = JClause.map_at_full_pos u_pos (K t') c
+          fun t_cmp_t' () = JLit.kbo_compare_left_to_right t_eq_t'
         in
           (* order restrictions *)
-          if Partial_Ord.is_less_equal (t_comp_t' ()) then
+          if Partial_Ord.is_less_equal (t_cmp_t' ()) then
             fail NONE (fn () => "t\<sigma> \<preceq> t'\<sigma>: " ^
               Slam_Common.pretty_term ctxt t ^ " \<preceq> " ^ Slam_Common.pretty_term ctxt t') else (* 5 *)
           if not u_eligible then fail NONE (K "u not eligible") else (* 6 *)
@@ -1049,7 +1053,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         val (u', v', _) = JLit.dest (JLit.orient lp' (JClause.lit_at cp' c))
         val uv_literal = JClause.lit_at cp c
         val (u, v, _) = JLit.dest (JLit.orient lp uv_literal)
-        val u_v_comp = Slam_KBO.ord (u, v)
+        val u_v_comp = JLit.kbo_compare_left_to_right uv_literal
         val uv_maximal = Slam_Order.is_maximal JLit.kbo false uv_literal (JClause.literals c)
       in
         if Partial_Ord.is_less_equal u_v_comp then fail NONE (K "u\<sigma> \<preceq> v\<sigma>") else
