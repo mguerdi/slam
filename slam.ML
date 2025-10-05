@@ -10,7 +10,12 @@ general procedure:
 
 signature SLAM =
 sig
-  val impl_simp_rewrite_lits : bool -> Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
+  type clause_lit = JClause.T * JClause.cpos
+  type clause_lit_side = JClause.T * (JLit.lpos * JClause.cpos)
+  type clause_term = JClause.T * JClause.full_pos
+  type unit_clause = JClause.T * JLit.lpos
+
+  val impl_simp_rewrite_lits : bool -> Proof.context -> unit_clause -> clause_term -> JClause.T option
   val find_single_green_disagreement : Proof.context -> term * term -> JTerm.tpos option
   val literal_can_match_single_disagreement : Proof.context -> int * JLit.T -> int * JLit.T -> (int * (JTerm.tpos * (JLit.lpos * Envir.env))) option
   val equality_subsumes : Proof.context -> JClause.T * JClause.T -> bool
@@ -27,28 +32,28 @@ sig
              (*   predicate variable      skolem        *)
   val is_trivial : JClause.T -> bool
   val is_equality_subsumed : Proof.context -> Slam_Clause_Set.T -> JClause.T -> bool
-  val simp_bool_outer_claus : Proof.context -> JClause.T * JClause.cpos -> JClause.T list
-  val simp_rewrite_positive_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
-  val simp_rewrite_negative_lits : Proof.context -> JClause.T * JLit.lpos -> JClause.T * JClause.full_pos -> JClause.T option
+  val simp_bool_outer_claus : Proof.context -> clause_lit -> JClause.T list
+  val simp_rewrite_positive_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
+  val simp_rewrite_negative_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
-  val simp_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_eq_neq_outer_claus : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
-  val infer_sup : Proof.context -> (JClause.T * (JLit.lpos * JClause.cpos)) -> (JClause.T * JClause.full_pos) -> JClause.T list
-  val infer_eres : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
+  val simp_bool_rw : Proof.context -> clause_term -> JClause.T list
+  val infer_eq_neq_outer_claus : Proof.context -> clause_lit -> JClause.T list
+  val infer_sup : Proof.context -> clause_lit_side -> clause_term -> JClause.T list
+  val infer_eres : Proof.context -> clause_lit -> JClause.T list
   val infer_efact : Proof.context -> JClause.T -> ((JLit.lpos * JClause.cpos) * (JLit.lpos * JClause.cpos)) -> JClause.T list
-  val infer_arg_cong : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
-  val infer_bool_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_false_elim : Proof.context -> JClause.T -> (JLit.lpos * JClause.cpos) -> JClause.T list
-  val simp_false_elim : Proof.context -> JClause.T -> (JLit.lpos * JClause.cpos) -> JClause.T list
-  val infer_bool_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_eq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_neq_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_forall_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_exists_hoist : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_forall_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_exists_rw : Proof.context -> JClause.T -> JClause.full_pos -> JClause.T list
-  val infer_neg_ext : Proof.context -> JClause.T -> JClause.cpos -> JClause.T list
+  val infer_arg_cong : Proof.context -> clause_lit -> JClause.T list
+  val infer_bool_hoist : Proof.context -> clause_term -> JClause.T list
+  val infer_false_elim : Proof.context -> clause_lit_side -> JClause.T list
+  val simp_false_elim : Proof.context -> clause_lit_side -> JClause.T list
+  val infer_bool_rw : Proof.context -> clause_term -> JClause.T list
+  val infer_eq_hoist : Proof.context -> clause_term -> JClause.T list
+  val infer_neq_hoist : Proof.context -> clause_term -> JClause.T list
+  val infer_forall_hoist : Proof.context -> clause_term -> JClause.T list
+  val infer_exists_hoist : Proof.context -> clause_term -> JClause.T list
+  val infer_forall_rw : Proof.context -> clause_term -> JClause.T list
+  val infer_exists_rw : Proof.context -> clause_term -> JClause.T list
+  val infer_neg_ext : Proof.context -> clause_lit -> JClause.T list
   val forward_simplify :
     Proof.context
     -> { forward: bool, cheap: bool }
@@ -92,6 +97,11 @@ end
 
 structure Slam : SLAM =
 struct
+
+type clause_lit = JClause.T * JClause.cpos
+type clause_lit_side = JClause.T * (JLit.lpos * JClause.cpos)
+type clause_term = JClause.T * JClause.full_pos
+type unit_clause = JClause.T * JLit.lpos
 
 (* oc function from the PhD thesis
 logically:
@@ -795,7 +805,7 @@ fun simp_bool_outer_claus ctxt (c, i) =
   end
 
 (* EqOuterClaus and NeqOuterClaus inferences *)
-fun infer_eq_neq_outer_claus ctxt c i =
+fun infer_eq_neq_outer_claus ctxt (c, i) =
   let
     val (s, t, b) = JLit.dest (JClause.lit_at i c)
   in
@@ -986,7 +996,7 @@ fun sup_active_into_given
   end
 
 (* ERes inference *)
-fun infer_eres (ctxt : Proof.context) c cp =
+fun infer_eres (ctxt : Proof.context) (c, cp) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_e_res "ERes"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
@@ -1082,7 +1092,7 @@ C'\<sigma> \<or> s\<sigma> x\<^sub>1 \<dots> x\<^sub>n = s'\<sigma> x\<^sub>1 \<
 
 *)
 
-fun infer_arg_cong ctxt c cpos =
+fun infer_arg_cong ctxt (c, cpos) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_arg_cong "ArgCong"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
@@ -1152,7 +1162,7 @@ fun infer_arg_cong ctxt c cpos =
   end
   end
 
-fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
+fun infer_bool_hoist ctxt (c, (u_pos as (_, _, cpos))) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_bool_hoist "BoolHoist"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
@@ -1196,7 +1206,7 @@ fun infer_bool_hoist ctxt c (u_pos as (_, _, cpos)) =
     (build_conclusion () handle Type.TUNIFY => fail [] (K "Type.TUNIFY"))
   end
 
-fun impl_simp_infer_false_elim as_simplification ctxt c (lp, cp) =
+fun impl_simp_infer_false_elim as_simplification ctxt (c, (lp, cp)) =
   let
     val tracer =
       if as_simplification then
@@ -1295,8 +1305,7 @@ the variable x occuring in disjunct_with. *)
 fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   ctxt
   (tracer : (unit -> string) -> unit)
-  (c : JClause.T)
-  (u_pos : JClause.full_pos)
+  (c : JClause.T, u_pos : JClause.full_pos)
   (pattern : term)
   (u_var_allowed : bool) (* this is false for BoolRw but true for the others *)
   (insert_for_u : term) (* will be \<top> or \<bottom> *)
@@ -1395,8 +1404,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
 fun impl_simp_bool_rw
   ctxt
   (tracer : (unit -> string) -> unit)
-  (c : JClause.T)
-  (u_pos : JClause.full_pos)
+  (c : JClause.T, u_pos : JClause.full_pos)
   (pattern : term)
   (u_var_allowed : bool) (* this is false for BoolRw but true for the others *)
   (insert_for_u : term) (* will be \<top> or \<bottom> *)
@@ -1492,7 +1500,7 @@ fun impl_simp_bool_rw
   end
   end
 
-fun simp_bool_rw ctxt c u_pos =
+fun simp_bool_rw ctxt (c, u_pos) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_simp_bool_rw "SimpBoolRw"
     val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
@@ -1506,7 +1514,7 @@ fun simp_bool_rw ctxt c u_pos =
       let val () = tracer (fn () =>
         "rule " ^ Slam_Common.pretty_term ctxt t ^ " \<mapsto> " ^ Slam_Common.pretty_term ctxt t')
       in
-        impl_simp_bool_rw ctxt tracer c u_pos t false t' NONE
+        impl_simp_bool_rw ctxt tracer (c, u_pos) t false t' NONE
         |> map (fn (unifier, clause) =>
           clause
           |> JClause.set_origin ctxt
@@ -1520,7 +1528,7 @@ fun simp_bool_rw ctxt c u_pos =
   end
 
 (* FIXME: Idea: have the rw rules as active clauses, then this is basically superposition *)
-fun infer_bool_rw ctxt c u_pos =
+fun infer_bool_rw ctxt (c, u_pos) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_bool_rw "BoolRw"
     val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
@@ -1537,7 +1545,7 @@ fun infer_bool_rw ctxt c u_pos =
       let val () = tracer (fn () =>
         "rule " ^ Slam_Common.pretty_term ctxt t ^ " \<mapsto> " ^ Slam_Common.pretty_term ctxt t')
       in
-        impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos t false t' NONE
+        impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer (c, u_pos) t false t' NONE
         |> map (fn (unifier, clause) =>
           clause
           |> JClause.set_origin ctxt
@@ -1552,7 +1560,7 @@ fun infer_bool_rw ctxt c u_pos =
 
 datatype HoistType = Eq | Neq | Forall | Exists
 
-fun impl_eq_neq_hoist positive ctxt c u_pos =
+fun impl_eq_neq_hoist positive ctxt (c, u_pos) =
   let
     val tracer =
       if positive
@@ -1571,7 +1579,7 @@ fun impl_eq_neq_hoist positive ctxt c u_pos =
       |> not positive ? HOLogic.mk_not
     val insert_for_u = hol_bool_of (not positive)
   in
-    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos pattern true insert_for_u (SOME x_eq_y_lit)
+    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer (c, u_pos) pattern true insert_for_u (SOME x_eq_y_lit)
     |> map (fn (unifier, clause) =>
       clause
       |> JClause.set_origin ctxt
@@ -1585,7 +1593,7 @@ val infer_eq_hoist = impl_eq_neq_hoist true
 
 val infer_neq_hoist = impl_eq_neq_hoist false
 
-fun impl_forall_exists_hoist is_forall ctxt c u_pos =
+fun impl_forall_exists_hoist is_forall ctxt (c, u_pos) =
   let
     val tracer =
       if is_forall
@@ -1608,7 +1616,7 @@ fun impl_forall_exists_hoist is_forall ctxt c u_pos =
     (* \<top> / \<bottom> *)
     val insert_for_u = hol_bool_of (not is_forall)
   in
-    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer c u_pos pattern true insert_for_u (SOME new_lit)
+    impl_infer_bool_rw_eq_neq_fa_ex_hoist ctxt tracer (c, u_pos) pattern true insert_for_u (SOME new_lit)
     |> map (fn (unifier, clause) =>
         clause
         |> JClause.set_origin ctxt
@@ -1626,8 +1634,7 @@ val infer_exists_hoist = impl_forall_exists_hoist false
 fun impl_fa_ex_rw
   is_forall
   ctxt
-  (c : JClause.T)
-  (u_pos : JClause.full_pos)
+  (c : JClause.T, u_pos : JClause.full_pos)
   : JClause.T list
 =
   let
@@ -1743,13 +1750,13 @@ fun impl_fa_ex_rw
   end
   end
 
-fun impl_infer_forall_exists_rw is_forall ctxt clause u_pos =
+fun impl_infer_forall_exists_rw is_forall ctxt (clause, u_pos) =
   (let
 
     val () = ()
     (* val _ = writeln ("FaExRw past more with u_pos" ^ @{make_string} u_pos ) *)
   in
-      impl_fa_ex_rw is_forall ctxt clause u_pos
+      impl_fa_ex_rw is_forall ctxt (clause, u_pos)
   end)
 
 val infer_forall_rw = impl_infer_forall_exists_rw true
@@ -1759,7 +1766,7 @@ val infer_exists_rw = impl_infer_forall_exists_rw false
 (* C \<or> s                      \<noteq> s'                              *)
 (* ------------------------------------------------------ NegExt *)
 (* C \<or> s (SOME x. s x \<noteq> s' x) \<noteq> s' (SOME x. s x \<noteq> s' x)        *)
-fun infer_neg_ext ctxt c cpos =
+fun infer_neg_ext ctxt (c, cpos) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_neg_ext "NegExt"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
@@ -1893,7 +1900,7 @@ fun forward_simplify
             in
               green_targets
               (* FIXME: try taking just one instead of dealing with multiple simplifiations *)
-              |> Seq.maps (fn (c, u_pos) => simp_bool_rw ctxt c u_pos |> Seq.of_list)
+              |> Seq.maps (fn (c, u_pos) => simp_bool_rw ctxt (c, u_pos) |> Seq.of_list)
             end);
         val simp_false_elim_rewrites: JClause.T -> JClause.T Seq.seq = fn c =>
           if_cfg Slam_Common.rule_simp_false_elim (
@@ -1901,7 +1908,7 @@ fun forward_simplify
               val lpos_cpos_pairs =
                 Slam_Common.cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of c)
             in
-              Seq.of_list (maps (simp_false_elim ctxt c) lpos_cpos_pairs)
+              Seq.of_list (maps (simp_false_elim ctxt) (map (pair c) lpos_cpos_pairs))
             end)
 
         (* FIXME rewrites is a misnomer inherited from rn_rp_rewrites *)
@@ -1946,14 +1953,14 @@ fun forward_simplify
             then
               if_cfg
                 Slam_Common.rule_neg_ext
-                (Seq.of_list (maps (infer_neg_ext ctxt c) (JClause.cposs_of c)))
+                (Seq.of_list (maps (infer_neg_ext ctxt) (map (pair c) (JClause.cposs_of c))))
             else Seq.empty
         val arg_cong_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           if Config.get ctxt Slam_Common.arg_cong_as_simpl
             then
               if_cfg
                 Slam_Common.rule_arg_cong
-                (Seq.of_list (maps (infer_arg_cong ctxt c) (JClause.cposs_of c)))
+                (Seq.of_list (maps (infer_arg_cong ctxt) (map (pair c) (JClause.cposs_of c))))
             else Seq.empty
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
@@ -2150,7 +2157,7 @@ fun infer_clauses ctxt active given_clause green_index =
     (* ERes, EFact have already been performed for the active clauses *)
     , ( Slam_Common.rule_e_res
       , Slam_Common.trace_e_res
-      , (fn _ => (maps (infer_eres ctxt given_clause) given_clause_cposs))
+      , (fn _ => (maps (infer_eres ctxt) (map (pair given_clause) given_clause_cposs)))
       )
     , ( Slam_Common.rule_e_fact
       , Slam_Common.trace_e_fact
@@ -2159,12 +2166,12 @@ fun infer_clauses ctxt active given_clause green_index =
     , ( Slam_Common.rule_arg_cong
       , Slam_Common.trace_arg_cong
       , (fn _ => if Config.get ctxt Slam_Common.arg_cong_as_simpl then [] else
-          (maps (infer_arg_cong ctxt given_clause) given_clause_cposs))
+          (maps (infer_arg_cong ctxt) (map (pair given_clause) given_clause_cposs)))
       )
     , ( Slam_Common.rule_neg_ext
       , Slam_Common.trace_neg_ext
       , (fn _ => if Config.get ctxt Slam_Common.neg_ext_as_simpl then [] else
-          (maps (infer_neg_ext ctxt given_clause) given_clause_cposs))
+          (maps (infer_neg_ext ctxt) (map (pair given_clause) given_clause_cposs)))
       )
     , ( Slam_Common.rule_neg_cong_fun
       , Slam_Common.trace_neg_cong_fun
@@ -2172,39 +2179,39 @@ fun infer_clauses ctxt active given_clause green_index =
       )
     , ( Slam_Common.rule_bool_hoist
       , Slam_Common.trace_bool_hoist
-      , (fn _ => (maps (infer_bool_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_bool_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     , ( Slam_Common.rule_false_elim
       , Slam_Common.trace_false_elim
-      , (fn _ => (maps (infer_false_elim ctxt given_clause) given_clause_lpos_cpos_pairs))
+      , (fn _ => (maps (infer_false_elim ctxt) (map (pair given_clause) given_clause_lpos_cpos_pairs)))
       )
     , ( Slam_Common.rule_bool_rw
       , Slam_Common.trace_bool_rw
-      , (fn _ => (maps (infer_bool_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_bool_rw ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     , ( Slam_Common.rule_eq_hoist
       , Slam_Common.trace_eq_hoist
-      , (fn _ => (maps (infer_eq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_eq_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     , ( Slam_Common.rule_neq_hoist
       , Slam_Common.trace_neq_hoist
-      , (fn _ => (maps (infer_neq_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_neq_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     , ( Slam_Common.rule_forall_hoist
       , Slam_Common.trace_forall_hoist
-      , (fn _ => (maps (infer_forall_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_forall_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     , ( Slam_Common.rule_exists_hoist
       , Slam_Common.trace_exists_hoist
-      , (fn _ => (maps (infer_exists_hoist ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_exists_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     , ( Slam_Common.rule_forall_rw
       , Slam_Common.trace_forall_rw
-      , (fn _ => (maps (infer_forall_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_forall_rw ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     , ( Slam_Common.rule_exists_rw
       , Slam_Common.trace_exists_rw
-      , (fn _ => (maps (infer_exists_rw ctxt given_clause) (JClause.green_full_poss_of given_clause)))
+      , (fn _ => (maps (infer_exists_rw ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
       )
     ]
   in
