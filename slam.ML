@@ -2135,12 +2135,15 @@ fun infer_clauses ctxt active given_clause green_index =
       Slam_Common.cartesian_product eqs_active targets_given
     (* for ERes, EFact, NegExt, NegCongFun *)
     val given_clause_cposs = JClause.cposs_of given_clause
+    val given_clause_lits = map (pair given_clause) given_clause_cposs
     val given_clause_lpos_cpos_pairs =
       Slam_Common.cartesian_product [JLit.Left, JLit.Right] given_clause_cposs
+    val given_clause_lit_sides = map (pair given_clause) given_clause_lpos_cpos_pairs
     val given_clause_lpos_cpos_pairs_pairs =
       Slam_Common.cartesian_product
         given_clause_lpos_cpos_pairs
         given_clause_lpos_cpos_pairs
+    val given_clause_terms = map (pair given_clause) (JClause.green_full_poss_of given_clause)
     val all_disabled = Config.get ctxt Slam_Common.disable_all
     (* val _ = if all_disabled then writeln "ALL DISABLED!!!!" else () *)
     (* a bit contrived to make it lazy *)
@@ -2157,7 +2160,7 @@ fun infer_clauses ctxt active given_clause green_index =
     (* ERes, EFact have already been performed for the active clauses *)
     , ( Slam_Common.rule_e_res
       , Slam_Common.trace_e_res
-      , (fn _ => (maps (infer_eres ctxt) (map (pair given_clause) given_clause_cposs)))
+      , (fn _ => (maps (infer_eres ctxt) given_clause_lits))
       )
     , ( Slam_Common.rule_e_fact
       , Slam_Common.trace_e_fact
@@ -2166,12 +2169,12 @@ fun infer_clauses ctxt active given_clause green_index =
     , ( Slam_Common.rule_arg_cong
       , Slam_Common.trace_arg_cong
       , (fn _ => if Config.get ctxt Slam_Common.arg_cong_as_simpl then [] else
-          (maps (infer_arg_cong ctxt) (map (pair given_clause) given_clause_cposs)))
+          (maps (infer_arg_cong ctxt) given_clause_lits))
       )
     , ( Slam_Common.rule_neg_ext
       , Slam_Common.trace_neg_ext
       , (fn _ => if Config.get ctxt Slam_Common.neg_ext_as_simpl then [] else
-          (maps (infer_neg_ext ctxt) (map (pair given_clause) given_clause_cposs)))
+          (maps (infer_neg_ext ctxt) given_clause_lits))
       )
     , ( Slam_Common.rule_neg_cong_fun
       , Slam_Common.trace_neg_cong_fun
@@ -2179,39 +2182,39 @@ fun infer_clauses ctxt active given_clause green_index =
       )
     , ( Slam_Common.rule_bool_hoist
       , Slam_Common.trace_bool_hoist
-      , (fn _ => (maps (infer_bool_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_bool_hoist ctxt) given_clause_terms))
       )
     , ( Slam_Common.rule_false_elim
       , Slam_Common.trace_false_elim
-      , (fn _ => (maps (infer_false_elim ctxt) (map (pair given_clause) given_clause_lpos_cpos_pairs)))
+      , (fn _ => (maps (infer_false_elim ctxt) given_clause_lit_sides))
       )
     , ( Slam_Common.rule_bool_rw
       , Slam_Common.trace_bool_rw
-      , (fn _ => (maps (infer_bool_rw ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_bool_rw ctxt) given_clause_terms))
       )
     , ( Slam_Common.rule_eq_hoist
       , Slam_Common.trace_eq_hoist
-      , (fn _ => (maps (infer_eq_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_eq_hoist ctxt) given_clause_terms))
       )
     , ( Slam_Common.rule_neq_hoist
       , Slam_Common.trace_neq_hoist
-      , (fn _ => (maps (infer_neq_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_neq_hoist ctxt) given_clause_terms))
       )
     , ( Slam_Common.rule_forall_hoist
       , Slam_Common.trace_forall_hoist
-      , (fn _ => (maps (infer_forall_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_forall_hoist ctxt) given_clause_terms))
       )
     , ( Slam_Common.rule_exists_hoist
       , Slam_Common.trace_exists_hoist
-      , (fn _ => (maps (infer_exists_hoist ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_exists_hoist ctxt) given_clause_terms))
       )
     , ( Slam_Common.rule_forall_rw
       , Slam_Common.trace_forall_rw
-      , (fn _ => (maps (infer_forall_rw ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_forall_rw ctxt) given_clause_terms))
       )
     , ( Slam_Common.rule_exists_rw
       , Slam_Common.trace_exists_rw
-      , (fn _ => (maps (infer_exists_rw ctxt) (map (pair given_clause) (JClause.green_full_poss_of given_clause))))
+      , (fn _ => (maps (infer_exists_rw ctxt) given_clause_terms))
       )
     ]
   in
