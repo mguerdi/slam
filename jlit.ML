@@ -42,6 +42,7 @@ sig
     (('a * 'a) -> Slam_Order.partial_order) ->
     (('a * 'a * bool) * ('a * 'a * bool)) ->
     Slam_Order.partial_order
+  val kbo_compare_left_to_right : T -> Slam_Order.partial_order
   val pretty_lit' : Proof.context -> T -> Pretty.T
   val pretty_lit : Proof.context -> T -> string
   val pretty_subterm' : Proof.context -> T -> lpos * JTerm.tpos -> Pretty.T
@@ -63,7 +64,15 @@ fun impl_swap_orientation LeftGreater = RightGreater
 
 val swap_orientation = Lazy.map (Option.map impl_swap_orientation)
 
-datatype T = Lit of { lhs: term, rhs: term, pol: bool, orientation: orientation option Lazy.lazy }
+datatype T =
+  Lit of
+    { lhs: term
+    , rhs: term
+    , pol: bool
+    , orientation: orientation option Lazy.lazy
+    , terms_normed: bool
+    }
+
 datatype lpos = Left | Right
 
 fun compute_orientation_lazy lhs rhs = Lazy.lazy (fn () =>
@@ -75,7 +84,7 @@ fun compute_orientation_lazy lhs rhs = Lazy.lazy (fn () =>
 )
 
 fun mk (lhs, rhs, is_positive) =
-  Lit { lhs = lhs, rhs = rhs, pol = is_positive, orientation = compute_orientation_lazy lhs rhs }
+  Lit { lhs = lhs, rhs = rhs, pol = is_positive, orientation = compute_orientation_lazy lhs rhs, terms_normed = false }
 
 (* FIXME: deprecate? *)
 fun dest (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
@@ -107,8 +116,8 @@ val is_flex_flex = both_sides JTerm.is_variable_headed
 (* forgets orientation *)
 fun map f (Lit { lhs, rhs, pol, ... }) = mk (f lhs, f rhs, pol)
 
-fun unsafe_map f (Lit { lhs, rhs, pol, orientation }) =
-  Lit { lhs = f lhs, rhs = f rhs, pol = pol, orientation = orientation }
+fun unsafe_map f (Lit { lhs, rhs, pol, orientation, terms_normed }) =
+  Lit { lhs = f lhs, rhs = f rhs, pol = pol, orientation = orientation, terms_normed = terms_normed }
 
 fun lposs_of _ = [Left, Right]
 
@@ -141,11 +150,11 @@ fun aconv_as (Lit { lhs = s, rhs = t, pol = b, ... }, Lit { lhs = s', rhs = t', 
 
 val aconv = is_some o aconv_as
 
-fun swap (Lit { lhs, rhs, pol, orientation }) =
-  Lit { lhs = rhs, rhs = lhs, pol = pol, orientation = swap_orientation orientation }
+fun swap (Lit { lhs, rhs, pol, orientation, terms_normed }) =
+  Lit { lhs = rhs, rhs = lhs, pol = pol, orientation = swap_orientation orientation, terms_normed = terms_normed }
 
-fun negate (Lit { lhs, rhs, pol, orientation }) =
-  (Lit { lhs = lhs, rhs = rhs, pol = not pol, orientation = orientation })
+fun negate (Lit { lhs, rhs, pol, orientation, terms_normed }) =
+  (Lit { lhs = lhs, rhs = rhs, pol = not pol, orientation = orientation, terms_normed = terms_normed })
 
 fun swap_lpos Left = Right
   | swap_lpos Right = Left
@@ -188,8 +197,8 @@ fun norm_negative_pred ctxt (l as Lit { pol = true, ... }) = l
       else l
 
 (* FIXME: use unsafe_map if we have stability under substitutions *)
-(* FIXME: if the substitution is empty, or the terms are ground, skip, and in particular preserve
-orientation! *)
+(* FIXME: if the substitution is empty (FIXME: watch out for maxidxforcer), or the terms are ground,
+skip, and in particular preserve orientation! *)
 fun norm_beta_eta_qeta_env env = map (JTerm.norm_beta_eta_qeta_env env)
 
 fun term_of (Lit { lhs = s, rhs = t, pol = b, ... }) =
@@ -243,6 +252,13 @@ fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
   else Slam_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
 
 val kbo = kbo_generic Slam_KBO.ord o apply2 dest
+
+fun kbo_compare_left_to_right (Lit { orientation, ... }) =
+  case Lazy.force orientation of
+    SOME LeftGreater => SOME GREATER
+  | SOME RightGreater => SOME LESS
+  | SOME Equal => SOME EQUAL
+  | NONE => NONE
 
 fun pretty_lit' ctxt = Slam_Common.pretty_term' ctxt o term_of
 
