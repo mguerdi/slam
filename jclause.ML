@@ -67,16 +67,18 @@ sig
   val incr_indexes : int -> T -> T
   val kbo : T * T -> Slam_Order.partial_order
 
-  val is_eligible_cpos : T -> cpos -> bool
-  val is_eligible_full_pos : T -> full_pos -> bool
+  datatype eligibility = Selected | PotentiallyMaximal | Unknown
+  val is_eligible_cpos : T -> cpos * eligibility -> bool
+  val is_eligible_full_pos : T -> full_pos * eligibility -> bool
 
-  val potentially_eligible_cposs_of : T -> int list
-  val potentially_eligible_positive_cposs_of : T -> int list
-  val potentially_eligible_green_full_poss_of : T -> full_pos list
+  val potentially_eligible_cposs_of : T -> (cpos * eligibility) list
+  val potentially_eligible_positive_cposs_of : T -> (cpos * eligibility) list
+  val potentially_eligible_lit_sides_of : T -> ((JLit.lpos * cpos) * eligibility) list
+  val potentially_eligible_green_full_poss_of : T -> (full_pos * eligibility) list
 
-  val is_potentially_eligible_cpos : T -> cpos -> bool
-  val is_potentially_eligible_positive_cpos : T -> cpos -> bool
-  val is_potentially_eligible_full_pos : T -> full_pos -> bool
+  val is_potentially_eligible_cpos : T -> cpos -> eligibility option
+  val is_potentially_eligible_positive_cpos : T -> cpos -> eligibility option
+  val is_potentially_eligible_full_pos : T -> full_pos -> eligibility option
 
   val is_position_of_fully_applied_logical_symbol : full_pos -> T -> bool
   val is_false : T -> bool
@@ -84,7 +86,6 @@ sig
   val is_positive_unit : T -> bool
   val is_negative_unit : T -> bool
   val the_unit_lit : T -> JLit.T
-  val orient_unit : JLit.lpos -> T -> term * term * bool
   val maxidx_of_literal_list : JLit.T list -> int
   (* literal selection *)
   val selected : T -> int list
@@ -540,56 +541,76 @@ fun is_eligible_tpos _ [] = true
       if not (JTerm.is_green_tpos [i] t) then error "non green position in is_eligible_tpos" else
       is_eligible_tpos (JTerm.subterm_at t [i]) tpos
 
+(* Reasons why a literal is considered eligible. *)
+datatype eligibility =
+  Selected
+| PotentiallyMaximal (* indicates nothing was selected in the original clause *)
+| Unknown (* for cases where eligibility doesn't matter *)
+
 (* NOTE: This is not eligibility of literals as defined in \<lambda>oSup Def 22. but
 rather, it anticipates the latter part of Def. 22 (E2), i.e.
   cpos of a positive literal is eligible if the literal is strictly Def22-eligible
   cpos of a negative literal is eligible if the literal is          Def22-eligible
 In practice the o\<lambda>Sup paper only ever asks for strict eligibility of positive literals
 (/ eligibility of negative literals) so we don't need the generality of Def. 22 *)
-fun is_eligible_cpos c cpos =
+fun is_eligible_cpos c (cpos, reason) =
   let
     val literals = literals c
     val literal = nth literals cpos (* FIXME: use lit_at *)
     val strict = JLit.is_positive literal
-    val selected = selected c
   in
-    if selected = []
-      then Slam_Order.is_maximal JLit.kbo strict literal literals
-      else member (op =) selected cpos
+    case reason of
+      Selected => true
+    | PotentiallyMaximal => Slam_Order.is_maximal JLit.kbo strict literal literals
   end
 
 fun potentially_eligible_cposs_of c =
   if selected c = []
-    then cposs_of c (* FIXME: only consider potentially maximal literals *)
-    else selected c
+    then map (rpair PotentiallyMaximal) (cposs_of c) (* FIXME: only consider potentially maximal literals *)
+    else map (rpair Selected) (selected c)
+
+fun potentially_eligible_lit_sides_of c =
+  potentially_eligible_cposs_of c
+  |> Slam_Common.cartesian_product [JLit.Left, JLit.Right]
+  |> map (fn (lp, (cp, eligibility)) => ((lp, cp), eligibility))
 
 fun potentially_eligible_positive_cposs_of c =
   (* Note: this returns in particular selected positive negativoid literals. *)
-  filter (fn cp => JLit.is_positive (lit_at cp c)) (potentially_eligible_cposs_of c)
+  potentially_eligible_cposs_of c
+  |> filter (fn (cp, _) => JLit.is_positive (lit_at cp c))
 
-fun is_potentially_eligible_cpos c = member (op=) (potentially_eligible_cposs_of c)
+fun is_potentially_eligible_cpos c cp =
+  potentially_eligible_cposs_of c
+  |> get_first (fn (cp', reason) => if cp = cp' then SOME reason else NONE)
 
-fun is_potentially_eligible_positive_cpos c =
-  member (op=) (potentially_eligible_positive_cposs_of c)
+fun is_potentially_eligible_positive_cpos c cp =
+  potentially_eligible_positive_cposs_of c
+  |> get_first (fn (cp', reason) => if cp = cp' then SOME reason else NONE)
 
-fun is_eligible_full_pos c (tpos, lpos, cpos) =
+fun is_eligible_full_pos c ((tpos, lpos, cpos), reason) =
   let
     val literal = nth (literals c) cpos
-    val (s, t, _) = JLit.orient lpos literal
+    val (s, t, _) = JLit.dest (JLit.orient lpos literal)
+    (* FIXME: use JLit.kbo_compare_left_to_right *)
     fun s_leq_t () =
       let val s_t_comp = Slam_KBO.ord (s, t) in
         (SOME LESS = s_t_comp) orelse (SOME EQUAL = s_t_comp)
       end
   in
-    is_eligible_cpos c cpos
+    is_eligible_cpos c (cpos, reason)
       andalso not (s_leq_t ())
       andalso is_eligible_tpos s tpos
   end
 
 fun potentially_eligible_green_full_poss_of c =
   potentially_eligible_cposs_of c
-  |> maps (fn cp => [JLit.Left, JLit.Right] |> map (fn lp => (subterm_at_full_pos c ([], lp, cp), lp, cp)))
-  |> maps (fn (t, lp, cp) => map (fn tp => (tp, lp, cp)) (JTerm.green_tposs_of t))
+  |> maps (fn (cp, reason) =>
+    (* FIXME: optimize using JLit.kbo_compare_left_to_right *)
+    [JLit.Left, JLit.Right]
+    |> map (fn lp => ((subterm_at_full_pos c ([], lp, cp), lp, cp), reason)))
+  |> maps (fn ((t, lp, cp), reason) =>
+    (JTerm.green_tposs_of t)
+    |> map (fn tp => ((tp, lp, cp), reason)))
 
 fun is_potentially_eligible_full_pos c (tpos, lpos, cpos) =
   is_potentially_eligible_cpos c cpos
@@ -612,8 +633,6 @@ fun the_unit_lit c =
   if not (is_unit c)
     then error ("the_unit_lit: not a unit" ^ @{make_string} c)
     else the_single (literals c)
-
-fun orient_unit lp = JLit.orient lp o the_unit_lit
 
 fun dist_to_neg_conj { dist_to_neg_conj, ... } = dist_to_neg_conj
 
