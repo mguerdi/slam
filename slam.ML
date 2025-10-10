@@ -2269,7 +2269,7 @@ type prover_state =
 fun given_clause_step
   { context, countdown, passive, green_index, unit_index, active, subsumption_index, archive }
 =
-  if countdown <= 0 then error "TIMEOUT (increase slam_max_number_of_steps config option)" else
+  if countdown = 0 then error "TIMEOUT (increase slam_max_number_of_steps config option)" else
   (Runtime.exn_trace (fn () =>
   let
     (* tracing *)

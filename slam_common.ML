@@ -415,10 +415,23 @@ val arg_cong_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_arg_cong
 (* Note: disables NegExt as an inference *)
 val neg_ext_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_neg_ext_as_simpl\<close> (K false)
 
+fun validate_max_number_of_steps ctxt =
+  let
+    val value = Config.get ctxt max_number_of_steps
+  in
+    if value >= 0
+      then ()
+    else if value = ~1
+      then warning "no heartbeat (slam_max_number_of_steps set to -1)"
+    else
+      error ("Invalid slam_max_number_of_steps: must be \<ge> -1.")
+  end
+
 fun validate_config ctxt =
   let
-    val _ = get_proof_reconstruction_mode ctxt
-    val _ = get_sup_variable_condition ctxt
+    val _: proof_reconstruction_mode = get_proof_reconstruction_mode ctxt
+    val _: sup_variable_condition = get_sup_variable_condition ctxt
+    val _: unit = validate_max_number_of_steps ctxt
   in
     ()
   end
