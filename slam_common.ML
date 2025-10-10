@@ -383,7 +383,7 @@ fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
 val arg_cong_extra_conclusions = Attrib.setup_config_int \<^binding>\<open>slam_arg_cong_extra_conclusions\<close> (K 2)
 fun get_arg_cong_extra_conclusions ctxt = Config.get ctxt arg_cong_extra_conclusions
 
-val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>slam_select_negativoid\<close> (K false)
+val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>slam_select_negativoid\<close> (K true)
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>slam_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>slam_literal_selection_function\<close> (K "select_first_neg_lit")
 
