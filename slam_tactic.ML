@@ -3,7 +3,7 @@ signature SLAM_TACTIC =
 sig
   type slam_options
   val slam_method : slam_options * thm list -> Proof.context -> thm list -> tactic
-  val slam_tac : slam_options -> Proof.context -> thm list -> int -> tactic
+  val slam_tac : slam_options -> Proof.context -> term option -> thm list -> int -> tactic
   val parse_slam_options : slam_options parser
   val dump : (Slam.prover_state list) Unsynchronized.ref
   val reconstruct_proof : Slam.prover_state -> tactic
@@ -43,7 +43,7 @@ fun reconstruct_proof
     Seq.single (Goal.protect 0 false_proved)
   end
 
-fun slam_tac options ctxt ths i st0 =
+fun slam_tac options ctxt goal_term ths i st0 =
   let
     val _ = Slam_Common.validate_config ctxt
     val ctxt = Config.put Unify.search_bound (Config.get ctxt Slam_Common.unify_search_bound) ctxt
@@ -51,7 +51,7 @@ fun slam_tac options ctxt ths i st0 =
     val _ = Slam_Common.trace_msg ctxt (fn () => "st0: " ^ @{make_string} st0)
     val _ = Slam_Common.trace_msg ctxt (fn () => "Thm.prop_of st0: " ^ @{make_string} (Thm.prop_of st0))
     val _ = Slam_Common.trace_msg ctxt (fn () =>
-      "slam called with theorems:\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths))
+      "slam called with theorems:\n" ^ cat_lines (map (@{make_string}) ths))
     fun handle_exception (e, state) = 
       if exists (curry (op =) "dump") options
         then
@@ -76,7 +76,7 @@ fun slam_tac options ctxt ths i st0 =
       Subgoal.FOCUS (fn { context, prems, ...} => (fn st =>
         (* FIXME: make sure that we really don't need asms (only use is in
         HOL/Tools/Quotient/quotient_tacs.ML) *)
-        case ((Slam_Common.cpu_time_milliseconds (Slam.try_saturate context) (atomized_ths @ prems)
+        case ((Slam_Common.cpu_time_milliseconds (Slam.try_saturate context goal_term) (atomized_ths @ prems)
             handle Slam.SLAM_EXCEPTION (e, state) => handle_exception (e, state))
             handle Exn.Interrupt_Breakdown => error "caught Interrupt_Breakdown") of
           ((Slam.Unsat, final_state), time) =>
@@ -111,9 +111,49 @@ fun slam_tac options ctxt ths i st0 =
     seq
   end handle JClause.NOBOOL (msg, term, typ) => (Slam_Common.trace_msg ctxt (fn () => (msg ^ ". Term " ^ @{make_string} term ^ " of type " ^ @{make_string} typ)); Seq.empty)
 
+(* from metis_tactic.ML *)
+fun neg_clausify ctxt combinators =
+  single
+  #> Meson.make_clauses_unsorted ctxt
+  #> combinators ? map (Meson_Clausify.introduce_combinators_in_theorem ctxt)
+  #> Meson.finish_cnf true
+
+fun preskolem_tac ctxt st0 =
+  (if exists (Meson.has_too_many_clauses ctxt)
+             (Logic.prems_of_goal (Thm.prop_of st0) 1) then
+     Simplifier.full_simp_tac (Meson_Clausify.ss_only @{thms not_all not_ex} ctxt) 1
+     THEN CNF.cnfx_rewrite_tac ctxt 1
+   else
+     all_tac) st0
+
+fun slam_meson_tac options ctxt facts i: tactic =
+  fn st =>
+    let
+      val () = writeln ("st: " ^ @{make_string} st)
+      val concl = Thm.concl_of st
+      val goal = the_default concl (concl |> try HOLogic.dest_Trueprop)
+      val () = writeln ("goal: " ^ Slam_Common.pretty_term ctxt goal)
+    in
+    Meson.MESON
+      (preskolem_tac ctxt)
+      (maps (neg_clausify ctxt false))
+      (fn ths => slam_tac options ctxt (SOME goal) (ths @ facts) i)
+      ctxt
+      i
+      st
+    end
+
+fun slam_meson_method (options, ths) ctxt facts =
+    HEADGOAL (slam_meson_tac options ctxt (facts @ ths))
+
 (* FIXME: only pass schematic facts to slam_tac? see metis_tactic.ML *)
+fun slam_no_meson_method (options, ths) ctxt facts =
+    HEADGOAL (slam_tac options ctxt NONE (facts @ ths))
+
 fun slam_method (options, ths) ctxt facts =
-    HEADGOAL (slam_tac options ctxt (facts @ ths))
+  if Config.get ctxt Slam_Common.meson
+    then slam_meson_method (options, ths) ctxt facts
+    else slam_no_meson_method (options, ths) ctxt facts
 
 (* utilities *)
 
