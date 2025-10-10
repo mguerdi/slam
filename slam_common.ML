@@ -330,8 +330,7 @@ val proof_reconstruction =
 
 fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)
 
-(* FIXME: remove or better default *)
-val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>slam_max_number_of_steps\<close> (K 300)
+val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>slam_max_number_of_steps\<close> (K ~1)
 
 (* NOTE: The rules aren't actually all turned off unless disable_all is set. *)
 val disable_all = Attrib.setup_config_bool \<^binding>\<open>slam_disable_all\<close> (K false)
