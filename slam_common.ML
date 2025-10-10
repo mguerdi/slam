@@ -330,8 +330,7 @@ val proof_reconstruction =
 
 fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)
 
-(* FIXME: remove or better default *)
-val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>slam_max_number_of_steps\<close> (K 300)
+val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>slam_max_number_of_steps\<close> (K ~1)
 
 (* NOTE: The rules aren't actually all turned off unless disable_all is set. *)
 val disable_all = Attrib.setup_config_bool \<^binding>\<open>slam_disable_all\<close> (K false)
@@ -383,7 +382,7 @@ fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
 val arg_cong_extra_conclusions = Attrib.setup_config_int \<^binding>\<open>slam_arg_cong_extra_conclusions\<close> (K 2)
 fun get_arg_cong_extra_conclusions ctxt = Config.get ctxt arg_cong_extra_conclusions
 
-val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>slam_select_negativoid\<close> (K false)
+val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>slam_select_negativoid\<close> (K true)
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>slam_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>slam_literal_selection_function\<close> (K "select_first_neg_lit")
 
@@ -415,10 +414,23 @@ val arg_cong_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_arg_cong
 (* Note: disables NegExt as an inference *)
 val neg_ext_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_neg_ext_as_simpl\<close> (K false)
 
+fun validate_max_number_of_steps ctxt =
+  let
+    val value = Config.get ctxt max_number_of_steps
+  in
+    if value >= 0
+      then ()
+    else if value = ~1
+      then warning "no heartbeat (slam_max_number_of_steps set to -1)"
+    else
+      error ("Invalid slam_max_number_of_steps: must be \<ge> -1.")
+  end
+
 fun validate_config ctxt =
   let
-    val _ = get_proof_reconstruction_mode ctxt
-    val _ = get_sup_variable_condition ctxt
+    val _: proof_reconstruction_mode = get_proof_reconstruction_mode ctxt
+    val _: sup_variable_condition = get_sup_variable_condition ctxt
+    val _: unit = validate_max_number_of_steps ctxt
   in
     ()
   end
