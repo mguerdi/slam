@@ -89,7 +89,7 @@ sig
   exception SLAM_EXCEPTION of exn * prover_state
   val given_clause_loop : bool -> prover_state -> step_result * prover_state
   val given_clause_step : prover_state -> step_result * prover_state
-  val try_saturate : Proof.context -> thm list -> step_result * prover_state
+  val try_saturate : Proof.context -> term option -> thm list -> step_result * prover_state
   val make_clause_db : prover_state -> int -> JClause.T
   (* DEBUG *)
   val ml_bool_of : term -> bool
@@ -2441,7 +2441,7 @@ fun given_clause_loop dump state =
     (Unsat, state) => (Unsat, state)
   | (Next, state) => given_clause_loop dump state
 
-fun try_saturate context prems =
+fun try_saturate context goal_term prems =
   let
     val _ = Slam_Common.trace_msg context (fn () =>
       "prems: "
@@ -2457,7 +2457,7 @@ fun try_saturate context prems =
       |> HOLogic.dest_Trueprop
       |> (fn t => JClause.of_term context (t, JClause_Id.new ()))
       |> JClause.set_origin context
-        (if is_negated_conjecture
+        (if is_negated_conjecture andalso is_none goal_term
           then Slam_Log.NegatedConjecture { thm = prem }
           else Slam_Log.Axiom { thm = prem })
     val clauses = (map (clause_of_prem false) axioms) @ [clause_of_prem true negated_conjecture]
@@ -2473,7 +2473,11 @@ fun try_saturate context prems =
 
     (* goal-oriented given-clause selection heuristic *)
     val goal_symbols =
-      Slam_Symbol_Table.add_symbols (Thm.prop_of negated_conjecture) Slam_Symbol_Table.empty
+      case goal_term of
+        SOME goal_term =>
+          Slam_Symbol_Table.add_symbols goal_term Slam_Symbol_Table.empty
+      | NONE =>
+          Slam_Symbol_Table.add_symbols (Thm.prop_of negated_conjecture) Slam_Symbol_Table.empty
     val () = Slam_Common.trace_msg context (fn () => "goal_symbols (for selection heuristic): "
         ^ Slam_Common.pretty_terms
             (Slam_Common.verbose_of context)

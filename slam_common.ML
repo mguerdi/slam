@@ -175,6 +175,8 @@ sig
   val arg_cong_as_simpl : bool Config.T
   val neg_ext_as_simpl : bool Config.T
 
+  val meson : bool Config.T
+
   (* These cases would normally be handled by FluidSup *)
   val sup_into_fluid : bool Config.T
   val sup_into_deeply_occuring : bool Config.T
@@ -413,6 +415,8 @@ val arg_cong_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_arg_cong
 
 (* Note: disables NegExt as an inference *)
 val neg_ext_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_neg_ext_as_simpl\<close> (K false)
+
+val meson = Attrib.setup_config_bool \<^binding>\<open>slam_meson\<close> (K true)
 
 fun validate_max_number_of_steps ctxt =
   let
