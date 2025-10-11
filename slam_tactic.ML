@@ -143,8 +143,15 @@ fun slam_meson_tac options ctxt facts i: tactic =
       st
     end
 
+val has_tvar = exists_type (exists_subtype (fn TVar _ => true | _ => false)) o Thm.prop_of
+
 fun slam_meson_method (options, ths) ctxt facts =
-    HEADGOAL (slam_meson_tac options ctxt (facts @ ths))
+    let
+      val (schem_facts, nonschem_facts) = List.partition has_tvar facts
+    in
+      HEADGOAL (Method.insert_tac ctxt nonschem_facts THEN'
+        CHANGED_PROP o slam_meson_tac options ctxt (schem_facts @ ths))
+    end
 
 (* FIXME: only pass schematic facts to slam_tac? see metis_tactic.ML *)
 fun slam_no_meson_method (options, ths) ctxt facts =
