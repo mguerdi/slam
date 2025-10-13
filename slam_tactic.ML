@@ -133,11 +133,13 @@ fun slam_meson_tac options ctxt facts i: tactic =
       val concl = Thm.concl_of st
       val goal = the_default concl (concl |> try HOLogic.dest_Trueprop)
       val () = writeln ("goal: " ^ Slam_Common.pretty_term ctxt goal)
+      (* Eliminate Ball, etc. *)
+      val simplify = Meson.presimplify Meson.simp_options_all_true ctxt
     in
     Meson.MESON
       (preskolem_tac ctxt)
       (maps (neg_clausify ctxt false))
-      (fn ths => slam_tac options ctxt (SOME goal) (ths @ facts) i)
+      (fn ths => slam_tac options ctxt (SOME goal) (map simplify (ths @ facts)) i)
       ctxt
       i
       st
