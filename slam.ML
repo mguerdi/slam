@@ -93,6 +93,7 @@ sig
   val make_clause_db : prover_state -> int -> JClause.T
   (* DEBUG *)
   val ml_bool_of : term -> bool
+  val contains_syntactic_complementaries : JLit.T list -> bool
 end
 
 structure Slam : SLAM =
@@ -216,11 +217,15 @@ fun contains_syntactic_equation [] = false
       exists (fn lit =>
         let val (s, t, is_positive) = JLit.dest lit in is_positive andalso s aconv t end) c
 
-(* Syntactic tautology deletion 2 (TD2) (Schulz) *)
-fun contains_syntactic_complementaries [] = false
-  | contains_syntactic_complementaries (l :: ls) =
-      exists (curry JLit.aconv (JLit.norm_negative_pred (JLit.negate l))) ls
-        orelse contains_syntactic_complementaries ls
+(* The condition `norm (negate l) = l'` is not equivalent to `l = norm (negate l')` so we need to
+compare the negation of each literal to all other literals. *)
+fun impl_contains_syntactic_complementaries _ [] = false
+  | impl_contains_syntactic_complementaries previous_ls (l :: later_ls) =
+      exists (curry JLit.aconv (JLit.norm_negative_pred (JLit.negate l))) previous_ls orelse
+      exists (curry JLit.aconv (JLit.norm_negative_pred (JLit.negate l))) later_ls orelse
+      impl_contains_syntactic_complementaries (l::previous_ls) later_ls
+
+val contains_syntactic_complementaries = impl_contains_syntactic_complementaries []
 
 (* FIXME: implement semantic tautology deletion? *)
 
