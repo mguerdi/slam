@@ -28,7 +28,7 @@ sig
   val mk_pred : term -> bool -> T
   val is_pred : T -> bool
   val dest_pred : T -> term * term
-  val norm_negative_pred : Proof.context -> T -> T
+  val norm_negative_pred : T -> T
   val norm_beta_eta_qeta_env : Envir.env -> T -> T
   val term_of : T -> term
   val as_tpos : bool -> lpos -> JTerm.tpos
@@ -182,8 +182,8 @@ The function below disallows the non-simplifications w.r.t. the current literal 
 its implementaiton) 
 *)
 (* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
-fun norm_negative_pred ctxt (l as Lit { pol = true, ... }) = l
-  | norm_negative_pred ctxt (l as Lit { lhs = s, rhs = t, pol = false, ... }) =
+fun norm_negative_pred (l as Lit { pol = true, ... }) = l
+  | norm_negative_pred (l as Lit { lhs = s, rhs = t, pol = false, ... }) =
       if JTerm.is_truth_value s andalso JTerm.ml_bool_of s andalso JTerm.is_variable_headed t
         then l
       else if JTerm.is_truth_value t andalso JTerm.ml_bool_of t andalso JTerm.is_variable_headed s

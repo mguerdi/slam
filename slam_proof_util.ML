@@ -43,7 +43,7 @@ fun norm_negative_predicate_literals ctxt th =
           let
             val negated_lit = JLit.of_term (HOLogic.dest_Trueprop (the_single (Thm.prems_of st)))
             val lit = JLit.negate negated_lit
-            val normed_lit = JLit.norm_negative_pred ctxt lit
+            val normed_lit = JLit.norm_negative_pred lit
           in
             if JLit.dest lit = JLit.dest normed_lit
               then all_tac st

@@ -219,7 +219,8 @@ fun contains_syntactic_equation [] = false
 (* Syntactic tautology deletion 2 (TD2) (Schulz) *)
 fun contains_syntactic_complementaries [] = false
   | contains_syntactic_complementaries (l :: ls) =
-      exists (curry JLit.aconv (JLit.negate l)) ls orelse contains_syntactic_complementaries ls
+      exists (curry JLit.aconv (JLit.norm_negative_pred (JLit.negate l))) ls
+        orelse contains_syntactic_complementaries ls
 
 (* FIXME: implement semantic tautology deletion? *)
 
