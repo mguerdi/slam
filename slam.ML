@@ -1143,10 +1143,9 @@ fun infer_arg_cong ctxt (c, cpos, eligibility) =
         val new_clause =
           c
           |> JClause.map_at_cpos cpos (K new_literal)
-          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier (* sets maxidx *)
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
-          |> JClause.set_maxidx new_maxidx
           |> JClause.refresh_id ()
           |> JClause.set_origin ctxt
               (Slam_Log.ArgCong
