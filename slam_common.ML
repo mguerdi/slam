@@ -212,7 +212,7 @@ val trace_active = Attrib.setup_config_bool \<^binding>\<open>slam_trace_active\
 val trace_passive = Attrib.setup_config_bool \<^binding>\<open>slam_trace_passive\<close> (K true)
 
 (* override slam_trace during the respective phases *)
-val trace_forward_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_forward_simp\<close> (K true)
+val trace_forward_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_forward_simp\<close> (K false)
 val trace_backward_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_backward_simp\<close> (K false)
 val trace_cheap_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_cheap_simp\<close> (K false)
 
