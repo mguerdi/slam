@@ -123,7 +123,7 @@ fun lposs_of _ = [Left, Right]
 
 fun mk_eq lhs rhs = mk (lhs, rhs, true)
 
-fun mk_neq lhs rhs = mk (lhs, rhs, true)
+fun mk_neq lhs rhs = mk (lhs, rhs, false)
 
 (* Make equality between term and HOL Boolean, removing a prefix of negations from the term. *)
 (* FIXME: is turning \<not>s \<approx> \<bottom> into s \<approx> \<top> okay? Should we use disequations instead of equations?
