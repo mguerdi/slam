@@ -476,7 +476,7 @@ fun norm_negative_predicate_literals ctxt clause =
     val selected = #selected clause
   in
     clause
-    |> map_literals (map (JLit.norm_negative_pred ctxt))
+    |> map_literals (map JLit.norm_negative_pred)
     |> set_maxidx maxidx
     |> set_selected selected
   end
