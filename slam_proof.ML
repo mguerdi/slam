@@ -364,9 +364,9 @@ fun prepare_forall_exists_hoist_log
     val x = Thm.cterm_of ctxt x
 
     val uninstantiated_premise = clause_db uninstantiated_premise
-    val (quantifier $ predicate_variable) = JClause.subterm_at_full_pos uninstantiated_premise subterm
+    val affected_term = JClause.subterm_at_full_pos uninstantiated_premise subterm
+    val (quantifier $ predicate) = JTerm.norm_beta_eta_qeta_env substitution affected_term
     val () = \<^assert> (JTerm.is_quantifier quantifier)
-    val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
     val predicate = Thm.cterm_of ctxt predicate
   in
     { uninstantiated_premise = uninstantiated_premise
@@ -456,9 +456,9 @@ fun prepare_forall_exists_rw_log
 =
   let
     val uninstantiated_premise = clause_db uninstantiated_premise
-    val (quantifier $ predicate_variable) = JClause.subterm_at_full_pos uninstantiated_premise subterm
+    val affected_term = JClause.subterm_at_full_pos uninstantiated_premise subterm
+    val (quantifier $ predicate) = JTerm.norm_beta_eta_qeta_env substitution affected_term
     val () = \<^assert> (JTerm.is_quantifier quantifier)
-    val predicate = JTerm.norm_beta_eta_qeta_env substitution predicate_variable
   in
     { uninstantiated_premise = uninstantiated_premise
     , subterm = subterm
