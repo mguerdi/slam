@@ -62,15 +62,17 @@ struct
 
   fun favor_positive_unit c = if JClause.is_positive_unit c then 0 else PENALTY_COEFF
 
-  (* basic goal-oriented selection heuristic *)
   fun favor_goal_symbols goal_symbols c =
     let
-      fun aterm_weight t =
-        if Slam_Symbol_Table.aterm_defined goal_symbols t then 0 else PENALTY_COEFF
-      val add_term_weight = fold_aterms (fn t => fn acc => acc + aterm_weight t)
-      val weight = fold (JLit.fold add_term_weight) (JClause.literals c) 0
+      fun add_aterm_counts t =
+        if Slam_Symbol_Table.aterm_defined goal_symbols t
+          then apfst (curry op+ 1) else apsnd (curry op+ 1)
+      val add_term_counts = fold_aterms add_aterm_counts
+      val (goal_symbols, non_goal_symbols) =
+        fold (JLit.fold add_term_counts) (JClause.literals c) (0, 0)
     in
-      weight
+      (* roughly: fraction of symbols of c that do not occur in the goal *)
+      (PENALTY_COEFF * non_goal_symbols) div (goal_symbols + non_goal_symbols + 1)
     end
   
   fun favor_free c =
