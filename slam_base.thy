@@ -55,6 +55,7 @@ ML_file \<open>slam_log.ML\<close>
 ML_file \<open>jclause.ML\<close>
 ML_file \<open>slam_argo.ML\<close>
 ML_file \<open>slam_index.ML\<close>
+ML_file \<open>slam_fuel.ML\<close>
 ML_file \<open>slam_isabelle_unify.ML\<close>
 ML_file \<open>slam_isabelle_more_unify.ML\<close>
 ML_file \<open>slam_unify.ML\<close>

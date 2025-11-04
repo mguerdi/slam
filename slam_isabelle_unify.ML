@@ -330,16 +330,17 @@ fun type_abs (env, T, t) = types_abs (Envir.binder_types env T, t);
   For example, projection in ?b'(?a) may be wrong if other dpairs constrain ?a.
   The order for trying projections is crucial in ?b'(?a)
   NB "vname" is only used in the call to make_args!!   *)
-fun matchcopy context vname =
+fun matchcopy fuel context vname =
   let
     fun mc (rbinder, targs, u, ed as (env, dpairs)) : (term * (Envir.env * dpair list)) Seq.seq =
       let
         val unify_trace_types = Config.get_generic context unify_trace_types;
         (*Produce copies of uarg and cons them in front of uargs*)
         fun copycons uarg (uargs, (env, dpairs)) =
-          Seq.map (fn (uarg', ed') => (uarg' :: uargs, ed'))
-            (mc (rbinder, targs,eta_norm env (rbinder, Envir.head_norm env uarg),
-              (env, dpairs)));
+          (
+            (Slam_Fuel.map_consume 1 fuel (fn ((uarg', ed')) => (uarg' :: uargs, ed')))
+              (mc (rbinder, targs, eta_norm env (rbinder, Envir.head_norm env uarg), (env, dpairs)))
+          )
         (*Produce sequence of all possible ways of copying the arg list*)
         fun copyargs [] = Seq.cons ([], ed) Seq.empty
           | copyargs (uarg :: uargs) = Seq.maps (copycons uarg) (copyargs uargs);
@@ -447,9 +448,11 @@ fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.
       (case Envir.lookup env' vT of
         NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
       | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
+    val fuel = Slam_Fuel.new (Config.get_generic context Slam_Common.unify_matchcopy_fuel)
   in
-    (matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
+    (matchcopy fuel context (#1 v) (rbinder, targs, u, (env, dpairs)))
     |> Seq.map new_dset
+    |> Slam_Fuel.fuelled
   end;
 
 
