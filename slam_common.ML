@@ -183,6 +183,7 @@ sig
 
   val unify_search_bound : int Config.T
   val unify_timeout_ms : int Config.T
+  val unify_matchcopy_fuel : int Config.T
   val supress_unify_trace : bool Config.T
 
   val debug_check_clauses : bool Config.T
@@ -440,7 +441,8 @@ fun validate_config ctxt =
   end
 
 val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>slam_unify_search_bound\<close> (K 50)
-val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>slam_unify_timeout_ms\<close> (K 10)
+val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>slam_unify_timeout_ms\<close> (K 0)
+val unify_matchcopy_fuel = Attrib.setup_config_int \<^binding>\<open>slam_unify_matchcopy_fuel\<close> (K 100);
 val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>slam_supress_unify_trace\<close> (K true)
 
 val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>slam_debug_check_clauses\<close> (K false)
