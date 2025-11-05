@@ -74,23 +74,31 @@ fun slam_tac options ctxt goal_term ths i st0 =
     fun tac ctxt' i' =
       (* FIXME: why are we doing this??? *)
       Subgoal.FOCUS (fn { context, prems, ...} => (fn st =>
-        (* FIXME: make sure that we really don't need asms (only use is in
-        HOL/Tools/Quotient/quotient_tacs.ML) *)
-        case ((Slam_Common.cpu_time_milliseconds (Slam.try_saturate context goal_term) (atomized_ths @ prems)
-            handle Slam.SLAM_EXCEPTION (e, state) => handle_exception (e, state))
-            handle Exn.Interrupt_Breakdown => error "caught Interrupt_Breakdown") of
-          ((Slam.Unsat, final_state), time) =>
-            let val () =
-              writeln ("total elapsed time until contradiction: " ^ @{make_string} time ^ " ms")
-            in
-              case Slam_Common.get_proof_reconstruction_mode context of
-                (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
-                (* we provide #False *)
-                Slam_Common.Cheat => ALLGOALS (Skip_Proof.cheat_tac context) st
-              | _ => reconstruct_proof final_state st
-            end
-        | ((Slam.MaybeSat, final_state), _) => Seq.empty
-        | ((Slam.Next, final_state), _) => error "Bug: Next in final result")
+          (* FIXME: make sure that we really don't need asms (only use is in
+          HOL/Tools/Quotient/quotient_tacs.ML) *)
+          let
+            val simplify = Meson.presimplify Meson.simp_options_all_true ctxt
+            val initial_clauses =
+              atomized_ths @ prems
+              |> Config.get ctxt Slam_Common.presimplify ? map simplify
+          in
+            case ((Slam_Common.cpu_time_milliseconds (Slam.try_saturate context goal_term) initial_clauses
+                handle Slam.SLAM_EXCEPTION (e, state) => handle_exception (e, state))
+                handle Exn.Interrupt_Breakdown => error "caught Interrupt_Breakdown") of
+              ((Slam.Unsat, final_state), time) =>
+                let val () =
+                  writeln ("total elapsed time until contradiction: " ^ @{make_string} time ^ " ms")
+                in
+                  case Slam_Common.get_proof_reconstruction_mode context of
+                    (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
+                    (* we provide #False *)
+                    Slam_Common.Cheat => ALLGOALS (Skip_Proof.cheat_tac context) st
+                  | _ => reconstruct_proof final_state st
+                end
+            | ((Slam.MaybeSat, final_state), _) => Seq.empty
+            | ((Slam.Next, final_state), _) => error "Bug: Next in final result"
+          end
+        )
       ) ctxt i' (* FIXME: why not ctxt'? *)
     val seq =
       (* SELECT_GOAL applies the tactic (it's first argument) to the selected
