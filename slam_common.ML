@@ -444,7 +444,7 @@ fun validate_config ctxt =
     ()
   end
 
-val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>slam_unify_search_bound\<close> (K 50)
+val unify_search_bound = Attrib.setup_config_int \<^binding>\<open>slam_unify_search_bound\<close> (K 200)
 val unify_timeout_ms = Attrib.setup_config_int \<^binding>\<open>slam_unify_timeout_ms\<close> (K 0)
 val unify_matchcopy_fuel = Attrib.setup_config_int \<^binding>\<open>slam_unify_matchcopy_fuel\<close> (K 50);
 val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>slam_supress_unify_trace\<close> (K true)

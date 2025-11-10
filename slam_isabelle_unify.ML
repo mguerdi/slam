@@ -363,6 +363,7 @@ fun matchcopy fuel context vname =
           in
             Seq.make (fn () =>
               let
+                val () = Slam_Fuel.consume 1 fuel
                 (* NOTE: env' is equal to env, except for greater maxidx *)
                 (* With Us = [U1, \<dots> Um] and Ts = [T1, \<dots>, Tn] produces
                     E1, \<dots>, Em
@@ -439,7 +440,7 @@ fun matchcopy fuel context vname =
 
 
 (*Call matchcopy to produce assignments to the variable in the dpair*)
-fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
+fun MATCH fuel context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
   let
     val (Var (vT as (v, T)), targs) = strip_comb t;
     val Ts = Envir.binder_types env T;
@@ -448,11 +449,9 @@ fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.
       (case Envir.lookup env' vT of
         NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
       | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
-    val fuel = Slam_Fuel.new (Config.get_generic context Slam_Common.unify_matchcopy_fuel)
   in
     (matchcopy fuel context (#1 v) (rbinder, targs, u, (env, dpairs)))
     |> Seq.map new_dset
-    |> Slam_Fuel.fuelled
   end;
 
 
@@ -641,6 +640,7 @@ fun hounifiers binders (context, env, tus : (term * term) list)
     val unify_trace_bound = Config.get_generic context unify_trace_bound;
     val unify_trace_simp = Config.get_generic context unify_trace_simp;
     val search_bound = Config.get_generic context search_bound;
+    val fuel = Slam_Fuel.new (Config.get_generic context Slam_Common.unify_matchcopy_fuel)
     fun add_unify tdepth ((env, dpairs), reseq) =
       Seq.make (fn () =>
         let
@@ -661,14 +661,17 @@ fun hounifiers binders (context, env, tus : (term * term) list)
                   print_dpairs context "Enter MATCH" (env',flexrigid@flexflex)
                 else ();
                 Seq.pull (Seq.it_right
-                    (add_unify (tdepth + 1)) (MATCH context (env',dp, frigid'@flexflex), reseq))))
+                    (add_unify (tdepth + 1)) (MATCH fuel context (env',dp, frigid'@flexflex), reseq))))
         end
         handle CANTUNIFY =>
          (if tdepth > unify_trace_bound
           then cond_tracing context (fn () => "Failure node")
           else (); Seq.pull reseq));
     val dps = map (fn (t, u) => (binders, t, u)) tus;
-  in add_unify 1 ((env, dps), Seq.empty) end;
+  in
+    add_unify 1 ((env, dps), Seq.empty)
+    |> Slam_Fuel.fuelled
+  end;
 
 fun unifiers (params as (context, env, tus)) =
   Seq.cons (fold (Pattern.unify context) tus env, []) Seq.empty
