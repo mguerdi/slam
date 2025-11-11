@@ -77,7 +77,7 @@ fun slam_tac options ctxt goal_term ths i st0 =
           (* FIXME: make sure that we really don't need asms (only use is in
           HOL/Tools/Quotient/quotient_tacs.ML) *)
           let
-            val simplify = Meson.presimplify Meson.simp_options_all_true ctxt
+            val simplify = Meson.presimplify Meson.simp_options_all_true context
             val initial_clauses =
               atomized_ths @ prems
               |> Config.get ctxt Slam_Common.presimplify ? map simplify
