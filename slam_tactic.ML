@@ -64,8 +64,10 @@ fun slam_tac options ctxt goal_term ths i st0 =
     (* Sledgehammer does not know that slam requires lemmas characterizing if-then-else, because
     metis doesn't need them (thanks to the Meson clausifier). *)
     val extra_lemmas =
-      if contains_const @{const_name "HOL.If"} (Thm.prop_of st0)
-        then @{thms "HOL.if_True" "HOL.if_False"}
+      if Config.get ctxt Slam_Common.presimplify then
+        if contains_const @{const_name "HOL.If"} (Thm.prop_of st0)
+          then @{thms "HOL.if_True" "HOL.if_False"}
+          else []
         else []
     val () = if not (null extra_lemmas) then Slam_Common.trace_msg ctxt (fn () =>
       "adding extra lemmas:\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths)) else ()
@@ -77,10 +79,15 @@ fun slam_tac options ctxt goal_term ths i st0 =
           (* FIXME: make sure that we really don't need asms (only use is in
           HOL/Tools/Quotient/quotient_tacs.ML) *)
           let
-            val simplify = Meson.presimplify Meson.simp_options_all_true ctxt
+            val simplify = Meson.presimplify Meson.simp_options_all_true context
+
+            val already_presimplified = Config.get ctxt Slam_Common.meson
+            val do_presimplify =
+              not already_presimplified andalso Config.get ctxt Slam_Common.presimplify
+
             val initial_clauses =
               atomized_ths @ prems
-              |> Config.get ctxt Slam_Common.presimplify ? map simplify
+              |> do_presimplify ? map simplify
           in
             case ((Slam_Common.cpu_time_milliseconds (Slam.try_saturate context goal_term) initial_clauses
                 handle Slam.SLAM_EXCEPTION (e, state) => handle_exception (e, state))
@@ -134,6 +141,28 @@ fun preskolem_tac ctxt st0 =
    else
      all_tac) st0
 
+(* Like Meson.MESON but properly threads context through to mkcl and cltac.
+Avoids
+  Bad context: clash of fresh free for bound: :000 vs. xa
+exception.
+*)
+(*Basis of all meson-tactics.  Supplies cltac with clauses: HOL disjunctions.
+  Function mkcl converts theorems to clauses.*)
+fun CONTEXT_MESON preskolem_tac mkcl cltac ctxt i st =
+  SELECT_GOAL
+    (EVERY [Object_Logic.atomize_prems_tac ctxt 1,
+            resolve_tac ctxt @{thms ccontr} 1,
+            preskolem_tac,
+            Subgoal.FOCUS (fn {context = ctxt', prems = negs, ...} =>
+                      EVERY1 [Meson.skolemize_prems_tac Meson.simp_options_all_true ctxt' negs,
+                              Subgoal.FOCUS
+                                (fn { context = ctxt'', prems = prems, ... } =>
+                                  cltac ctxt'' (mkcl ctxt'' prems)
+                                )
+                                ctxt']
+                              ) ctxt 1]) i st
+  handle THM _ => no_tac st;    (*probably from make_meta_clause, not first-order*)
+
 fun slam_meson_tac options ctxt facts i: tactic =
   fn st =>
     let
@@ -142,12 +171,12 @@ fun slam_meson_tac options ctxt facts i: tactic =
       val goal = the_default concl (concl |> try HOLogic.dest_Trueprop)
       val () = writeln ("goal: " ^ Slam_Common.pretty_term ctxt goal)
       (* Eliminate Ball, etc. *)
-      val simplify = Meson.presimplify Meson.simp_options_all_true ctxt
+      fun simplify ctxt = Meson.presimplify Meson.simp_options_all_true ctxt
     in
-    Meson.MESON
+    CONTEXT_MESON
       (preskolem_tac ctxt)
-      (maps (neg_clausify ctxt false))
-      (fn ths => slam_tac options ctxt (SOME goal) (map simplify (ths @ facts)) i)
+      (fn ctxt => maps (neg_clausify ctxt false))
+      (fn ctxt => fn ths => slam_tac options ctxt (SOME goal) (map (simplify ctxt) (ths @ facts)) i)
       ctxt
       i
       st
