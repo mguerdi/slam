@@ -127,13 +127,13 @@ struct
 
   (* similar to `default_fun` in Zipperpositions clauseQueue.ml *)
   fun default_fun goal_symbols = combine
-    [ (size_of_clause, 5)
+    [ (size_of_clause, 3)
     , (favor_all_ground_and_neg, 1)
     , (favor_small_num_vars, 1)
     , (favor_positive_unit, 1)
-    , (favor_goal_symbols goal_symbols, 0)
+    , (favor_goal_symbols goal_symbols, 1)
     , (favor_initial, 2)
-    , (favor_small_dist_to_neg_conj, 2)
+    , (favor_small_dist_to_neg_conj, 1)
     ]
 end
 
