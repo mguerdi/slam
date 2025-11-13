@@ -29,7 +29,7 @@ sig
   (* law: JLit.term_of (lit_at cp c) = JTerm.subterm_at (as_tpos c) (term_of c) *)
   val as_tpos : int -> cpos -> JTerm.tpos
   val dummy : JLit.T list -> T
-  val refresh_id : unit -> T -> T
+  val refresh_id : Proof.context -> unit -> T -> T
   val add_literal : Proof.context -> JLit.T -> T -> T
   val combine : Proof.context -> T -> T -> T
   val delete_lit_at : Proof.context -> cpos -> T -> T
@@ -156,7 +156,26 @@ fun dummy literals =
 fun map_id f { literals, id, maxidx, origin, selected } =
   { literals = literals, id = f id, maxidx = maxidx, origin = origin, selected = selected }
 
-fun refresh_id _ = map_id (K (JClause_Id.new ()))
+(* ignores types and variable identities, does not ignore order and orientation of literals *)
+fun lits_stringify_for_hash (c : T) =
+  fold (JLit.fold JTerm.stringify_for_hash) (#literals c) (Vartab.empty, "")
+  |> #2
+
+(* 6 digit number *)
+fun lits_hash c =
+  c
+  |> lits_stringify_for_hash
+  |> SHA1.digest
+  |> SHA1.rep
+  |> (fn s => String.substring (s, 0, 6))
+  |> String.explode
+  |> map (fn c => Char.ord c mod 10)
+  |> (fn ds => fold (fn d => fn acc => d + acc * 10) ds 0)
+
+fun refresh_id ctxt () c =
+  if Config.get ctxt Slam_Common.debug_prefix_clause_id_with_hash
+    then map_id (K (lits_hash c * 1000000 + JClause_Id.new ())) c
+    else map_id (K (JClause_Id.new ())) c
 
 fun maxidx_of_literal_list ls =
   fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
@@ -338,18 +357,18 @@ fun recompute_selected ctxt clause =
 fun add_literal ctxt l clause =
   clause
   |> map_literals (fn lits => lits @ [l])
-  |> refresh_id ()
+  |> refresh_id ctxt ()
   |> set_maxidx (Int.max (maxidx clause, JLit.maxidx_of l))
 
 fun combine ctxt c d =
   map_literals (curry (op @) (literals c)) d
-  |> refresh_id ()
+  |> refresh_id ctxt ()
   |> set_maxidx (maxidx_of2 (c, d))
 
 fun delete_lit_at ctxt cp clause =
   clause
   |> map_literals (nth_drop cp)
-  |> refresh_id ()
+  |> refresh_id ctxt ()
   |> set_maxidx (maxidx clause)
 
 fun delete_lits_at ctxt cps clause =

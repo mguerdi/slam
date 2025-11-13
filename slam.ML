@@ -258,7 +258,7 @@ fun simp_delete_duplicated_lits ctxt c =
         SOME (
           c'
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ()
+          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
             (Slam_Log.DeleteDuplicatedLits
               { premise = JClause.id c, duplicate_cposs = cposs_of_dups })
@@ -294,7 +294,7 @@ fun simp_delete_resolved_lits ctxt c =
         SOME (
           c'
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ()
+          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
             (Slam_Log.DeleteResolvedLits { premise = JClause.id c, cposs = cposs })
           |> trace_concl ctxt tracer
@@ -367,7 +367,7 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp, JClause.Unknown) (tar
         (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (
             (if positive then Slam_Log.RewritePositiveLits else Slam_Log.RewriteNegativeLits)
               { unit = JClause.id unit_clause
@@ -497,7 +497,7 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (Slam_Log.NegativeSimplifyReflect
             { literal = target_cp
             , right_premise = JClause.id target_clause
@@ -612,7 +612,7 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (
             Slam_Log.PositiveSimplifyReflect
             { unit = JClause.id unit_clause
@@ -805,7 +805,7 @@ fun simp_bool_outer_claus ctxt (c, i, JClause.Unknown) =
     |> (fn clauses =>
         fold
           (fn clause => fn (unit_value, acc) =>
-            (unit_value, JClause.refresh_id unit_value clause :: acc))
+            (unit_value, JClause.refresh_id ctxt unit_value clause :: acc))
           clauses
           ((), [])
        )
@@ -921,7 +921,7 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
           JClause.combine ctxt (d' ()) (ct' ())
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ()
+          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
               (Slam_Log.Sup
                 { left_premise = JClause.id d
@@ -1028,7 +1028,7 @@ fun infer_eres (ctxt : Proof.context) (c, cp, eligibility) =
         |> JClause.delete_lit_at ctxt cp
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt
           (Slam_Log.ERes { premise = JClause.id c, literal = cp, substitution = unifier })
         |> trace_concl ctxt tracer
@@ -1074,7 +1074,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         |> JClause.add_literal ctxt (JLit.mk (u, v', true))
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt
             (Slam_Log.EFact
               { premise = JClause.id c
@@ -1151,7 +1151,7 @@ fun infer_arg_cong ctxt (c, cpos, eligibility) =
           |> JClause.norm_beta_eta_qeta_env ctxt unifier (* sets maxidx *)
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ()
+          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
               (Slam_Log.ArgCong
                 { premise = JClause.id c
@@ -1207,7 +1207,7 @@ fun infer_bool_hoist ctxt (c, (u_pos as (_, _, cpos)), eligibility) =
         |> JClause.norm_beta_eta_qeta_env ctxt unifier
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt
           (Slam_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
         |> trace_concl ctxt tracer
@@ -1260,7 +1260,7 @@ fun impl_simp_infer_false_elim as_simplification ctxt (c, (lp, cp), eligibility)
         |> JClause.delete_lit_at ctxt cp
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt origin
         |> trace_concl ctxt tracer
         |> SOME
@@ -1400,7 +1400,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         |> the_default I (Slam_Common.map_some (JClause.add_literal ctxt) new_literal)
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> pair unifier
         |> SOME
       end
@@ -1500,7 +1500,7 @@ fun impl_simp_bool_rw
         |> the_default I (Slam_Common.map_some (JClause.add_literal ctxt) new_literal)
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> pair unifier
         |> SOME
       end
@@ -1743,7 +1743,7 @@ fun impl_fa_ex_rw
         |> JClause.set_maxidx maxidx
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ()
+        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (
           (if is_forall then Slam_Log.ForallRw else Slam_Log.ExistsRw)
             { premise = JClause.id c
@@ -1809,7 +1809,7 @@ fun infer_neg_ext ctxt (c, cpos, eligibility) =
       |> JClause.norm_negative_predicate_literals ctxt
       |> JClause.recompute_selected ctxt
       |> JClause.set_maxidx (JClause.maxidx c)
-      |> JClause.refresh_id ()
+      |> JClause.refresh_id ctxt ()
       |> JClause.set_origin ctxt
           (Slam_Log.NegExt
             { premise = JClause.id c
@@ -1851,7 +1851,7 @@ fun infer_neg_cong_fun ctxt (c, cpos, eligibility) =
     |> JClause.norm_negative_predicate_literals ctxt
     |> JClause.recompute_selected ctxt
     |> JClause.set_maxidx (JClause.maxidx c)
-    |> JClause.refresh_id ()
+    |> JClause.refresh_id ctxt ()
     |> JClause.set_origin ctxt
         (Slam_Log.NegCongFun
           { premise = JClause.id c
