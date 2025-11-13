@@ -131,6 +131,8 @@ struct
         else Int.min (old_dist_to_neg_conj, max_dist_to_neg_conj)
     end
 
+  fun favor_small_dist_to_initial c = JClause.dist_to_initial c * PENALTY_COEFF
+
   (* similar to `default_fun` in Zipperpositions clauseQueue.ml *)
   fun default_fun goal_symbols = combine
     [ (size_of_clause, 3)
@@ -140,6 +142,7 @@ struct
     , (favor_goal_symbols goal_symbols, 1)
     , (favor_initial, 2)
     , (favor_small_dist_to_neg_conj, 1)
+    , (favor_small_dist_to_initial, 2)
     ]
 end
 
