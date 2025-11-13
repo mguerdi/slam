@@ -615,6 +615,7 @@ fun is_eligible_cpos c (cpos, reason) =
     case reason of
       Selected => true
     | PotentiallyMaximal => Slam_Order.is_maximal JLit.kbo strict literal literals
+    | Unknown => error "is_eligible_cpos: Unknown reason should only appear in simplification rules"
   end
 
 fun potentially_eligible_cposs_of c =
