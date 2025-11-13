@@ -188,6 +188,7 @@ sig
   val supress_unify_trace : bool Config.T
 
   val debug_check_clauses : bool Config.T
+  val debug_prefix_clause_id_with_hash : bool Config.T
 
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
   val time_and_trace : ((unit -> string) -> unit) -> ('a -> 'b) -> 'a -> 'b
@@ -450,6 +451,7 @@ val unify_matchcopy_fuel = Attrib.setup_config_int \<^binding>\<open>slam_unify_
 val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>slam_supress_unify_trace\<close> (K true)
 
 val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>slam_debug_check_clauses\<close> (K false)
+val debug_prefix_clause_id_with_hash = Attrib.setup_config_bool \<^binding>\<open>slam_debug_prefix_clause_id_with_hash\<close> (K false)
 
 (** term parsing antiquotations **)
 

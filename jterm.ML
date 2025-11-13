@@ -49,6 +49,9 @@ sig
   val pretty_subterm : Proof.context -> term -> tpos -> string
   val pretty_subterm' : Proof.context -> term -> tpos -> Pretty.T
   val has_functional_type : term -> bool
+
+  val fold_subterms : (term -> 'b -> 'b) -> term -> 'b -> 'b
+  val stringify_for_hash : term -> string Vartab.table * string -> string Vartab.table * string
 end;
 
 structure JTerm : JTERM =
@@ -614,6 +617,44 @@ fun has_functional_type t =
       (TVar _) => true
     | (Type (\<^type_name>\<open>fun\<close>, _)) => true
     | _ => false
+  end
+
+fun fold_subterms (f : term -> 'b -> 'b) t =
+  let
+    fun go t =
+      case t of
+        Abs (name, typ, body) => go body o f t
+      | (u $ v) => go u o go v o f t
+      | _ => f t
+  in
+    go t
+  end
+
+fun stringify_for_hash (t : term) (vt : string Vartab.table, s) : string Vartab.table * string =
+  let
+    fun sfy t (vt, s) =
+      case t of
+        Abs _ => (vt, "l" ^ s)
+      | (_ $ _) => (vt, "a" ^ s)
+      | (Const (name, _)) => (vt, "c" ^ name ^ s)
+      | (Free (name, _)) => (vt, "f" ^ name ^ s)
+      | (Var (ix, _)) =>
+          let
+            val (vt', vid) =
+              case Vartab.lookup vt ix of
+                SOME vid => (vt, vid)
+              | NONE =>
+                  let
+                    val vid = @{make_string} (Vartab.size vt)
+                  in
+                    (Vartab.insert (op=) (ix, vid) vt, vid)
+                  end
+          in
+            (vt', "v" ^ vid ^ s)
+          end
+      | Bound i => (vt, "b" ^ @{make_string} i)
+  in
+    fold_subterms sfy t (vt, s)
   end
 
 end;

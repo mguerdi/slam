@@ -29,7 +29,7 @@ sig
   (* law: JLit.term_of (lit_at cp c) = JTerm.subterm_at (as_tpos c) (term_of c) *)
   val as_tpos : int -> cpos -> JTerm.tpos
   val dummy : JLit.T list -> T
-  val refresh_id : unit -> T -> T
+  val refresh_id : Proof.context -> unit -> T -> T
   val add_literal : Proof.context -> JLit.T -> T -> T
   val combine : Proof.context -> T -> T -> T
   val delete_lit_at : Proof.context -> cpos -> T -> T
@@ -95,10 +95,12 @@ sig
   val select_first_maximal_neg_lit : literal_selection_function
   val recompute_selected : Proof.context -> T -> T
 
-  val dist_to_neg_conj : T -> int
+  val dist_to_initial : T -> int
+  val tainted_by_neg_conj : T -> bool option
   (* Debuggging *)
   val is_eligible_tpos : term -> JTerm.tpos -> bool
   val check_clause : Proof.context -> T -> unit
+  val lits_hash : T -> int
 end;
 
 structure JClause : JCLAUSE =
@@ -108,14 +110,22 @@ exception NOBOOL of string * term * typ
 
 open JClause_Pos
 
+type origin =
+  { inference: int Slam_Log.inference
+  , tainted_by_neg_conj: bool option
+  , dist_to_initial: int
+  }
+
+val empty_origin =
+  { inference = Slam_Log.Invalid, tainted_by_neg_conj = NONE, dist_to_initial = ~1 }
+
 type T =
   { literals: JLit.T list
   , id : int
   , maxidx : int
-  , origin: int Slam_Log.inference
+  , origin: origin
   , selected: cpos list
   (* , normalized: bool *)
-  , dist_to_neg_conj: int
   }
 
 type cpos = int
@@ -129,30 +139,49 @@ val maxidx = #maxidx
 
 val maxidx_of2 = Int.max o apply2 maxidx
 
-val empty = { literals = [], id = ~1, maxidx = ~1, origin = Slam_Log.Invalid, selected = [], dist_to_neg_conj = ~1 }
+val empty = { literals = [], id = ~1, maxidx = ~1, origin = empty_origin, selected = [] }
 
 (* NOTE: invalidates maxidx and selection *)
-fun map_literals f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
-  { literals = f literals, id = id, maxidx = ~1, origin = origin, selected = [~1], dist_to_neg_conj = dist_to_neg_conj }
+fun map_literals f { literals, id, maxidx, origin, selected } =
+  { literals = f literals, id = id, maxidx = ~1, origin = origin, selected = [~1] }
 
-fun unsafe_map_literals f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
-  { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected, dist_to_neg_conj = dist_to_neg_conj }
+fun unsafe_map_literals f { literals, id, maxidx, origin, selected } =
+  { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected }
 
 fun lit_at cp clause = nth (literals clause) cp
 
 fun dummy literals =
   map_literals (K literals) empty
 
-fun map_id f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
-  { literals = literals, id = f id, maxidx = maxidx, origin = origin, selected = selected, dist_to_neg_conj = dist_to_neg_conj }
+fun map_id f { literals, id, maxidx, origin, selected } =
+  { literals = literals, id = f id, maxidx = maxidx, origin = origin, selected = selected }
 
-fun refresh_id _ = map_id (K (JClause_Id.new ()))
+(* ignores types and variable identities, does not ignore order and orientation of literals *)
+fun lits_stringify_for_hash (c : T) =
+  fold (JLit.fold JTerm.stringify_for_hash) (#literals c) (Vartab.empty, "")
+  |> #2
+
+(* 6 digit number *)
+fun lits_hash c =
+  c
+  |> lits_stringify_for_hash
+  |> SHA1.digest
+  |> SHA1.rep
+  |> (fn s => String.substring (s, 0, 6))
+  |> String.explode
+  |> map (fn c => Char.ord c mod 10)
+  |> (fn ds => fold (fn d => fn acc => d + acc * 10) ds 0)
+
+fun refresh_id ctxt () c =
+  if Config.get ctxt Slam_Common.debug_prefix_clause_id_with_hash
+    then map_id (K (lits_hash c * 1000000 + JClause_Id.new ())) c
+    else map_id (K (JClause_Id.new ())) c
 
 fun maxidx_of_literal_list ls =
   fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
 
-fun map_maxidx f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
-  { literals = literals, id = id, maxidx = f maxidx, origin = origin, selected = selected, dist_to_neg_conj = dist_to_neg_conj }
+fun map_maxidx f { literals, id, maxidx, origin, selected } =
+  { literals = literals, id = id, maxidx = f maxidx, origin = origin, selected = selected }
 
 fun set_maxidx maxidx = map_maxidx (K maxidx)
 
@@ -192,27 +221,52 @@ fun check_clause ctxt clause =
     check_type clause
   )
 
-fun set_origin ctxt origin { literals, id, maxidx, selected, dist_to_neg_conj, ... } =
+fun set_origin
+  ctxt
+  new_inference
+  { literals
+  , id
+  , maxidx
+  , origin =
+    { inference
+    , dist_to_initial
+    , tainted_by_neg_conj
+    }
+  , selected
+  , ...
+  }
+=
   let
-    val dist_to_neg_conj =
-      case origin of
-        Slam_Log.Axiom _ => 15 (* FIXME: should be Slam_Passive.max_dist_to_neg_conj *)
+    val new_dist_to_initial =
+      case inference of
+        Slam_Log.Axiom _ => 0
       | Slam_Log.NegatedConjecture _ => 0
-      | _ => if Slam_Log.is_simplification origin then dist_to_neg_conj else dist_to_neg_conj + 1
+      | _ =>
+          if Slam_Log.is_simplification new_inference
+            then dist_to_initial
+            else dist_to_initial + 1
+    val new_tainted_by_neg_conj =
+      case inference of
+        Slam_Log.Axiom _ => SOME false
+      | Slam_Log.NegatedConjecture _ => SOME true
+      | _ => tainted_by_neg_conj
     val clause =
       { literals = literals
       , id = id
       , maxidx = maxidx
+      , origin =
+        { inference = new_inference
+        , dist_to_initial = new_dist_to_initial
+        , tainted_by_neg_conj = new_tainted_by_neg_conj
+        }
       , selected = selected
-      , origin = origin
-      , dist_to_neg_conj = dist_to_neg_conj
       }
   in
     check_clause ctxt clause;
     clause
   end
 
-fun origin { origin, ... } = origin
+fun origin { origin = { inference , ... } , ... } = inference
 
 (* FIXME: use this for testing *)
 fun recalculate_maxidx clause =
@@ -220,13 +274,12 @@ fun recalculate_maxidx clause =
 
 (* literal selection functions *)
 
-fun map_selected f { literals, id, maxidx, origin, selected, dist_to_neg_conj } =
+fun map_selected f { literals, id, maxidx, origin, selected } =
   { literals = literals
   , id = id
   , maxidx = maxidx
   , origin = origin
   , selected = f selected
-  , dist_to_neg_conj = dist_to_neg_conj
   }
 
 fun set_selected selected = map_selected (K selected)
@@ -304,18 +357,18 @@ fun recompute_selected ctxt clause =
 fun add_literal ctxt l clause =
   clause
   |> map_literals (fn lits => lits @ [l])
-  |> refresh_id ()
+  |> refresh_id ctxt ()
   |> set_maxidx (Int.max (maxidx clause, JLit.maxidx_of l))
 
 fun combine ctxt c d =
   map_literals (curry (op @) (literals c)) d
-  |> refresh_id ()
+  |> refresh_id ctxt ()
   |> set_maxidx (maxidx_of2 (c, d))
 
 fun delete_lit_at ctxt cp clause =
   clause
   |> map_literals (nth_drop cp)
-  |> refresh_id ()
+  |> refresh_id ctxt ()
   |> set_maxidx (maxidx clause)
 
 fun delete_lits_at ctxt cps clause =
@@ -340,19 +393,19 @@ fun length_negative c =
 
 fun pretty_clause' ctxt c =
   let
-    val origin = #origin c
-    val premises = case origin of
+    val inference = #inference (#origin c)
+    val premises = case inference of
       Slam_Log.Invalid => "[Invalid]"
-    | _ => @{make_string} (Slam_Log.premises origin)
+    | _ => @{make_string} (Slam_Log.premises inference)
   in
     Pretty.block
       [ Pretty.str (@{make_string} (#id c) ^ ":")
       , Syntax.pretty_term ctxt (term_of c)
-      , Pretty.str (" (" ^ (Slam_Log.name_of origin) ^ " " ^ premises ^ ")")
+      , Pretty.str (" (" ^ (Slam_Log.name_of inference) ^ " " ^ premises ^ ")")
       ]
   end
 
-val pretty_clause = Pretty.string_of oo pretty_clause'
+fun pretty_clause ctxt c = Pretty.string_of (pretty_clause' ctxt c)
 
 fun pretty_clauses' ctxt cs =
   cs
@@ -562,6 +615,7 @@ fun is_eligible_cpos c (cpos, reason) =
     case reason of
       Selected => true
     | PotentiallyMaximal => Slam_Order.is_maximal JLit.kbo strict literal literals
+    | Unknown => error "is_eligible_cpos: Unknown reason should only appear in simplification rules"
   end
 
 fun potentially_eligible_cposs_of c =
@@ -634,6 +688,9 @@ fun the_unit_lit c =
     then error ("the_unit_lit: not a unit" ^ @{make_string} c)
     else the_single (literals c)
 
-fun dist_to_neg_conj { dist_to_neg_conj, ... } = dist_to_neg_conj
+fun dist_to_initial { origin = { dist_to_initial, ... }, ... } = dist_to_initial
+
+fun tainted_by_neg_conj { origin = { tainted_by_neg_conj, ... }, ... } =
+  tainted_by_neg_conj
 
 end;

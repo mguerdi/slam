@@ -117,13 +117,21 @@ struct
   (* favor_goal from Zipperposition *)
   fun favor_small_dist_to_neg_conj c =
     let
-      val dist_to_neg_conj = JClause.dist_to_neg_conj c
+      val dist_to_initial = JClause.dist_to_initial c
+      val tainted_by_neg_conj = JClause.tainted_by_neg_conj c
+      val old_dist_to_neg_conj =
+        case tainted_by_neg_conj of
+          SOME true => dist_to_initial
+        | SOME false => max_dist_to_neg_conj + dist_to_initial
+        | NONE => max_dist_to_neg_conj (* FIXME: this should be an error *)
     in
       if JClause.is_false c then 0 else
-      if dist_to_neg_conj < 0
+      if old_dist_to_neg_conj < 0
         then max_dist_to_neg_conj (* FIXME: this should be an error *)
-        else Int.min (dist_to_neg_conj, max_dist_to_neg_conj)
+        else Int.min (old_dist_to_neg_conj, max_dist_to_neg_conj)
     end
+
+  fun favor_small_dist_to_initial c = JClause.dist_to_initial c * PENALTY_COEFF
 
   (* similar to `default_fun` in Zipperpositions clauseQueue.ml *)
   fun default_fun goal_symbols = combine
@@ -134,6 +142,7 @@ struct
     , (favor_goal_symbols goal_symbols, 1)
     , (favor_initial, 2)
     , (favor_small_dist_to_neg_conj, 1)
+    , (favor_small_dist_to_initial, 2)
     ]
 end
 
