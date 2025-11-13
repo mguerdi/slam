@@ -313,6 +313,8 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp, JClause.Unknown) (tar
       else
         mk_tracer ctxt Slam_Common.trace_msg_rewrite_negative_lits "(RN)"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    val () = tracer (fn () =>
+      JClause.pretty_oriented ctxt unit_clause (lp, 0) ^ " into " ^ JClause.pretty_subterm ctxt target_clause j)
   in
   if not (JClause.is_positive_unit unit_clause) then fail NONE (K "not a positive unit") else
   if not (positive = JLit.is_positive (JClause.lit_at target_cp target_clause)) then
