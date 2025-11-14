@@ -422,7 +422,7 @@ val neg_ext_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_neg_ext_a
 (* Unfold bounded forall, if-else, etc. *)
 val presimplify = Attrib.setup_config_bool \<^binding>\<open>slam_presimplify\<close> (K true)
 
-val meson = Attrib.setup_config_bool \<^binding>\<open>slam_meson\<close> (K true)
+val meson = Attrib.setup_config_bool \<^binding>\<open>slam_meson\<close> (K false)
 
 fun validate_max_number_of_steps ctxt =
   let
