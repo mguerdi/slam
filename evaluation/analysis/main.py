@@ -175,7 +175,7 @@ def get_call_by_goal(calls, goal):
     raise ValueError(f"No call with {goal} in calls.")
 
 
-def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
+def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
     failed = [call for call in calls if call["result"].is_failed()]
     timed_out = [call for call in calls if call["result"].is_timeout()]
     success = [call for call in calls if call["result"].is_success()]
@@ -246,7 +246,7 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
     print("\n".join(ten_easiest))
 
     if plot_cactus:
-        plot_success_calls(metis_calls, slam_calls, label)
+        plot_success_calls(metis_calls, slam_calls, label, invocation)
 
     both_success = list(set(metis_success).intersection(set(slam_success)))
     # get_call_by_goal(slam_calls, goal)["result"].as_string + "\t\t" + goal
@@ -342,7 +342,10 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
         )
 
 
-def plot_success_calls(metis_calls, slam_calls, label):
+def plot_success_calls(metis_calls, slam_calls, label, invocation):
+    cm = plt.get_cmap('nipy_spectral')
+    color = cm(((135 * invocation) % 360) / 360.)
+
     def plot_calls(calls, label):
         success = sorted(
             [call for call in calls if call["result"].is_success()], key=lambda call: call["result"]
@@ -350,7 +353,7 @@ def plot_success_calls(metis_calls, slam_calls, label):
         success_times = [call["result"].time_ms for call in success]
         cumulative_problems = [i for i, _ in enumerate(success)]
         # print(f"plotting with label {label}")
-        plt.plot(success_times, cumulative_problems, "+", label=label)
+        plt.plot(success_times, cumulative_problems, "+", color=color, label=label)
         # print("done plotting")
 
     plot_calls(metis_calls, label=label + " (metis)")
@@ -427,7 +430,7 @@ if __name__ == "__main__":
         )
         runs_dirs = ["runs/" + dirname for dirname in runs_dirs_relative]
 
-    for dirname in runs_dirs:
+    for i, dirname in enumerate(runs_dirs):
         filename = dirname + "/mirabelle.log"
         try:
             with open(dirname + "/commit") as c:
@@ -440,7 +443,7 @@ if __name__ == "__main__":
             label = dirname + " " + commit
             # label = "commit " + commit
             summarize(
-                calls, label, args.plot_cactus, args.plot_scatter, args.plot_hist
+                calls, label, args.plot_cactus, args.plot_scatter, args.plot_hist, i
             )
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
