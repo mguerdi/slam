@@ -15,7 +15,7 @@ sig
   type clause_term = JClause.T * JClause.full_pos * JClause.eligibility
   type unit_clause = JClause.T * JLit.lpos * JClause.eligibility
 
-  val impl_simp_rewrite_lits : bool -> Proof.context -> unit_clause -> clause_term -> JClause.T option
+  val impl_simp_rewrite_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
   val find_single_green_disagreement : Proof.context -> term * term -> JTerm.tpos option
   val literal_can_match_single_disagreement : Proof.context -> int * JLit.T -> int * JLit.T -> (int * (JTerm.tpos * (JLit.lpos * Envir.env))) option
   val equality_subsumes : Proof.context -> JClause.T * JClause.T -> bool
@@ -33,8 +33,7 @@ sig
   val is_trivial : JClause.T -> bool
   val is_equality_subsumed : Proof.context -> Slam_Clause_Set.T -> JClause.T -> bool
   val simp_bool_outer_claus : Proof.context -> clause_lit -> JClause.T list
-  val simp_rewrite_positive_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
-  val simp_rewrite_negative_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
+  val simp_rewrite_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_bool_rw : Proof.context -> clause_term -> JClause.T list
@@ -305,21 +304,17 @@ fun simp_delete_resolved_lits ctxt c =
 (* FIXME: Implement side conditions following
   https://github.com/leanprover-community/duper/blob/aab52219c72cb52951832c8e985e1dc3e9497af9/Duper/Rules/Demodulation.lean#L51
 *)
-fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp, JClause.Unknown) (target_clause, j as (_, _, target_cp), JClause.Unknown) =
+fun impl_simp_rewrite_lits ctxt (unit_clause, lp, JClause.Unknown) (target_clause, j as (_, _, target_cp), JClause.Unknown) =
   let
     val tracer =
-      if positive then
-        mk_tracer ctxt Slam_Common.trace_msg_rewrite_positive_lits "(RP)"
-      else
-        mk_tracer ctxt Slam_Common.trace_msg_rewrite_negative_lits "(RN)"
+      mk_tracer ctxt Slam_Common.trace_msg_rewrite_lits "(RP/RN)"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () =>
       JClause.pretty_oriented ctxt unit_clause (lp, 0) ^ " into " ^ JClause.pretty_subterm ctxt target_clause j)
   in
   if not (JClause.is_positive_unit unit_clause) then fail NONE (K "not a positive unit") else
-  if not (positive = JLit.is_positive (JClause.lit_at target_cp target_clause)) then
-    fail NONE (K "wrong polarity") else
   let
+  val positive = JLit.is_positive (JClause.lit_at target_cp target_clause)
   (* in particular: ensure the variables of `to` are distinct from those of target_clause *)
   val unit_shift = JClause.maxidx target_clause + 1
   val unit_clause = JClause.incr_indexes unit_shift unit_clause
@@ -392,18 +387,15 @@ fun impl_simp_rewrite_lits positive ctxt (unit_clause, lp, JClause.Unknown) (tar
   end end
 
 (* Rewriting of positive literals (RP) simplification (Schulz) *)
-val simp_rewrite_positive_lits = impl_simp_rewrite_lits true
-
 (* Rewriting of positive literals (RN) simplification (Schulz) *)
-val simp_rewrite_negative_lits = impl_simp_rewrite_lits false
+val simp_rewrite_lits = impl_simp_rewrite_lits
 
 (* active units rewrite given clause *)
 fun forward_rewrite ctxt active unit_index given_clause =
   let
     val all_disabled = Config.get ctxt Slam_Common.disable_all
     fun cfg_rule rule = if not all_disabled orelse Config.get ctxt rule then true else false
-    val cfg_rp = cfg_rule Slam_Common.rule_rewrite_positive_lits
-    val cfg_rn = cfg_rule Slam_Common.rule_rewrite_negative_lits
+    val cfg_rewrite_lits = cfg_rule Slam_Common.rule_rewrite_lits
     val green_subterms_in_given_clause =
       JClause.green_full_poss_of given_clause
       |> map (`(JClause.subterm_at_full_pos given_clause))
@@ -415,15 +407,13 @@ fun forward_rewrite ctxt active unit_index given_clause =
           SOME active_clause => SOME (active_clause, lp)
         | NONE => NONE)
   in
+    if not cfg_rewrite_lits then NONE else
     (* FIXME: do all possible rewrites, instead of only one and re-querying every time *)
     green_subterms_in_given_clause
     |> get_first (fn (t, fp) =>
     candidate_units t
     |> get_first (fn (c, lp) =>
-    merge_options
-      ( if cfg_rp then simp_rewrite_positive_lits ctxt (c, lp, JClause.Unknown) (given_clause, fp, JClause.Unknown) else NONE
-      , if cfg_rn then simp_rewrite_negative_lits ctxt (c, lp, JClause.Unknown) (given_clause, fp, JClause.Unknown) else NONE
-      )
+      simp_rewrite_lits ctxt (c, lp, JClause.Unknown) (given_clause, fp, JClause.Unknown)
     ))
   end
 
@@ -435,8 +425,7 @@ fun backward_rewrite ctxt active green_index given_clause
   let
     val all_disabled = Config.get ctxt Slam_Common.disable_all
     fun cfg_rule rule = if not all_disabled orelse Config.get ctxt rule then true else false
-    val cfg_rp = cfg_rule Slam_Common.rule_rewrite_positive_lits
-    val cfg_rn = cfg_rule Slam_Common.rule_rewrite_negative_lits
+    val cfg_rewrite_lits = cfg_rule Slam_Common.rule_rewrite_lits
     fun backward_rewrite_oriented lp acc =
       let
         val candidate_subterms_in_active_clauses =
@@ -451,11 +440,11 @@ fun backward_rewrite ctxt active green_index given_clause
           (case find_first (curry op= id o JClause.id) archive of
             SOME _ => acc (* skip *)
           | NONE => (case Slam_Clause_Set.lookup active id of
-              SOME active_clause => (case if cfg_rp then (simp_rewrite_positive_lits ctxt (given_clause, lp, JClause.Unknown) (active_clause, fp, JClause.Unknown)) else NONE of
-                  SOME result => { simplifications = result::simplifications, archive = active_clause::archive }
-                | NONE => (case if cfg_rn then (simp_rewrite_negative_lits ctxt (given_clause, lp, JClause.Unknown) (active_clause, fp, JClause.Unknown)) else NONE of
+              SOME active_clause =>
+                ( case if cfg_rewrite_lits then (simp_rewrite_lits ctxt (given_clause, lp, JClause.Unknown) (active_clause, fp, JClause.Unknown)) else NONE of
                     SOME result => { simplifications = result::simplifications, archive = active_clause::archive }
-                  | NONE => acc))
+                  | NONE => acc
+                )
             | NONE =>
               (* FIXME: error here, once we delete from the index. *)
               (* error "clause was not deleted from index" *)
