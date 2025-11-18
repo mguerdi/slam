@@ -259,11 +259,12 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
 
     log_slam_both_success_times = np.log(slam_both_success_times)
     log_metis_both_success_times = np.log(metis_both_success_times)
-    fit = np.polyfit(log_metis_both_success_times, log_slam_both_success_times, 2)
-    print(f"\n\nPOLYFIT: {fit}\n\n")
 
+    polyfit_degree = 1
+    fit = np.polyfit(log_metis_both_success_times, log_slam_both_success_times, polyfit_degree)
     def extrapolate(time):
-        return np.exp(fit[2]) * time ** fit[1] * time ** (fit[0] * np.log(time))
+        return np.exp(np.sum([fit[i] * np.log(time)**(polyfit_degree - i) for i in range(polyfit_degree + 1)]))
+    polyfit_label = " + ".join(f"{fit[i]:.2f} x**{polyfit_degree - i}" for i in range(polyfit_degree + 1))
 
     metis_success_slam_fail_or_timeout_times = [
         get_call_by_goal(metis_calls, goal)["result"].time_ms
@@ -300,7 +301,10 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
         plt.rc("axes", axisbelow=True)
         plt.grid(True, which="major", color="0.65")
 
-        plt.scatter(metis_both_success_times, slam_both_success_times, marker=".", label=label, s=1)
+        cm = plt.get_cmap('nipy_spectral')
+        color = cm(((135 * (invocation + 1)) % 360) / 360.)
+        plt.scatter(metis_both_success_times, slam_both_success_times, c=color, marker=".", label=label, s=1, alpha=0.5)
+
         # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_long_times, marker='x')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_random_times, marker='x')
@@ -309,7 +313,7 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
         max_time_plus = max_time / .4
 
         plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", label="diagonal")
-        # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_extrapolated_times, marker='x')
+        # plt.plot(metis_success_slam_fail_or_timeout_times, slam_fake_extrapolated_times, c=color, label=polyfit_label)
         plt.xlim(min_time_minus, max_time_plus)
         plt.ylim(min_time_minus, max_time_plus)
         print("MAX TIME", max_time)
