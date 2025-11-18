@@ -399,7 +399,7 @@ if __name__ == "__main__":
         plt.rc("axes", axisbelow=True)
         rc_fonts = {
             "font.family": "serif",
-            "font.size": 20,
+            "font.size": 10 if args.save_plot else 20,
             'figure.figsize': (5, 3),
             "text.usetex": True,
             'text.latex.preamble':
