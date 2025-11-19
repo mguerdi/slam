@@ -56,6 +56,7 @@ sig
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_literals : (JLit.T list -> JLit.T list) -> T -> T (* NOTE: invalidates maxidx, selected *)
+  val is_sub_full_pos_of : (full_pos * full_pos) -> bool
   val subterm_at_full_pos : T -> full_pos -> term
   (* law: subterm_at_full_pos fp [\<dots>, (s, t, b), \<dots>]
             = JTerm.subterm_at (full_pos_as_tpos b fp) (term_of [\<dots>, (s, t, b), \<dots>]) *)
@@ -502,6 +503,9 @@ val pretty_oriented = Pretty.string_of ooo pretty_oriented'
 fun cposs_of c = 0 upto (length c - 1)
 
 fun positive_cposs_of c = filter (JLit.is_positive o (fn cpos => lit_at cpos c)) (cposs_of c)
+
+fun is_sub_full_pos_of ((tp_sub, lp_sub, cp_sub), (tp_super, lp_super, cp_super)) =
+  cp_sub = cp_super andalso lp_sub = lp_super andalso JTerm.is_sub_tpos_of (tp_sub, tp_super)
 
 fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = JTerm.subterm_at (JLit.term_at_lpos (nth literals cp) lp) tp
 

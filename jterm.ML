@@ -3,6 +3,7 @@ sig
   exception JTERM of term * string
   (* type T = term *)
   type tpos = int list (* position of a subterm *)
+  val is_sub_tpos_of : (tpos * tpos) -> bool
   val is_truth_value : term -> bool
   val ml_bool_of : term -> bool
   val is_false : term -> bool
@@ -113,6 +114,8 @@ fun strip_comb_fun_types_args t = strip_comb_fun_types_args1 ([], t)
 
 (* Term position, mostly for documentation / testing purposes. See long comment at bottom. *)
 type tpos = int list;
+
+fun is_sub_tpos_of (sub, super) = is_prefix (op=) super sub
 
 (* t|\<^sub>p *)
 fun subterm_at t [] = t
