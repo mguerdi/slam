@@ -378,8 +378,14 @@ fun impl_simp_rewrite_lits ctxt (unit_clause, lp, JClause.Unknown) (target_claus
         |> SOME)
       end
     end
+    val report_no_matchers =
+      Seq.pull
+      #> tap (fn r => if is_none r then fail () (K "no matchers") else ())
+      #> K
+      #> Seq.make
   in
     matchers
+    |> report_no_matchers
     |> Seq.take (Slam_Common.get_unifier_cutoff ctxt) 
     |> Seq.map_filter build_conclusion
     |> Seq.pull
