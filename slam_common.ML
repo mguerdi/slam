@@ -169,6 +169,8 @@ sig
   datatype sup_variable_condition = None | FirstOrder | Approximate
   val get_sup_variable_condition : Proof.context -> sup_variable_condition
 
+  val forward_rewrite_countdown : int Config.T
+
   val arg_cong_as_simpl : bool Config.T
   val neg_ext_as_simpl : bool Config.T
 
@@ -406,6 +408,8 @@ fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get c
 val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_fluid\<close> (K true)
 
 val sup_into_deeply_occuring = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_deeply_occuring\<close> (K true)
+
+val forward_rewrite_countdown = Attrib.setup_config_int \<^binding>\<open>slam_forward_rewrite_countdown\<close> (K 10)
 
 (* Note: disables ArgCong as an inference *)
 val arg_cong_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_arg_cong_as_simpl\<close> (K false)

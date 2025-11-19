@@ -168,8 +168,8 @@ sig
   val empty: 'a T
   val insert : (key * 'a) -> 'a T -> 'a T
   val fold : (FeatureTable.key * FeatureTable.key -> bool) -> key -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
+  val get_first : (FeatureTable.key * FeatureTable.key -> bool) -> ('a -> 'b option) -> key -> 'a T -> 'b option
 end;
-
 
 (* feature is
     * for green subterms: Slam_Index.feature
@@ -216,6 +216,18 @@ struct
     | fold _ [] _ (Node _) _ = error "fold: key too short"
     | fold _ (_::_) _ (Leaf _) _ = error "fold: key too long"
 
+  fun get_first _ getter [] (Leaf xs) = Library.get_first getter xs
+    | get_first compat getter (k::ks) (Node children) =
+        FeatureTable.get_first
+          ( fn (k', child) =>
+              if compat (k, k')
+                then get_first compat getter ks child
+                else NONE
+          )
+          children
+    | get_first _ _ [] (Node _) = error "get_first: key too short"
+    | get_first _ _ (_::_) (Leaf _) = error "get_first: key too long"
+
 end;
 
 (* Index for green subterms, etc. *)
@@ -228,6 +240,7 @@ sig
   val get_unifiables : term -> 'a T -> 'a list
   val get_instances : term -> 'a T -> 'a list
   val get_generalizations : term -> 'a T -> 'a list
+  val get_first_of_generalizations : ('a -> 'b option) -> term -> 'a T -> 'b option
   val insert_clause : JClause.T -> (int * JClause.full_pos) T -> (int * JClause.full_pos) T
   val insert_unit : JClause.T -> (int * JLit.lpos) T -> (int * JLit.lpos) T
 end;
@@ -249,26 +262,33 @@ struct
   val feature_positions = e_fp6m_positions
 
   fun compute_key t = map (fn p => Slam_Fingerprint.feature_at [] p t) feature_positions
-  
+
   fun get_unifiables t index =
     let
       val key = compute_key t
     in
       fold Slam_Fingerprint.could_unify key cons index []
     end
-  
+
   fun get_instances t index =
     let
       val key = compute_key t
     in
       fold Slam_Fingerprint.could_match key cons index []
     end
-  
+
   fun get_generalizations t index =
     let
       val key = compute_key t
     in
       fold (Slam_Fingerprint.could_match o swap) key cons index []
+    end
+
+  fun get_first_of_generalizations getter t index =
+    let
+      val key = compute_key t
+    in
+      get_first (Slam_Fingerprint.could_match o swap) getter key index
     end
 
   (* FIXME: we want insert term and subterms *)

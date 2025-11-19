@@ -60,6 +60,7 @@ sig
   (* law: subterm_at_full_pos fp [\<dots>, (s, t, b), \<dots>]
             = JTerm.subterm_at (full_pos_as_tpos b fp) (term_of [\<dots>, (s, t, b), \<dots>]) *)
   val full_pos_as_tpos : int -> bool -> full_pos -> JTerm.tpos
+  val fold_postorder_with_green_full_pos : (full_pos -> term -> 'a -> 'a) -> T -> 'a -> 'a
   val occurs_deeply : term -> T -> bool
   val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
   val norm_beta_eta_qeta : Proof.context -> T -> T
@@ -149,6 +150,15 @@ fun unsafe_map_literals f { literals, id, maxidx, origin, selected } =
   { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected }
 
 fun lit_at cp clause = nth (literals clause) cp
+
+fun fold_postorder_with_green_full_pos (f : full_pos -> term -> 'a -> 'a) c =
+  literals c
+  |> fold_index
+      ( fn (cp, lit) =>
+         JLit.fold_with_lpos
+           (fn lp => fn t => JTerm.fold_postorder_with_green_tpos (fn tp => f (tp, lp, cp)) t)
+           lit
+      )
 
 fun dummy literals =
   map_literals (K literals) empty

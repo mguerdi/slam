@@ -417,6 +417,55 @@ fun forward_rewrite ctxt active unit_index given_clause =
     ))
   end
 
+fun forward_rewrite_bottom_up
+  ctxt
+  active
+  unit_index
+  given_clause
+  : { clause : JClause.T, archive : JClause.T list }
+=
+  let
+    fun forward_rewrite_subterm fp c : JClause.T option =
+      (* invariant: fp is a valid green full pos for c *)
+      let
+        val subterm: term = JClause.subterm_at_full_pos c fp
+      in
+        Term_Index.get_first_of_generalizations
+          ( fn (active_unit_id, orientation) =>
+              case Slam_Clause_Set.lookup active active_unit_id of
+                NONE => NONE
+              | SOME active_unit =>
+                  impl_simp_rewrite_lits
+                    ctxt
+                    (active_unit, orientation, JClause.Unknown)
+                    (c, fp, JClause.Unknown)
+          )
+          subterm
+          unit_index
+      end
+    fun repeat_forward_rewrite_subterm countdown fp (state as { clause, archive }) =
+      if countdown < 0
+        then
+          ( warning "forward_rewrite_bottom_up: slam_forward_rewrite_countdown exhausted"
+          ; state
+          )
+        else
+          case forward_rewrite_subterm fp clause of
+            NONE => state
+          | SOME rewritten_clause =>
+              repeat_forward_rewrite_subterm
+                (countdown - 1)
+                fp
+                { clause = rewritten_clause, archive = clause :: archive }
+    fun fold_postorder_over_green_full_pos (f : JClause.full_pos -> 'a -> 'a) : JClause.T -> 'a -> 'a =
+      JClause.fold_postorder_with_green_full_pos (fn fp => fn _ => f fp)
+  in
+    fold_postorder_over_green_full_pos
+      (repeat_forward_rewrite_subterm (Config.get ctxt Slam_Common.forward_rewrite_countdown))
+      given_clause
+      { clause = given_clause, archive = [] }
+  end
+
 (* given clause (a unit) rewrites active clauses *)
 fun backward_rewrite ctxt active green_index given_clause
   : { simplifications : JClause.T list, archive : JClause.T list }
@@ -1929,9 +1978,6 @@ fun forward_simplify
           |> Seq.pull
           |> Slam_Common.map_some fst
           |> the_default []
-        (* successful rewrites of c (NONE filtered out) *)
-        val rn_rp_rewrites : JClause.T -> JClause.T list =
-          the_list o forward_rewrite ctxt active unit_index
         val ps_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           if_cfg Slam_Common.rule_positive_simplify_reflect (
             Slam_Common.seq_cartesian_product active_units
@@ -1985,7 +2031,6 @@ fun forward_simplify
         [simp_fun_of_seq simp_bool_rewrites]
         @ [simp_fun_of_seq simp_false_elim_rewrites]
         @ [oc_rewrites]
-        @ (if forward then [rn_rp_rewrites] else [])
         @ map simp_fun_of_seq
           ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
@@ -1993,6 +2038,11 @@ fun forward_simplify
           @ [neg_ext_rewrites]
           @ [arg_cong_rewrites] )
       end
+
+    val { clause = given_clause, archive = rewriting_archive } =
+      if forward
+        then forward_rewrite_bottom_up ctxt active unit_index given_clause
+        else { clause = given_clause, archive = [] }
     (* rewrite until not possible anymore *)
     val (simplifications, archive) =
       Slam_Simplify.simplify
@@ -2000,6 +2050,8 @@ fun forward_simplify
         ctxt
         simp_funs
         given_clause
+    val archive = archive @ rewriting_archive
+
     fun trace_msg_clauses tracer msg clauses =
       tracer ctxt
         (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
