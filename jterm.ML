@@ -3,6 +3,7 @@ sig
   exception JTERM of term * string
   (* type T = term *)
   type tpos = int list (* position of a subterm *)
+  val is_sub_tpos_of : (tpos * tpos) -> bool
   val is_truth_value : term -> bool
   val ml_bool_of : term -> bool
   val is_false : term -> bool
@@ -21,6 +22,7 @@ sig
   val disagreement_tpos_of2 : term * term -> tpos option
   val green_tposs_of : term -> tpos list
   val is_green_tpos : tpos -> term -> bool
+  val fold_postorder_with_green_tpos : (tpos -> term -> 'a -> 'a) -> term -> 'a -> 'a
   val subterm_at : term -> tpos -> term
   val map_at : tpos -> (term -> term) -> term -> term
   (* preprocessing *)
@@ -112,6 +114,8 @@ fun strip_comb_fun_types_args t = strip_comb_fun_types_args1 ([], t)
 
 (* Term position, mostly for documentation / testing purposes. See long comment at bottom. *)
 type tpos = int list;
+
+fun is_sub_tpos_of (sub, super) = is_prefix (op=) super sub
 
 (* t|\<^sub>p *)
 fun subterm_at t [] = t
@@ -655,6 +659,33 @@ fun stringify_for_hash (t : term) (vt : string Vartab.table, s) : string Vartab.
       | Bound i => (vt, "b" ^ @{make_string} i)
   in
     fold_subterms sfy t (vt, s)
+  end
+
+fun fold_postorder_with_green_tpos (f : tpos -> term -> 'a -> 'a) (s : term) (acc : 'a) : 'a =
+  let
+    fun go tp (t as (_$_)) =
+      if can_have_green_args (head_of t)
+        then
+          let
+            val (_, args) = strip_comb t
+            val go_args : 'a -> 'a =
+              fold_index
+                ( fn (arg_idx, arg) =>
+                    let
+                      (* FIXME: performance *)
+                      val arg_tpos = tp @ [arg_idx + 1]
+                    in
+                      go arg_tpos arg
+                    end
+                )
+                args
+          in
+            go_args #> f tp t
+          end
+      else f tp t
+    | go tp t = f tp t
+  in
+    go [] s acc
   end
 
 end;

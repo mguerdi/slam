@@ -56,10 +56,12 @@ sig
   val map_at_cpos : cpos -> (JLit.T -> JLit.T) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_at_full_pos : full_pos -> (term -> term) -> T -> T (* NOTE: invalidates maxidx, selected *)
   val map_literals : (JLit.T list -> JLit.T list) -> T -> T (* NOTE: invalidates maxidx, selected *)
+  val is_sub_full_pos_of : (full_pos * full_pos) -> bool
   val subterm_at_full_pos : T -> full_pos -> term
   (* law: subterm_at_full_pos fp [\<dots>, (s, t, b), \<dots>]
             = JTerm.subterm_at (full_pos_as_tpos b fp) (term_of [\<dots>, (s, t, b), \<dots>]) *)
   val full_pos_as_tpos : int -> bool -> full_pos -> JTerm.tpos
+  val fold_postorder_with_green_full_pos : (full_pos -> term -> 'a -> 'a) -> T -> 'a -> 'a
   val occurs_deeply : term -> T -> bool
   val norm_beta_eta_qeta_env : Proof.context -> Envir.env -> T -> T
   val norm_beta_eta_qeta : Proof.context -> T -> T
@@ -149,6 +151,15 @@ fun unsafe_map_literals f { literals, id, maxidx, origin, selected } =
   { literals = f literals, id = id, maxidx = maxidx, origin = origin, selected = selected }
 
 fun lit_at cp clause = nth (literals clause) cp
+
+fun fold_postorder_with_green_full_pos (f : full_pos -> term -> 'a -> 'a) c =
+  literals c
+  |> fold_index
+      ( fn (cp, lit) =>
+         JLit.fold_with_lpos
+           (fn lp => fn t => JTerm.fold_postorder_with_green_tpos (fn tp => f (tp, lp, cp)) t)
+           lit
+      )
 
 fun dummy literals =
   map_literals (K literals) empty
@@ -492,6 +503,9 @@ val pretty_oriented = Pretty.string_of ooo pretty_oriented'
 fun cposs_of c = 0 upto (length c - 1)
 
 fun positive_cposs_of c = filter (JLit.is_positive o (fn cpos => lit_at cpos c)) (cposs_of c)
+
+fun is_sub_full_pos_of ((tp_sub, lp_sub, cp_sub), (tp_super, lp_super, cp_super)) =
+  cp_sub = cp_super andalso lp_sub = lp_super andalso JTerm.is_sub_tpos_of (tp_sub, tp_super)
 
 fun subterm_at_full_pos { literals, ... } (tp, lp, cp) = JTerm.subterm_at (JLit.term_at_lpos (nth literals cp) lp) tp
 

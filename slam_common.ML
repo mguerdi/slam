@@ -36,8 +36,7 @@ sig
   val trace_neg_cong_fun : bool Config.T
   val trace_delete_duplicated_lits : bool Config.T
   val trace_delete_resolved_lits : bool Config.T
-  val trace_rewrite_positive_lits : bool Config.T
-  val trace_rewrite_negative_lits : bool Config.T
+  val trace_rewrite_lits : bool Config.T
   val trace_positive_simplify_reflect : bool Config.T
   val trace_negative_simplify_reflect : bool Config.T
   val trace_simp_outer_claus : bool Config.T
@@ -82,8 +81,7 @@ sig
   val trace_msg_neg_cong_fun : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_duplicated_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_resolved_lits : Proof.context -> (unit -> string) -> unit
-  val trace_msg_rewrite_positive_lits : Proof.context -> (unit -> string) -> unit
-  val trace_msg_rewrite_negative_lits : Proof.context -> (unit -> string) -> unit
+  val trace_msg_rewrite_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_positive_simplify_reflect : Proof.context -> (unit -> string) -> unit
   val trace_msg_negative_simplify_reflect : Proof.context -> (unit -> string) -> unit
   val trace_msg_simp_outer_claus : Proof.context -> (unit -> string) -> unit
@@ -146,8 +144,7 @@ sig
   (* simplifications *)
   val rule_delete_duplicated_lits : bool Config.T
   val rule_delete_resolved_lits : bool Config.T
-  val rule_rewrite_positive_lits : bool Config.T
-  val rule_rewrite_negative_lits : bool Config.T
+  val rule_rewrite_lits : bool Config.T
   val rule_positive_simplify_reflect : bool Config.T
   val rule_negative_simplify_reflect : bool Config.T
   val rule_simp_outer_claus : bool Config.T
@@ -171,6 +168,8 @@ sig
   val sup_variable_condition : string Config.T
   datatype sup_variable_condition = None | FirstOrder | Approximate
   val get_sup_variable_condition : Proof.context -> sup_variable_condition
+
+  val forward_rewrite_countdown : int Config.T
 
   val arg_cong_as_simpl : bool Config.T
   val neg_ext_as_simpl : bool Config.T
@@ -240,8 +239,7 @@ val trace_neg_ext = Attrib.setup_config_bool \<^binding>\<open>slam_trace_neg_ex
 val trace_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>slam_trace_neg_cong_fun\<close> (K false)
 val trace_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_delete_duplicated_lits\<close> (K false)
 val trace_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_delete_resolved_lits\<close> (K false)
-val trace_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_rewrite_positive_lits\<close> (K false)
-val trace_rewrite_negative_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_rewrite_negative_lits\<close> (K false)
+val trace_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_rewrite_lits\<close> (K false)
 val trace_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_trace_positive_simplify_reflect\<close> (K false)
 val trace_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_trace_negative_simplify_reflect\<close> (K false)
 val trace_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>slam_trace_simp_outer_claus\<close> (K false)
@@ -295,8 +293,7 @@ fun trace_msg_neg_ext ctxt msg = if Config.get ctxt trace_neg_ext then trace_msg
 fun trace_msg_neg_cong_fun ctxt msg = if Config.get ctxt trace_neg_cong_fun then trace_msg ctxt msg else ();
 fun trace_msg_delete_duplicated_lits ctxt msg = if Config.get ctxt trace_delete_duplicated_lits then trace_msg ctxt msg else ();
 fun trace_msg_delete_resolved_lits ctxt msg = if Config.get ctxt trace_delete_resolved_lits then trace_msg ctxt msg else ();
-fun trace_msg_rewrite_positive_lits ctxt msg = if Config.get ctxt trace_rewrite_positive_lits then trace_msg ctxt msg else ();
-fun trace_msg_rewrite_negative_lits ctxt msg = if Config.get ctxt trace_rewrite_negative_lits then trace_msg ctxt msg else ();
+fun trace_msg_rewrite_lits ctxt msg = if Config.get ctxt trace_rewrite_lits then trace_msg ctxt msg else ();
 fun trace_msg_positive_simplify_reflect ctxt msg = if Config.get ctxt trace_positive_simplify_reflect then trace_msg ctxt msg else ();
 fun trace_msg_negative_simplify_reflect ctxt msg = if Config.get ctxt trace_negative_simplify_reflect then trace_msg ctxt msg else ();
 fun trace_msg_simp_outer_claus ctxt msg = if Config.get ctxt trace_simp_outer_claus then trace_msg ctxt msg else ();
@@ -366,8 +363,7 @@ val rule_choice = Attrib.setup_config_bool \<^binding>\<open>slam_rule_choice\<c
 (* simplifications *)
 val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_duplicated_lits\<close> (K rule_default)
 val rule_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_resolved_lits\<close> (K rule_default)
-val rule_rewrite_positive_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_rewrite_positive_lits\<close> (K rule_default)
-val rule_rewrite_negative_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_rewrite_negative_lits\<close> (K rule_default)
+val rule_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_rewrite_lits\<close> (K rule_default)
 val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_positive_simplify_reflect\<close> (K rule_default)
 val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_negative_simplify_reflect\<close> (K rule_default)
 val rule_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>slam_rule_simp_outer_claus\<close> (K rule_default)
@@ -412,6 +408,8 @@ fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get c
 val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_fluid\<close> (K true)
 
 val sup_into_deeply_occuring = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_deeply_occuring\<close> (K true)
+
+val forward_rewrite_countdown = Attrib.setup_config_int \<^binding>\<open>slam_forward_rewrite_countdown\<close> (K 10)
 
 (* Note: disables ArgCong as an inference *)
 val arg_cong_as_simpl = Attrib.setup_config_bool \<^binding>\<open>slam_arg_cong_as_simpl\<close> (K false)

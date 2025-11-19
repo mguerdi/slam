@@ -1,13 +1,15 @@
 signature JLIT =
 sig
   type T
+  (* left or right side of an equational literal *)
+  datatype lpos = Left | Right
+
   val mk : term * term * bool -> T 
   val dest : T -> term * term * bool
   val fold : (term -> 'a -> 'a) -> T -> 'a -> 'a
+  val fold_with_lpos : (lpos -> term -> 'a -> 'a) -> T -> 'a -> 'a
   val any_side : (term -> bool) -> T -> bool
   val both_sides : (term -> bool) -> T -> bool
-  (* left or right side of an equational literal *)
-  datatype lpos = Left | Right
   val is_positive : T -> bool
   val is_negative : T -> bool
   val is_negative_or_negativoid_cfg : Proof.context -> T -> bool
@@ -90,6 +92,8 @@ fun mk (lhs, rhs, is_positive) =
 fun dest (Lit { lhs, rhs, pol, ... }) = (lhs, rhs, pol)
 
 fun fold f (Lit { lhs, rhs, ... }) = f lhs #> f rhs
+
+fun fold_with_lpos f (Lit { lhs, rhs, ...}) = f Left lhs #> f Right rhs
 
 fun any_side p (Lit { lhs, rhs, ... }) = p lhs orelse p rhs
 

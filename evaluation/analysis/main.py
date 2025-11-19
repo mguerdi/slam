@@ -175,7 +175,7 @@ def get_call_by_goal(calls, goal):
     raise ValueError(f"No call with {goal} in calls.")
 
 
-def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
+def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
     failed = [call for call in calls if call["result"].is_failed()]
     timed_out = [call for call in calls if call["result"].is_timeout()]
     success = [call for call in calls if call["result"].is_success()]
@@ -246,7 +246,7 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
     print("\n".join(ten_easiest))
 
     if plot_cactus:
-        plot_success_calls(metis_calls, slam_calls, label)
+        plot_success_calls(metis_calls, slam_calls, label, invocation)
 
     both_success = list(set(metis_success).intersection(set(slam_success)))
     # get_call_by_goal(slam_calls, goal)["result"].as_string + "\t\t" + goal
@@ -259,11 +259,12 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
 
     log_slam_both_success_times = np.log(slam_both_success_times)
     log_metis_both_success_times = np.log(metis_both_success_times)
-    fit = np.polyfit(log_metis_both_success_times, log_slam_both_success_times, 2)
-    print(f"\n\nPOLYFIT: {fit}\n\n")
 
+    polyfit_degree = 1
+    fit = np.polyfit(log_metis_both_success_times, log_slam_both_success_times, polyfit_degree)
     def extrapolate(time):
-        return np.exp(fit[2]) * time ** fit[1] * time ** (fit[0] * np.log(time))
+        return np.exp(np.sum([fit[i] * np.log(time)**(polyfit_degree - i) for i in range(polyfit_degree + 1)]))
+    polyfit_label = " + ".join(f"{fit[i]:.2f} x**{polyfit_degree - i}" for i in range(polyfit_degree + 1))
 
     metis_success_slam_fail_or_timeout_times = [
         get_call_by_goal(metis_calls, goal)["result"].time_ms
@@ -300,7 +301,10 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
         plt.rc("axes", axisbelow=True)
         plt.grid(True, which="major", color="0.65")
 
-        plt.scatter(metis_both_success_times, slam_both_success_times, marker=".", label=label, s=1)
+        cm = plt.get_cmap('nipy_spectral')
+        color = cm(((135 * (invocation + 1)) % 360) / 360.)
+        plt.scatter(metis_both_success_times, slam_both_success_times, c=color, marker=".", label=label, s=1, alpha=0.5)
+
         # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_long_times, marker='x')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_random_times, marker='x')
@@ -309,7 +313,7 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
         max_time_plus = max_time / .4
 
         plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", label="diagonal")
-        # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_extrapolated_times, marker='x')
+        # plt.plot(metis_success_slam_fail_or_timeout_times, slam_fake_extrapolated_times, c=color, label=polyfit_label)
         plt.xlim(min_time_minus, max_time_plus)
         plt.ylim(min_time_minus, max_time_plus)
         print("MAX TIME", max_time)
@@ -342,7 +346,10 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist):
         )
 
 
-def plot_success_calls(metis_calls, slam_calls, label):
+def plot_success_calls(metis_calls, slam_calls, label, invocation):
+    cm = plt.get_cmap('nipy_spectral')
+    color = cm(((135 * invocation) % 360) / 360.)
+
     def plot_calls(calls, label):
         success = sorted(
             [call for call in calls if call["result"].is_success()], key=lambda call: call["result"]
@@ -350,7 +357,7 @@ def plot_success_calls(metis_calls, slam_calls, label):
         success_times = [call["result"].time_ms for call in success]
         cumulative_problems = [i for i, _ in enumerate(success)]
         # print(f"plotting with label {label}")
-        plt.plot(success_times, cumulative_problems, "+", label=label)
+        plt.plot(success_times, cumulative_problems, "+", color=color, label=label)
         # print("done plotting")
 
     plot_calls(metis_calls, label=label + " (metis)")
@@ -399,7 +406,7 @@ if __name__ == "__main__":
         plt.rc("axes", axisbelow=True)
         rc_fonts = {
             "font.family": "serif",
-            "font.size": 20,
+            "font.size": 10 if args.save_plot else 20,
             'figure.figsize': (5, 3),
             "text.usetex": True,
             'text.latex.preamble':
@@ -427,7 +434,7 @@ if __name__ == "__main__":
         )
         runs_dirs = ["runs/" + dirname for dirname in runs_dirs_relative]
 
-    for dirname in runs_dirs:
+    for i, dirname in enumerate(runs_dirs):
         filename = dirname + "/mirabelle.log"
         try:
             with open(dirname + "/commit") as c:
@@ -440,7 +447,7 @@ if __name__ == "__main__":
             label = dirname + " " + commit
             # label = "commit " + commit
             summarize(
-                calls, label, args.plot_cactus, args.plot_scatter, args.plot_hist
+                calls, label, args.plot_cactus, args.plot_scatter, args.plot_hist, i
             )
         except FileNotFoundError:
             print(f"skipping {filename} (not found)")
