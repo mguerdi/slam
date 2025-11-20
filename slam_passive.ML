@@ -27,6 +27,7 @@ struct
   rules *)
 
   fun combine weight_funs_and_coeffs clause =
+    if JClause.is_false clause then 0 else
     fold
       (fn (weight_fun, coeff) => fn acc => acc + coeff * weight_fun clause)
       weight_funs_and_coeffs
@@ -125,13 +126,13 @@ struct
         | SOME false => max_dist_to_neg_conj + dist_to_initial
         | NONE => max_dist_to_neg_conj (* FIXME: this should be an error *)
     in
-      if JClause.is_false c then 0 else
       if old_dist_to_neg_conj < 0
         then max_dist_to_neg_conj (* FIXME: this should be an error *)
         else Int.min (old_dist_to_neg_conj, max_dist_to_neg_conj)
     end
 
-  fun favor_small_dist_to_initial c = JClause.dist_to_initial c * PENALTY_COEFF
+  fun favor_small_dist_to_initial c =
+    JClause.dist_to_initial c * PENALTY_COEFF
 
   (* similar to `default_fun` in Zipperpositions clauseQueue.ml *)
   fun default_fun goal_symbols = combine
@@ -143,6 +144,7 @@ struct
     , (favor_initial, 2)
     , (favor_small_dist_to_neg_conj, 1)
     , (favor_small_dist_to_initial, 2)
+    , (favor_containing_free, 1)
     ]
 end
 
