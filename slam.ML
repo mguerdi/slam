@@ -1457,6 +1457,39 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   end
   end
 
+val bool_simp_rules = [
+  (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
+  Effective Implementation Leo-III *)
+  @{lemma "\<And>b. (b \<or> b) = b" by auto},
+  @{lemma "\<And>b. (b \<and> b) = b" by auto},
+  @{lemma "\<And>b. (\<not>b \<or> b) = True" by auto},
+  @{lemma "\<And>b. (\<not>b \<and> b) = False" by auto},
+  @{lemma "\<And>b. (b \<or> \<top>) = True" by auto},
+  @{lemma "\<And>b. (b \<and> \<top>) = b" by auto},
+  @{lemma "\<And>b. (b \<or> False) = b" by auto},
+  @{lemma "\<And>b. (b \<and> False) = False" by auto},
+  @{lemma "\<And>t. (t = t) = True" by auto},
+  @{lemma "\<And>t. (t \<noteq> t) = False" by auto},
+  @{lemma "\<And>b. (b = True) = b" by auto},
+  @{lemma "\<And>b. (b = False) = (\<not> b)" by auto},
+  @{lemma "(\<not> False) = True" by auto},
+  @{lemma "(\<not> True) = False" by auto},
+  (* BoolSimp, Superposition with First-Class Booleans and Inprocessing Clausification *)
+  @{lemma "\<And>b. (True \<longrightarrow> b) = b" by auto},
+  @{lemma "\<And>b. (False \<longrightarrow> b) = True" by auto},
+  @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto},
+  @{lemma "\<And>b. (b \<longrightarrow> False) = (\<not> b)" by auto},
+  @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto},
+  @{lemma "\<And>b. (\<not> b \<longrightarrow> b) = b" by auto},
+  @{lemma "\<And>b. (b \<longrightarrow> b) = True" by auto}
+]
+
+fun split_bool_simp_rule th =
+  th
+  |> Thm.prop_of
+  |> HOLogic.dest_Trueprop
+  |> HOLogic.dest_eq
+
 (* FIXME: duplication with impl_infer_bool_rw_eq_neq_fa_ex_hoist *)
 fun impl_simp_bool_rw
   ctxt
@@ -1495,7 +1528,12 @@ fun impl_simp_bool_rw
     val u_variable_headed_condition =
       not (JTerm.is_variable_headed u)
         orelse u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term
-    val unifiers = if u aconv pattern then Seq.single (Envir.empty (maxidx + 1)) else Seq.empty
+    (* val unifiers = if u aconv pattern then Seq.single (Envir.empty (maxidx + 1)) else Seq.empty *)
+    val unifiers =
+      Slam_Unify.matchers
+        (Context.Proof ctxt)
+        (maxidx + 1)
+        [(pattern, u)]
     val (unifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) unifiers
     fun build_conclusion unifier =
       let
@@ -1567,6 +1605,8 @@ fun simp_bool_rw ctxt (c, u_pos, eligibility) =
       , (HOLogic.mk_not fresh_variable_eq_itself, @{term "False"}) ]
       @ *)
       bool_rw_non_var_rules true
+      @
+      map split_bool_simp_rule bool_simp_rules
     fun apply_rw_rule (t, t') =
       let val () = tracer (fn () =>
         "rule " ^ Slam_Common.pretty_term ctxt t ^ " \<mapsto> " ^ Slam_Common.pretty_term ctxt t')
