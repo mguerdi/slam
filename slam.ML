@@ -36,7 +36,7 @@ sig
   val simp_rewrite_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
-  val simp_bool_rw : Proof.context -> clause_term -> JClause.T list
+  (* val simp_bool_rw : Proof.context -> clause_term -> JClause.T list *)
   val infer_eq_neq_outer_claus : Proof.context -> clause_lit -> JClause.T list
   val infer_sup : Proof.context -> clause_lit_side -> clause_term -> JClause.T list
   val infer_eres : Proof.context -> clause_lit -> JClause.T list
@@ -1457,32 +1457,32 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   end
   end
 
-val bool_simp_rules = [
-  (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
-  Effective Implementation Leo-III *)
-  @{lemma "\<And>b. (b \<or> b) = b" by auto},
-  @{lemma "\<And>b. (b \<and> b) = b" by auto},
-  @{lemma "\<And>b. (\<not>b \<or> b) = True" by auto},
-  @{lemma "\<And>b. (\<not>b \<and> b) = False" by auto},
-  @{lemma "\<And>b. (b \<or> \<top>) = True" by auto},
-  @{lemma "\<And>b. (b \<and> \<top>) = b" by auto},
-  @{lemma "\<And>b. (b \<or> False) = b" by auto},
-  @{lemma "\<And>b. (b \<and> False) = False" by auto},
-  @{lemma "\<And>t. (t = t) = True" by auto},
-  @{lemma "\<And>t. (t \<noteq> t) = False" by auto},
-  @{lemma "\<And>b. (b = True) = b" by auto},
-  @{lemma "\<And>b. (b = False) = (\<not> b)" by auto},
-  @{lemma "(\<not> False) = True" by auto},
-  @{lemma "(\<not> True) = False" by auto},
-  (* BoolSimp, Superposition with First-Class Booleans and Inprocessing Clausification *)
-  @{lemma "\<And>b. (True \<longrightarrow> b) = b" by auto},
-  @{lemma "\<And>b. (False \<longrightarrow> b) = True" by auto},
-  @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto},
-  @{lemma "\<And>b. (b \<longrightarrow> False) = (\<not> b)" by auto},
-  @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto},
-  @{lemma "\<And>b. (\<not> b \<longrightarrow> b) = b" by auto},
-  @{lemma "\<And>b. (b \<longrightarrow> b) = True" by auto}
-]
+val bool_simp_rules =
+  [ (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
+    Effective Implementation Leo-III *)
+    @{lemma "\<And>b. (b \<or> b) = b" by auto}
+  , @{lemma "\<And>b. (b \<and> b) = b" by auto}
+  , @{lemma "\<And>b. (\<not>b \<or> b) = True" by auto}
+  , @{lemma "\<And>b. (\<not>b \<and> b) = False" by auto}
+  , @{lemma "\<And>b. (b \<or> \<top>) = True" by auto}
+  , @{lemma "\<And>b. (b \<and> \<top>) = b" by auto}
+  , @{lemma "\<And>b. (b \<or> False) = b" by auto}
+  , @{lemma "\<And>b. (b \<and> False) = False" by auto}
+  , @{lemma "\<And>t. (t = t) = True" by auto}
+  , @{lemma "\<And>t. (t \<noteq> t) = False" by auto}
+  , @{lemma "\<And>b. (b = True) = b" by auto}
+  , @{lemma "\<And>b. (b = False) = (\<not> b)" by auto}
+  , @{lemma "(\<not> False) = True" by auto}
+  , @{lemma "(\<not> True) = False" by auto}
+    (* BoolSimp, Superposition with First-Class Booleans and Inprocessing Clausification *)
+  , @{lemma "\<And>b. (True \<longrightarrow> b) = b" by auto}
+  , @{lemma "\<And>b. (False \<longrightarrow> b) = True" by auto}
+  , @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto}
+  , @{lemma "\<And>b. (b \<longrightarrow> False) = (\<not> b)" by auto}
+  , @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto}
+  , @{lemma "\<And>b. (\<not> b \<longrightarrow> b) = b" by auto}
+  , @{lemma "\<And>b. (b \<longrightarrow> b) = True" by auto}
+  ]
 
 fun split_bool_simp_rule th =
   th
@@ -1496,105 +1496,51 @@ fun impl_simp_bool_rw
   (tracer : (unit -> string) -> unit)
   (c : JClause.T, u_pos : JClause.full_pos, eligibility)
   (pattern : term)
-  (u_var_allowed : bool) (* this is false for BoolRw but true for the others *)
-  (insert_for_u : term) (* will be \<top> or \<bottom> *)
-  (disjunct_with : JLit.T option) (* this is needed for the Hoist rules *)
-  : (Envir.env * JClause.T) list
+  (insert_for_u : term)
+  : (Envir.env * JClause.T) option
 =
   let
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val u = JClause.subterm_at_full_pos c u_pos
     val () = tracer (fn () => "u = " ^ Slam_Common.pretty_term ctxt u)
   in
-  if (not u_var_allowed) andalso (is_Var u) then (* BoolRw: 2. *) fail [] (K "u is a variable") else
+  if is_Var u then (* BoolRw: 2. *) fail NONE (K "u is a variable") else
   let
-    val maxidx =
-      Int.max
-        ( Int.max (JClause.maxidx c, maxidx_of_term pattern)
-        , the_default ~1 (Slam_Common.map_some JLit.maxidx_of disjunct_with) )
-    val u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term =
-      case u_pos of
-        ([], lpos, cpos) =>
-          let
-            val (_, other_side, is_positive) =
-              c |> JClause.lit_at cpos |> JLit.orient lpos |> JLit.dest
-          in
-            is_positive andalso
-              (other_side = @{term True}
-                orelse other_side = @{term False}
-                orelse JTerm.is_variable_headed other_side)
-          end
-      | _ => false
-    val u_variable_headed_condition =
-      not (JTerm.is_variable_headed u)
-        orelse u_at_toplevel_and_eq_to_bool_or_eq_to_var_headed_term
-    (* val unifiers = if u aconv pattern then Seq.single (Envir.empty (maxidx + 1)) else Seq.empty *)
-    val unifiers =
+    val maxidx = Int.max (JClause.maxidx c, maxidx_of_term pattern)
+    val matchers =
       Slam_Unify.matchers
         (Context.Proof ctxt)
         (maxidx + 1)
         [(pattern, u)]
-    val (unifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) unifiers
-    fun build_conclusion unifier =
+    val maybe_matcher: Envir.env option = Option.map #1 (Seq.pull matchers)
+    fun build_conclusion matcher =
       let
         val () = tracer (fn () => "build_conclusion")
         val c =
           c
-          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+          |> JClause.norm_beta_eta_qeta_env ctxt matcher 
           |> JClause.recompute_selected ctxt
-        val new_literal =
-          Slam_Common.map_some
-            (JLit.norm_beta_eta_qeta_env unifier)
-            disjunct_with
-        val insert_for_u = JTerm.norm_beta_eta_qeta_env unifier insert_for_u
+        val insert_for_u = JTerm.norm_beta_eta_qeta_env matcher insert_for_u
 
-        (* FIXME: remove after debugging *)
-        val u_subbed = JClause.subterm_at_full_pos c u_pos
-        val _ = if type_of u_subbed <> type_of insert_for_u then
-            (writeln ("TYPES DONT MATCH: " ^ Slam_Common.pretty_term ctxt u_subbed ^ " <> " ^ Slam_Common.pretty_term ctxt insert_for_u);
-            writeln ("NORMED CLAUSE: " ^ JClause.pretty_clause ctxt c);
-            writeln ("PATTERN: " ^ Slam_Common.pretty_term ctxt pattern);
-            writeln ("U: " ^ Slam_Common.pretty_term ctxt u);
-            writeln ("UNIFIER: " ^ Slam_Common.pretty_tenv ctxt (Envir.term_env unifier));
-            writeln ("INSERT FOR U:" ^ Slam_Common.pretty_term ctxt insert_for_u);
-            error "TYPESDONTMATCH")
-          else ()
-
-        val maxidx =
-          Int.max
-            ( Int.max (JClause.maxidx c, maxidx_of_term insert_for_u)
-            , the_default ~1 (Slam_Common.map_some JLit.maxidx_of new_literal) )
+        val maxidx = Int.max (JClause.maxidx c, maxidx_of_term insert_for_u)
       in
-        (* FIXME: Is this condition needed? It looks like neither zip nor duper implement it
-          https://github.com/leanprover-community/duper/blob/aab52219c72cb52951832c8e985e1dc3e9497af9/Duper/Rules/BoolSimp.lean#L1260
-          https://github.com/sneeuwballen/zipperposition/blob/050072e01d8539f9126993482b595e09f921f66a/src/prover_calculi/booleans.ml#L1344
-        (* 3. the position of u is eligible in C w.r.t. \<sigma> *)
-        if not (JClause.is_eligible_full_pos c u_pos) then
-          fail NONE "u is not eligible in C w.r.t \<sigma>" else
-        *)
-
-        (* 4. if the head of u is a variable ... *)
-        if not u_variable_headed_condition then
-          fail NONE (K ("u is variable headed but isn't applied or the affected literal is not of "
-            ^ "the form u\<approx>\<top>, u\<approx>\<bottom>, or u\<approx>v with v variable-headed")) else
         c
         |> JClause.map_at_full_pos u_pos (K insert_for_u)
         |> JClause.set_maxidx maxidx
-        (* add the new literal if it exists, otherwise apply identity function *)
-        |> the_default I (Slam_Common.map_some (JClause.add_literal ctxt) new_literal)
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ctxt ()
-        |> pair unifier
+        |> pair matcher 
         |> SOME
       end
-    val result = map_filter build_conclusion unifiers
+    val result = Option.mapPartial build_conclusion maybe_matcher
     val () = tracer (fn () => ("done"))
   in
     result
   end
   end
 
+(*
 fun simp_bool_rw ctxt (c, u_pos, eligibility) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_simp_bool_rw "SimpBoolRw"
@@ -1611,8 +1557,8 @@ fun simp_bool_rw ctxt (c, u_pos, eligibility) =
       let val () = tracer (fn () =>
         "rule " ^ Slam_Common.pretty_term ctxt t ^ " \<mapsto> " ^ Slam_Common.pretty_term ctxt t')
       in
-        impl_simp_bool_rw ctxt tracer (c, u_pos, eligibility) t false t' NONE
-        |> map (fn (unifier, clause) =>
+        impl_simp_bool_rw ctxt tracer (c, u_pos, eligibility) t t'
+        |> Option.map (fn (unifier, clause) =>
           clause
           |> JClause.set_origin ctxt
             (Slam_Log.SimpBoolRw
@@ -1621,7 +1567,72 @@ fun simp_bool_rw ctxt (c, u_pos, eligibility) =
           )
       end
   in
-    maps apply_rw_rule rw_rules
+    filter_map apply_rw_rule rw_rules
+  end
+*)
+
+fun bool_simp 
+  ctxt
+  clause
+  : { clause : JClause.T, archive : JClause.T list }
+=
+  let
+    val tracer = mk_tracer ctxt Slam_Common.trace_msg_simp_bool_rw "BoolSimp"
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt clause)
+    fun simp_subterm fp c : ((term * term) * (Envir.env * JClause.T)) option =
+      (* invariant: fp is a valid green full pos for c *)
+      let
+        val subterm: term = JClause.subterm_at_full_pos c fp
+      in
+        bool_rw_non_var_rules true @ map split_bool_simp_rule bool_simp_rules
+        |> get_first (fn (lhs, rhs) =>
+          impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
+          |> Option.map (pair (lhs, rhs))
+        )
+        (*
+        Term_Index.get_first_of_generalizations
+          ( fn (active_unit_id, orientation) =>
+              case Slam_Clause_Set.lookup active active_unit_id of
+                NONE => NONE
+              | SOME active_unit =>
+                  impl_simp_rewrite_lits
+                    ctxt
+                    (active_unit, orientation, JClause.Unknown)
+                    (c, fp, JClause.Unknown)
+          )
+          subterm
+          unit_index
+          *)
+      end
+    fun repeat_simp_subterm countdown fp (state as { clause, archive }) =
+      if countdown < 0
+        then
+          ( warning "bool_simp: more than 1000 simplification steps in subterm";
+            { clause = clause, archive = archive }
+          )
+        else
+          case simp_subterm fp clause of
+            NONE => state
+          | SOME ((lhs, rhs), (matcher, rewritten_clause)) =>
+              let
+                val rewritten_clause =
+                  rewritten_clause
+                  |> JClause.set_origin ctxt
+                    (Slam_Log.SimpBoolRw
+                      { premise = JClause.id clause, subterm = fp, subrule = (lhs, rhs), substitution = matcher })
+              in
+                repeat_simp_subterm
+                  (countdown - 1)
+                  fp
+                  { clause = rewritten_clause, archive = clause :: archive }
+              end
+    fun fold_postorder_over_green_full_pos (f : JClause.full_pos -> 'a -> 'a) : JClause.T -> 'a -> 'a =
+      JClause.fold_postorder_with_green_full_pos (fn fp => fn _ => f fp)
+  in
+    fold_postorder_over_green_full_pos
+      (repeat_simp_subterm 1000)
+      clause
+      { clause = clause, archive = [] }
   end
 
 (* FIXME: Idea: have the rw rules as active clauses, then this is basically superposition *)
@@ -1989,28 +2000,16 @@ fun forward_simplify
     (* FIXME: remove active_units hack *)
     val simp_funs =
       let
-        val simp_bool_rewrites: JClause.T -> JClause.T Seq.seq = fn c =>
-          if_cfg Slam_Common.rule_simp_bool_rw (
-            let
-              val green_targets: (JClause.T * JClause.full_pos * JClause.eligibility) Seq.seq =
-                Seq.map (pair c) (Seq.of_list (JClause.green_full_poss_of c))
-                |> Seq.map (fn (c, fp) => (c, fp, JClause.Unknown))
-            in
-              green_targets
-              (* FIXME: try taking just one instead of dealing with multiple simplifiations *)
-              |> Seq.maps (simp_bool_rw ctxt #> Seq.of_list)
-            end);
         val simp_false_elim_rewrites: JClause.T -> JClause.T Seq.seq = fn c =>
           if_cfg Slam_Common.rule_simp_false_elim (
             let
-              val lpos_cpos_pairs =
-                Slam_Common.cartesian_product [JLit.Left, JLit.Right] (JClause.cposs_of c)
-              val clause_potentially_eligible_lit_sides =
-                JClause.potentially_eligible_cposs_of c
+              val clause_lit_sides =
+                JClause.cposs_of c
+                |> map (rpair JClause.Unknown)
                 |> Slam_Common.cartesian_product [JLit.Left, JLit.Right]
                 |> map (fn (lp, (cp, eligibility)) => (c, (lp, cp), eligibility))
             in
-              Seq.of_list (maps (simp_false_elim ctxt) clause_potentially_eligible_lit_sides)
+              Seq.of_list (maps (simp_false_elim ctxt) clause_lit_sides)
             end)
 
         (* FIXME rewrites is a misnomer inherited from rn_rp_rewrites *)
@@ -2074,8 +2073,8 @@ fun forward_simplify
             else Seq.empty
       in
         (* following Schulz: RN, RP, PS, NS, DD, DR *)
-        [simp_fun_of_seq simp_bool_rewrites]
-        @ [simp_fun_of_seq simp_false_elim_rewrites]
+        (* [simp_fun_of_seq simp_bool_rewrites]
+        @ *) [simp_fun_of_seq simp_false_elim_rewrites]
         @ [oc_rewrites]
         @ map simp_fun_of_seq
           ( (if not cheap then [ps_rewrites] else [])
@@ -2085,18 +2084,22 @@ fun forward_simplify
           @ [arg_cong_rewrites] )
       end
 
+    (* FIXME: bool_simp and forward_rewrite should be part of the simplify fixed-point loop *)
+    val { clause = given_clause, archive = bool_simp_archive } = bool_simp ctxt given_clause
+
     val { clause = given_clause, archive = rewriting_archive } =
       if forward
         then forward_rewrite_bottom_up ctxt active unit_index given_clause
         else { clause = given_clause, archive = [] }
-    (* rewrite until not possible anymore *)
+
+    (* simplify until not possible anymore *)
     val (simplifications, archive) =
       Slam_Simplify.simplify
         false
         ctxt
         simp_funs
         given_clause
-    val archive = archive @ rewriting_archive
+    val archive = archive @ rewriting_archive @ bool_simp_archive
 
     fun trace_msg_clauses tracer msg clauses =
       tracer ctxt
