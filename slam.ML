@@ -162,7 +162,7 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
   | outer_clausify ctxt maxidx b (Const (@{const_name HOL.Ex}, T) $ P) c =
       if b then
         let
-          val abstract_over = Free ("z", domain_type (fastype_of P))
+          val abstract_over = Free ("outerclausifyabsvar002460177", domain_type (fastype_of P))
           val () = if (not (exists_subterm (fn Free (name, _) =>
             name = #1 (dest_Free abstract_over) | _ => false) P)) then () else error "outer_clausify: assertion failed"
           val choice_witness =
@@ -1816,7 +1816,7 @@ fun impl_fa_ex_rw
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
           |> JClause.recompute_selected ctxt
 
-        val abstract_over = Free ("z", fresh_typ)
+        val abstract_over = Free ("implfaexrwabsvar002460177", fresh_typ)
         val () = if (not (exists_subterm (fn Free (name, _) =>
           name = #1 (dest_Free abstract_over) | _ => false) fresh_predicate)) then () else error "impl_fa_ex_rw: assertion failed"
         val choice_body = (is_forall ? HOLogic.mk_not) (fresh_predicate $ abstract_over)
