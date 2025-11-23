@@ -1515,8 +1515,8 @@ fun impl_simp_bool_rw
   (tracer : (unit -> string) -> unit)
   (c : JClause.T, u_pos : JClause.full_pos, eligibility)
   (pattern : term)
-  (insert_for_u : term)
-  : (Envir.env * JClause.T) option
+  (rhs : term)
+  : ((term * term) * (Envir.env * JClause.T)) option
 =
   let
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
@@ -1525,7 +1525,7 @@ fun impl_simp_bool_rw
   in
   if is_Var u then (* BoolRw: 2. *) fail NONE (K "u is a variable") else
   let
-    val (pattern, insert_for_u) = apply2 (Logic.incr_indexes ([], (JClause.maxidx c + 1))) (pattern, insert_for_u)
+    val (pattern, rhs) = apply2 (Logic.incr_indexes ([], (JClause.maxidx c + 1))) (pattern, rhs)
     val maxidx = Int.max (JClause.maxidx c, maxidx_of_term pattern)
     val matchers =
       Slam_Unify.matchers
@@ -1540,7 +1540,7 @@ fun impl_simp_bool_rw
           c
           |> JClause.norm_beta_eta_qeta_env ctxt matcher 
           |> JClause.recompute_selected ctxt
-        val insert_for_u = JTerm.norm_beta_eta_qeta_env matcher insert_for_u
+        val insert_for_u = JTerm.norm_beta_eta_qeta_env matcher rhs
 
         val maxidx = Int.max (JClause.maxidx c, maxidx_of_term insert_for_u)
       in
@@ -1550,7 +1550,8 @@ fun impl_simp_bool_rw
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ctxt ()
-        |> pair matcher 
+        |> pair matcher
+        |> pair (pattern, rhs)
         |> SOME
       end
     val result = Option.mapPartial build_conclusion maybe_matcher
@@ -1609,7 +1610,6 @@ fun bool_simp
           bool_simp_rules_index
           ( fn (lhs, rhs) =>
               impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
-              |> Option.map (pair (lhs, rhs))
           )
       end
     fun repeat_simp_subterm countdown fp (state as { clause, archive }) =

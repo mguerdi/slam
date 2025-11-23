@@ -93,7 +93,12 @@ class Result:
 
     def __eq__(self, other):
         if self.__class__ == other.__class__:
-            return self.kind == other.kind and self.time_ms == other.time_ms
+            if self.kind != other.kind:
+                return False
+            # kinds are equal
+            if self.kind == ResultKind.SUCCESS:
+                return self.time_ms == other.time_ms
+            return True
         raise NotImplementedError("Can only compare Result to itself.")
 
     def __lt__(self, other):
@@ -115,17 +120,29 @@ def parse_file(filename, timeout_ms):
         # See "Terminology" above.
         goal = " ".join(line.split(" ")[3:5])
         tail = " ".join(line.split(" ")[7:])
-        command = "(".join(tail.split("(")[:-1])
+        command = "(".join(tail.split("(")[:-1]).strip()
+        if command.startswith("("):
+            if not command.endswith(")"):
+                raise RuntimeError("Command " + repr(command) + " starts with '(' but doesn't end with ')'")
+            command = command[1:-1]
         if "slam" in command and "metis" in command:
             raise RuntimeError("Line has both slam and metis:\n" + line)
         if "slam" in command:
+            assert command.startswith("slam")
             method = "slam"
+            facts = command[5:]
         elif "metis" in command:
+            assert command.startswith("metis")
             method = "metis"
+            options_and_facts = command[6:]
+            if options_and_facts.startswith("("):
+                facts = options_and_facts[options_and_facts.index(")")+2:]
+            else:
+                facts = options_and_facts
         else:
             raise RuntimeError("Line has neither slam nor metis:\n" + line)
         result = Result("(" + (tail.split("(")[-1]), timeout_ms)
-        calls.append({"goal": goal, "method": method, "command": command, "result": result})
+        calls.append({"goal": goal, "method": method, "command": command, "facts": facts, "result": result})
     return calls
 
 
@@ -212,6 +229,23 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
 
     metis_fails_or_timeouts = metis_fails + metis_timeouts
 
+    differing_facts_count = 0
+    differing_facts_slam_better = 0
+    for goal in all_goals:
+        slam_call = get_call_by_goal(slam_calls, goal)
+        metis_call = get_call_by_goal(metis_calls, goal)
+        if slam_call["facts"] != metis_call["facts"]: # and (not metis_call["facts"].startswith("ext") or slam_call["facts"] != metis_call["facts"][4:]):
+            differing_facts_count += 1
+            if slam_call["result"] < metis_call["result"]:
+                differing_facts_slam_better += 1
+                print("DIFFERING FACTS, SLAM BETTER: " + goal)
+                print("SLAM COMMAND: ", slam_call["command"], slam_call["result"].as_string)
+                print("METIS COMMAND:", metis_call["command"], metis_call["result"].as_string)
+                print("SLAM FACTS:  ", repr(slam_call["facts"]))
+                print("METIS FACTS: ", repr(metis_call["facts"]))
+    print("TOTAL CALLS WITH DIFFERING FACTS:", differing_facts_count)
+    print("TOTAL CALLS WITH DIFFERING FACTS WHERE SLAM IS BETTER:", differing_facts_slam_better)
+
     # print(metis_any_success[0])
     print(f"slam fails: {len(slam_fails)}")
     print(f"slam timeouts: {len(slam_timeouts)}")
@@ -243,18 +277,18 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
     metis_success_slam_timeout = set(metis_success) - set(slam_success) - set(slam_fails)
     print(f"metis success, slam timeout: {str(len(metis_success_slam_timeout))}")
 
-    print("5 easiest (to metis) problems where slam fails:")
+    print("10 easiest (to metis) problems where slam fails:")
     easiest_slam_fails = sorted(
         list(metis_success_slam_fail),
         key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
-    )[:5]
+    )[:10]
     print("- " + "\n- ".join(easiest_slam_fails))
 
-    print("5 easiest (to metis) problems where slam times out:")
+    print("10 easiest (to metis) problems where slam times out:")
     easiest_slam_timeouts = sorted(
         list(metis_success_slam_timeout),
         key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
-    )[:5]
+    )[:10]
     print("- " + "\n- ".join(easiest_slam_timeouts))
 
     if plot_cactus:
