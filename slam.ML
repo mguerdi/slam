@@ -1506,6 +1506,7 @@ fun impl_simp_bool_rw
   in
   if is_Var u then (* BoolRw: 2. *) fail NONE (K "u is a variable") else
   let
+    val (pattern, insert_for_u) = apply2 (Logic.incr_indexes ([], (JClause.maxidx c + 1))) (pattern, insert_for_u)
     val maxidx = Int.max (JClause.maxidx c, maxidx_of_term pattern)
     val matchers =
       Slam_Unify.matchers
@@ -1584,6 +1585,7 @@ fun bool_simp
       let
         val subterm: term = JClause.subterm_at_full_pos c fp
       in
+        (* FIXME: pre-filter rw rules by top-symbol of subterm *)
         bool_rw_non_var_rules true @ map split_bool_simp_rule bool_simp_rules
         |> get_first (fn (lhs, rhs) =>
           impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
@@ -1641,6 +1643,7 @@ fun infer_bool_rw ctxt (c, u_pos, eligibility) =
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_bool_rw "BoolRw"
     val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c ^ ", subterm: " ^ @{make_string} u_pos)
     val maxidx = JClause.maxidx c
+    (* FIXME: move renaming into impl_simp_bool_rw... ? *)
     val fresh_typ = TVar (("'a", maxidx + 1), Sign.defaultS (Proof_Context.theory_of ctxt)) (* type of y FIXME: better name? *)
     val fresh_variable = Var (("y_brw", maxidx + 1), fresh_typ) (* y *)
     val fresh_variable_eq_itself = HOLogic.mk_eq (fresh_variable, fresh_variable)
