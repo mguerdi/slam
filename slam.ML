@@ -437,6 +437,8 @@ fun forward_rewrite_bottom_up
         val subterm: term = JClause.subterm_at_full_pos c fp
       in
         Term_Index.get_first_of_generalizations
+          subterm
+          unit_index
           ( fn (active_unit_id, orientation) =>
               case Slam_Clause_Set.lookup active active_unit_id of
                 NONE => NONE
@@ -446,8 +448,6 @@ fun forward_rewrite_bottom_up
                     (active_unit, orientation, JClause.Unknown)
                     (c, fp, JClause.Unknown)
           )
-          subterm
-          unit_index
       end
     fun repeat_forward_rewrite_subterm countdown fp (state as { clause, archive }) =
       if countdown < 0
@@ -1458,7 +1458,7 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   end
   end
 
-val bool_simp_rules =
+val bool_simp_var_lemmas =
   [
     @{lemma "\<And>b. (\<not>\<not>b) = b" by auto}
     (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
@@ -1501,6 +1501,13 @@ fun split_bool_simp_rule th =
   |> Thm.prop_of
   |> HOLogic.dest_Trueprop
   |> HOLogic.dest_eq
+
+val bool_simp_rules =
+  bool_rw_non_var_rules true @ map split_bool_simp_rule bool_simp_var_lemmas
+
+val bool_simp_rules_index =
+  Top_Symbol_Index.empty
+  |> fold (fn (lhs, rhs) => Top_Symbol_Index.insert_term (lhs, (lhs, rhs))) bool_simp_rules
 
 (* FIXME: duplication with impl_infer_bool_rw_eq_neq_fa_ex_hoist *)
 fun impl_simp_bool_rw
@@ -1597,26 +1604,13 @@ fun bool_simp
       let
         val subterm: term = JClause.subterm_at_full_pos c fp
       in
-        (* FIXME: pre-filter rw rules by top-symbol of subterm *)
-        bool_rw_non_var_rules true @ map split_bool_simp_rule bool_simp_rules
-        |> get_first (fn (lhs, rhs) =>
-          impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
-          |> Option.map (pair (lhs, rhs))
-        )
-        (*
-        Term_Index.get_first_of_generalizations
-          ( fn (active_unit_id, orientation) =>
-              case Slam_Clause_Set.lookup active active_unit_id of
-                NONE => NONE
-              | SOME active_unit =>
-                  impl_simp_rewrite_lits
-                    ctxt
-                    (active_unit, orientation, JClause.Unknown)
-                    (c, fp, JClause.Unknown)
-          )
+        Top_Symbol_Index.get_first_of_generalizations
           subterm
-          unit_index
-          *)
+          bool_simp_rules_index
+          ( fn (lhs, rhs) =>
+              impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
+              |> Option.map (pair (lhs, rhs))
+          )
       end
     fun repeat_simp_subterm countdown fp (state as { clause, archive }) =
       if countdown < 0
