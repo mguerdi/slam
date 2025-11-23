@@ -93,7 +93,12 @@ class Result:
 
     def __eq__(self, other):
         if self.__class__ == other.__class__:
-            return self.kind == other.kind and self.time_ms == other.time_ms
+            if self.kind != other.kind:
+                return False
+            # kinds are equal
+            if self.kind == ResultKind.SUCCESS:
+                return self.time_ms == other.time_ms
+            return True
         raise NotImplementedError("Can only compare Result to itself.")
 
     def __lt__(self, other):
