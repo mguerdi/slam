@@ -1459,30 +1459,41 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   end
 
 val bool_simp_rules =
-  [ (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
+  [
+    @{lemma "\<And>b. (\<not>\<not>b) = b" by auto}
+    (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
     Effective Implementation Leo-III *)
-    @{lemma "\<And>b. (b \<or> b) = b" by auto}
+  , @{lemma "\<And>b. (b \<or> b) = b" by auto}
   , @{lemma "\<And>b. (b \<and> b) = b" by auto}
   , @{lemma "\<And>b. (\<not>b \<or> b) = True" by auto}
+  , @{lemma "\<And>b. (b \<or> \<not>b) = True" by auto}
   , @{lemma "\<And>b. (\<not>b \<and> b) = False" by auto}
-  , @{lemma "\<And>b. (b \<or> \<top>) = True" by auto}
-  , @{lemma "\<And>b. (b \<and> \<top>) = b" by auto}
+  , @{lemma "\<And>b. (b \<and> \<not>b) = False" by auto}
+  , @{lemma "\<And>b. (b \<or> True) = True" by auto}
+  , @{lemma "\<And>b. (True \<or> b) = True" by auto}
+  , @{lemma "\<And>b. (b \<and> True) = b" by auto}
+  , @{lemma "\<And>b. (True \<and> b) = b" by auto}
   , @{lemma "\<And>b. (b \<or> False) = b" by auto}
+  , @{lemma "\<And>b. (False \<or> b) = b" by auto}
   , @{lemma "\<And>b. (b \<and> False) = False" by auto}
+  , @{lemma "\<And>b. (False \<and> b) = False" by auto}
   , @{lemma "\<And>t. (t = t) = True" by auto}
   , @{lemma "\<And>t. (t \<noteq> t) = False" by auto}
   , @{lemma "\<And>b. (b = True) = b" by auto}
+  , @{lemma "\<And>b. (True = b) = b" by auto}
   , @{lemma "\<And>b. (b = False) = (\<not> b)" by auto}
-  , @{lemma "(\<not> False) = True" by auto}
-  , @{lemma "(\<not> True) = False" by auto}
+  , @{lemma "\<And>b. (False = b) = (\<not> b)" by auto}
     (* BoolSimp, Superposition with First-Class Booleans and Inprocessing Clausification *)
   , @{lemma "\<And>b. (True \<longrightarrow> b) = b" by auto}
   , @{lemma "\<And>b. (False \<longrightarrow> b) = True" by auto}
-  , @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto}
   , @{lemma "\<And>b. (b \<longrightarrow> False) = (\<not> b)" by auto}
   , @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto}
   , @{lemma "\<And>b. (\<not> b \<longrightarrow> b) = b" by auto}
   , @{lemma "\<And>b. (b \<longrightarrow> b) = True" by auto}
+  (* Computing Small Clause Normal Forms *)
+  (* FIXME: evaluate performance *)
+  , @{lemma "\<And>P. (\<forall>x. P) = P" by auto}
+  , @{lemma "\<And>P. (\<exists>x. P) = P" by auto}
   ]
 
 fun split_bool_simp_rule th =
