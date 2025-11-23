@@ -163,8 +163,8 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
       if b then
         let
           val abstract_over = Free ("z", domain_type (fastype_of P))
-          val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-            name = #1 (dest_Free abstract_over) | _ => false) P))
+          val () = if (not (exists_subterm (fn Free (name, _) =>
+            name = #1 (dest_Free abstract_over) | _ => false) P)) then () else error "outer_clausify: assertion failed"
           val choice_witness =
             JTerm.make_choice_witness abstract_over (P $ abstract_over)
           val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
@@ -816,6 +816,7 @@ fun simp_bool_outer_claus ctxt (c, i, JClause.Unknown) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_simp_outer_claus "OuterClaus"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c)
 
     val lit = JClause.lit_at i c
   in
@@ -1816,8 +1817,8 @@ fun impl_fa_ex_rw
           |> JClause.recompute_selected ctxt
 
         val abstract_over = Free ("z", fresh_typ)
-        val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-          name = #1 (dest_Free abstract_over) | _ => false) fresh_predicate))
+        val () = if (not (exists_subterm (fn Free (name, _) =>
+          name = #1 (dest_Free abstract_over) | _ => false) fresh_predicate)) then () else error "impl_fa_ex_rw: assertion failed"
         val choice_body = (is_forall ? HOLogic.mk_not) (fresh_predicate $ abstract_over)
         val choice_witness =
           JTerm.make_choice_witness abstract_over choice_body
@@ -1890,10 +1891,10 @@ fun infer_neg_ext ctxt (c, cpos, eligibility) =
   if null (Term.binder_types (fastype_of s)) then fail [] (K "not of function type") else
   let
     val x = Free ("x_neg_ext", domain_type (fastype_of s))
-    val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-      name = #1 (dest_Free x) | _ => false) s))
-    val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-      name = #1 (dest_Free x) | _ => false) s'))
+    val () = if (not (exists_subterm (fn Free (name, _) =>
+      name = #1 (dest_Free x) | _ => false) s)) then () else error "infer_neg_ext: assertion 1 failed"
+    val () = if (not (exists_subterm (fn Free (name, _) =>
+      name = #1 (dest_Free x) | _ => false) s')) then () else error "infer_neg_ext: assertion 2 failed"
     val choice_body = HOLogic.mk_not (HOLogic.mk_eq (s $ x, s' $ x))
     (* Note: FV(s\<noteq>s') = FV(SOME z. s z \<noteq> s' z), where FV gives the set of *schematic* variables. *)
     val choice_witness = JTerm.make_choice_witness x choice_body
@@ -1939,7 +1940,7 @@ fun infer_neg_cong_fun ctxt (c, cpos, eligibility) =
     val ((f, ss), (g, ts)) = apply2 strip_comb (f_ss, g_ts)
   in
   if not (f aconv g) then fail [] (K "unequal heads") else
-  let val () = \<^assert> (length ss = length ts) in
+  let val () = if (length ss = length ts) then () else error "infer_neg_cong_fun: assertion failed" in
   if not (exists JTerm.has_functional_type ss) then fail [] (K "no argument has functional type") else
   let
     val disj_pairs = map (uncurry JLit.mk_neq) (ss ~~ ts)
@@ -1975,7 +1976,7 @@ fun forward_simplify
   given_clause
 =
   let
-    val () = \<^assert> (if cheap then (* also *) forward else true)
+    val () = if (if cheap then (* also *) forward else true) then () else error "forward_simplify: assertion failed"
     (* tracing *)
     val do_trace =
       if forward then
@@ -2230,8 +2231,10 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
       get_backward_subsumed ctxt given_clause unsimplifiable_actives subsumption_index
     val unsimplifiable_actives = Slam_Clause_Set.delete_clauses subsumed_unsimplifiable_actives unsimplifiable_actives
     val archive = subsumed_unsimplifiable_actives @ archive
-    val () = \<^assert> (* FIXME remove *)
+    val () = if (* FIXME remove *)
       (subset (op=) (active_ids, map JClause.id archive @ map JClause.id (Slam_Clause_Set.dest unsimplifiable_actives)))
+      then ()
+      else error "backward_simplify: assertion failed"
   in
     (archive, simplified_actives, unsimplifiable_actives)
   end
