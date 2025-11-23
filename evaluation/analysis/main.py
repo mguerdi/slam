@@ -243,18 +243,18 @@ def summarize(calls, label, plot_cactus, plot_scatter, plot_hist, invocation):
     metis_success_slam_timeout = set(metis_success) - set(slam_success) - set(slam_fails)
     print(f"metis success, slam timeout: {str(len(metis_success_slam_timeout))}")
 
-    print("5 easiest (to metis) problems where slam fails:")
+    print("10 easiest (to metis) problems where slam fails:")
     easiest_slam_fails = sorted(
         list(metis_success_slam_fail),
         key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
-    )[:5]
+    )[:10]
     print("- " + "\n- ".join(easiest_slam_fails))
 
-    print("5 easiest (to metis) problems where slam times out:")
+    print("10 easiest (to metis) problems where slam times out:")
     easiest_slam_timeouts = sorted(
         list(metis_success_slam_timeout),
         key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
-    )[:5]
+    )[:10]
     print("- " + "\n- ".join(easiest_slam_timeouts))
 
     if plot_cactus:
