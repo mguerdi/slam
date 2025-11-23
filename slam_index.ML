@@ -240,26 +240,25 @@ sig
   val get_unifiables : term -> 'a T -> 'a list
   val get_instances : term -> 'a T -> 'a list
   val get_generalizations : term -> 'a T -> 'a list
-  val get_first_of_generalizations : ('a -> 'b option) -> term -> 'a T -> 'b option
+  val get_first_of_generalizations : term -> 'a T -> ('a -> 'b option) -> 'b option
   val insert_clause : JClause.T -> (int * JClause.full_pos) T -> (int * JClause.full_pos) T
   val insert_unit : JClause.T -> (int * JLit.lpos) T -> (int * JLit.lpos) T
 end;
 
-structure Term_Index : TERM_INDEX =
+(* Duper's defaults (?) *)
+val duper_default_feature_positions = [[], [1], [2]]
+(* Zipperposition's defaults (?) *)
+val zip_default_feature_positions = [[3], [1, 1], [4], [1, 2]]
+(* https://wwwlehre.dhbw-stuttgart.de/~sschulz/PAPERS/schulz_fp-index.pdf *)
+val e_fp6m_positions = [[], [1], [2], [3], [1, 1], [1, 2]]
+
+functor Make_Term_Index(val feature_positions: int list list) : TERM_INDEX =
 struct
   structure FPFeatureTable : TABLE = Table(type key = Slam_Fingerprint.feature val ord = Slam_Fingerprint.feature_ord);
   structure Term_Index_Trie = Slam_Trie(structure FeatureTable = FPFeatureTable);
 
   open Term_Index_Trie
   
-  (* Duper's defaults (?) *)
-  val duper_default_feature_positions = [[], [1], [2]]
-  (* Zipperposition's defaults (?) *)
-  val zip_default_feature_positions = [[3], [1, 1], [4], [1, 2]]
-  (* https://wwwlehre.dhbw-stuttgart.de/~sschulz/PAPERS/schulz_fp-index.pdf *)
-  val e_fp6m_positions = [[], [1], [2], [3], [1, 1], [1, 2]]
-
-  val feature_positions = e_fp6m_positions
 
   fun compute_key t = map (fn p => Slam_Fingerprint.feature_at [] p t) feature_positions
 
@@ -284,15 +283,13 @@ struct
       fold (Slam_Fingerprint.could_match o swap) key cons index []
     end
 
-  fun get_first_of_generalizations getter t index =
+  fun get_first_of_generalizations t index getter =
     let
       val key = compute_key t
     in
       get_first (Slam_Fingerprint.could_match o swap) getter key index
     end
 
-  (* FIXME: we want insert term and subterms *)
-  (* FIXME: for testing purposes only *)
   fun insert_term (t, x) index =
     let
       val key = compute_key t
@@ -324,6 +321,10 @@ struct
         index
     end
 end;
+
+structure Term_Index = Make_Term_Index(val feature_positions = e_fp6m_positions);
+
+structure Top_Symbol_Index = Make_Term_Index(val feature_positions = [[]]);
 
 signature SUBSUMPTION_INDEX =
 sig

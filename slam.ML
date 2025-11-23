@@ -162,9 +162,9 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
   | outer_clausify ctxt maxidx b (Const (@{const_name HOL.Ex}, T) $ P) c =
       if b then
         let
-          val abstract_over = Free ("z", domain_type (fastype_of P))
-          val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-            name = #1 (dest_Free abstract_over) | _ => false) P))
+          val abstract_over = Free ("outerclausifyabsvar002460177", domain_type (fastype_of P))
+          val () = if (not (exists_subterm (fn Free (name, _) =>
+            name = #1 (dest_Free abstract_over) | _ => false) P)) then () else error "outer_clausify: assertion failed"
           val choice_witness =
             JTerm.make_choice_witness abstract_over (P $ abstract_over)
           val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
@@ -437,6 +437,8 @@ fun forward_rewrite_bottom_up
         val subterm: term = JClause.subterm_at_full_pos c fp
       in
         Term_Index.get_first_of_generalizations
+          subterm
+          unit_index
           ( fn (active_unit_id, orientation) =>
               case Slam_Clause_Set.lookup active active_unit_id of
                 NONE => NONE
@@ -446,8 +448,6 @@ fun forward_rewrite_bottom_up
                     (active_unit, orientation, JClause.Unknown)
                     (c, fp, JClause.Unknown)
           )
-          subterm
-          unit_index
       end
     fun repeat_forward_rewrite_subterm countdown fp (state as { clause, archive }) =
       if countdown < 0
@@ -816,6 +816,7 @@ fun simp_bool_outer_claus ctxt (c, i, JClause.Unknown) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_simp_outer_claus "OuterClaus"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt c)
 
     val lit = JClause.lit_at i c
   in
@@ -1457,31 +1458,42 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   end
   end
 
-val bool_simp_rules =
-  [ (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
+val bool_simp_var_lemmas =
+  [
+    @{lemma "\<And>b. (\<not>\<not>b) = b" by auto}
+    (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
     Effective Implementation Leo-III *)
-    @{lemma "\<And>b. (b \<or> b) = b" by auto}
+  , @{lemma "\<And>b. (b \<or> b) = b" by auto}
   , @{lemma "\<And>b. (b \<and> b) = b" by auto}
   , @{lemma "\<And>b. (\<not>b \<or> b) = True" by auto}
+  , @{lemma "\<And>b. (b \<or> \<not>b) = True" by auto}
   , @{lemma "\<And>b. (\<not>b \<and> b) = False" by auto}
-  , @{lemma "\<And>b. (b \<or> \<top>) = True" by auto}
-  , @{lemma "\<And>b. (b \<and> \<top>) = b" by auto}
+  , @{lemma "\<And>b. (b \<and> \<not>b) = False" by auto}
+  , @{lemma "\<And>b. (b \<or> True) = True" by auto}
+  , @{lemma "\<And>b. (True \<or> b) = True" by auto}
+  , @{lemma "\<And>b. (b \<and> True) = b" by auto}
+  , @{lemma "\<And>b. (True \<and> b) = b" by auto}
   , @{lemma "\<And>b. (b \<or> False) = b" by auto}
+  , @{lemma "\<And>b. (False \<or> b) = b" by auto}
   , @{lemma "\<And>b. (b \<and> False) = False" by auto}
+  , @{lemma "\<And>b. (False \<and> b) = False" by auto}
   , @{lemma "\<And>t. (t = t) = True" by auto}
   , @{lemma "\<And>t. (t \<noteq> t) = False" by auto}
   , @{lemma "\<And>b. (b = True) = b" by auto}
+  , @{lemma "\<And>b. (True = b) = b" by auto}
   , @{lemma "\<And>b. (b = False) = (\<not> b)" by auto}
-  , @{lemma "(\<not> False) = True" by auto}
-  , @{lemma "(\<not> True) = False" by auto}
+  , @{lemma "\<And>b. (False = b) = (\<not> b)" by auto}
     (* BoolSimp, Superposition with First-Class Booleans and Inprocessing Clausification *)
   , @{lemma "\<And>b. (True \<longrightarrow> b) = b" by auto}
   , @{lemma "\<And>b. (False \<longrightarrow> b) = True" by auto}
-  , @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto}
   , @{lemma "\<And>b. (b \<longrightarrow> False) = (\<not> b)" by auto}
   , @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto}
   , @{lemma "\<And>b. (\<not> b \<longrightarrow> b) = b" by auto}
   , @{lemma "\<And>b. (b \<longrightarrow> b) = True" by auto}
+  (* Computing Small Clause Normal Forms *)
+  (* FIXME: evaluate performance *)
+  , @{lemma "\<And>P. (\<forall>x. P) = P" by auto}
+  , @{lemma "\<And>P. (\<exists>x. P) = P" by auto}
   ]
 
 fun split_bool_simp_rule th =
@@ -1489,6 +1501,13 @@ fun split_bool_simp_rule th =
   |> Thm.prop_of
   |> HOLogic.dest_Trueprop
   |> HOLogic.dest_eq
+
+val bool_simp_rules =
+  bool_rw_non_var_rules true @ map split_bool_simp_rule bool_simp_var_lemmas
+
+val bool_simp_rules_index =
+  Top_Symbol_Index.empty
+  |> fold (fn (lhs, rhs) => Top_Symbol_Index.insert_term (lhs, (lhs, rhs))) bool_simp_rules
 
 (* FIXME: duplication with impl_infer_bool_rw_eq_neq_fa_ex_hoist *)
 fun impl_simp_bool_rw
@@ -1585,26 +1604,13 @@ fun bool_simp
       let
         val subterm: term = JClause.subterm_at_full_pos c fp
       in
-        (* FIXME: pre-filter rw rules by top-symbol of subterm *)
-        bool_rw_non_var_rules true @ map split_bool_simp_rule bool_simp_rules
-        |> get_first (fn (lhs, rhs) =>
-          impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
-          |> Option.map (pair (lhs, rhs))
-        )
-        (*
-        Term_Index.get_first_of_generalizations
-          ( fn (active_unit_id, orientation) =>
-              case Slam_Clause_Set.lookup active active_unit_id of
-                NONE => NONE
-              | SOME active_unit =>
-                  impl_simp_rewrite_lits
-                    ctxt
-                    (active_unit, orientation, JClause.Unknown)
-                    (c, fp, JClause.Unknown)
-          )
+        Top_Symbol_Index.get_first_of_generalizations
           subterm
-          unit_index
-          *)
+          bool_simp_rules_index
+          ( fn (lhs, rhs) =>
+              impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
+              |> Option.map (pair (lhs, rhs))
+          )
       end
     fun repeat_simp_subterm countdown fp (state as { clause, archive }) =
       if countdown < 0
@@ -1815,9 +1821,9 @@ fun impl_fa_ex_rw
           |> JClause.norm_beta_eta_qeta_env ctxt unifier
           |> JClause.recompute_selected ctxt
 
-        val abstract_over = Free ("z", fresh_typ)
-        val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-          name = #1 (dest_Free abstract_over) | _ => false) fresh_predicate))
+        val abstract_over = Free ("implfaexrwabsvar002460177", fresh_typ)
+        val () = if (not (exists_subterm (fn Free (name, _) =>
+          name = #1 (dest_Free abstract_over) | _ => false) fresh_predicate)) then () else error "impl_fa_ex_rw: assertion failed"
         val choice_body = (is_forall ? HOLogic.mk_not) (fresh_predicate $ abstract_over)
         val choice_witness =
           JTerm.make_choice_witness abstract_over choice_body
@@ -1890,10 +1896,10 @@ fun infer_neg_ext ctxt (c, cpos, eligibility) =
   if null (Term.binder_types (fastype_of s)) then fail [] (K "not of function type") else
   let
     val x = Free ("x_neg_ext", domain_type (fastype_of s))
-    val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-      name = #1 (dest_Free x) | _ => false) s))
-    val () = \<^assert> (not (exists_subterm (fn Free (name, _) =>
-      name = #1 (dest_Free x) | _ => false) s'))
+    val () = if (not (exists_subterm (fn Free (name, _) =>
+      name = #1 (dest_Free x) | _ => false) s)) then () else error "infer_neg_ext: assertion 1 failed"
+    val () = if (not (exists_subterm (fn Free (name, _) =>
+      name = #1 (dest_Free x) | _ => false) s')) then () else error "infer_neg_ext: assertion 2 failed"
     val choice_body = HOLogic.mk_not (HOLogic.mk_eq (s $ x, s' $ x))
     (* Note: FV(s\<noteq>s') = FV(SOME z. s z \<noteq> s' z), where FV gives the set of *schematic* variables. *)
     val choice_witness = JTerm.make_choice_witness x choice_body
@@ -1939,7 +1945,7 @@ fun infer_neg_cong_fun ctxt (c, cpos, eligibility) =
     val ((f, ss), (g, ts)) = apply2 strip_comb (f_ss, g_ts)
   in
   if not (f aconv g) then fail [] (K "unequal heads") else
-  let val () = \<^assert> (length ss = length ts) in
+  let val () = if (length ss = length ts) then () else error "infer_neg_cong_fun: assertion failed" in
   if not (exists JTerm.has_functional_type ss) then fail [] (K "no argument has functional type") else
   let
     val disj_pairs = map (uncurry JLit.mk_neq) (ss ~~ ts)
@@ -1975,7 +1981,7 @@ fun forward_simplify
   given_clause
 =
   let
-    val () = \<^assert> (if cheap then (* also *) forward else true)
+    val () = if (if cheap then (* also *) forward else true) then () else error "forward_simplify: assertion failed"
     (* tracing *)
     val do_trace =
       if forward then
@@ -2230,8 +2236,10 @@ fun backward_simplify ctxt active unit_index green_index subsumption_index given
       get_backward_subsumed ctxt given_clause unsimplifiable_actives subsumption_index
     val unsimplifiable_actives = Slam_Clause_Set.delete_clauses subsumed_unsimplifiable_actives unsimplifiable_actives
     val archive = subsumed_unsimplifiable_actives @ archive
-    val () = \<^assert> (* FIXME remove *)
+    val () = if (* FIXME remove *)
       (subset (op=) (active_ids, map JClause.id archive @ map JClause.id (Slam_Clause_Set.dest unsimplifiable_actives)))
+      then ()
+      else error "backward_simplify: assertion failed"
   in
     (archive, simplified_actives, unsimplifiable_actives)
   end
