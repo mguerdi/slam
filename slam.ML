@@ -1494,6 +1494,9 @@ val bool_simp_var_lemmas =
   (* FIXME: evaluate performance *)
   , @{lemma "\<And>P. (\<forall>x. P) = P" by auto}
   , @{lemma "\<And>P. (\<exists>x. P) = P" by auto}
+  , @{lemma "\<And>s t. (if True then s else t) = s" by auto}
+  , @{lemma "\<And>s t. (if False then s else t) = t" by auto}
+  , @{lemma "\<And>b s. (if b then s else s) = s" by auto}
   ]
 
 fun split_bool_simp_rule th =
@@ -1598,7 +1601,7 @@ fun bool_simp
   : { clause : JClause.T, archive : JClause.T list }
 =
   let
-    val tracer = mk_tracer ctxt Slam_Common.trace_msg_simp_bool_rw "BoolSimp"
+    val tracer = mk_tracer ctxt Slam_Common.trace_msg_bool_simp "BoolSimp"
     val () = tracer (fn () => "start: " ^ JClause.pretty_clause ctxt clause)
     fun simp_subterm fp c : ((term * term) * (Envir.env * JClause.T)) option =
       (* invariant: fp is a valid green full pos for c *)
@@ -2094,7 +2097,10 @@ fun forward_simplify
       end
 
     (* FIXME: bool_simp and forward_rewrite should be part of the simplify fixed-point loop *)
-    val { clause = given_clause, archive = bool_simp_archive } = bool_simp ctxt given_clause
+    val { clause = given_clause, archive = bool_simp_archive } =
+      if not all_disabled orelse Config.get ctxt Slam_Common.rule_bool_simp
+        then bool_simp ctxt given_clause
+        else { clause = given_clause, archive = [] }
 
     val { clause = given_clause, archive = rewriting_archive } =
       if forward

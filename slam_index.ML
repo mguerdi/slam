@@ -52,24 +52,14 @@ fun is_symbol (DB _) = true
   | is_symbol (FOConst _) = true
   | is_symbol _ = false
 
-(* In the sense of the translation for fingerprint indexing, i.e. if the head is
-a variable or the head's type's return type (domain) is a TVar
-   Q: What if it contains a TVar? Why is that okay?
-   A: Probably because only function types can lead to eta expansion?
-   Q: Okay, but what if the return type is a type synonym for a function type?
-   A: ??? (not possible?)
-*)
-fun return_is_tvar T = is_TVar (body_type T)
-
-(* FIXME: figure out if considering TVar return types as variables is necessary.
-We're not doing \<eta>-expansion so it might not be *)
 (* regarding \<eta> long/short:
 https://github.com/leanprover-community/duper/blob/ff6e7e5aadc6f9b3080fa3454d993a296d7484c9/Duper/Fingerprint.lean#L130
 I'm not sure if I believe this. *)
 fun is_var_head _ (Var _) = true
-  | is_var_head Ts (Bound i) = return_is_tvar (nth Ts i)
+  | is_var_head _ (Bound i) = false
   | is_var_head _ (Abs _) = error "abs head encountered (not beta-normal)"
-  | is_var_head _ t = return_is_tvar (fastype_of t)
+  | is_var_head _ (_ $ _) = error "app head encountered (not a head)"
+  | is_var_head _ t = false
 
 fun feature_of (Free (name, _)) = FOFree name
   | feature_of (Const (name, _)) = FOConst name
@@ -169,6 +159,7 @@ sig
   val insert : (key * 'a) -> 'a T -> 'a T
   val fold : (FeatureTable.key * FeatureTable.key -> bool) -> key -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
   val get_first : (FeatureTable.key * FeatureTable.key -> bool) -> ('a -> 'b option) -> key -> 'a T -> 'b option
+  val pretty : (FeatureTable.key -> Pretty.T) -> ('a -> Pretty.T) -> 'a T -> string
 end;
 
 (* feature is
@@ -183,6 +174,31 @@ struct
   datatype 'a T =
     Leaf of 'a list
   | Node of ('a T) FeatureTable.table
+
+  fun pretty' (pk : FeatureTable.key -> Pretty.T) (pa : 'a -> Pretty.T) : 'a T -> Pretty.T =
+    let
+      fun go (Leaf xs) = Pretty.list "[" "]" (map pa xs)
+        | go (Node tab) = Pretty.block [ Pretty.str "Node", go_tab tab ]
+      and go_tab tab =
+        tab
+        |> FeatureTable.dest
+        |> map (fn (k, v) => Pretty.list "(" ")" [pk k, go v])
+        |> Pretty.list "{" "}"
+    in
+      go
+    end
+
+  fun pretty (pk : FeatureTable.key -> Pretty.T) (pa : 'a -> Pretty.T) : 'a T -> string =
+    Pretty.string_of o pretty' pk pa
+
+    (*
+    error "pretty unimplemented"
+    Pretty.block
+      [ Pretty.str (@{make_string} (#id c) ^ ":")
+      , Syntax.pretty_term ctxt (term_of c)
+      , Pretty.str (" (" ^ (Slam_Log.name_of inference) ^ " " ^ premises ^ ")")
+      ]
+      *)
 
   val empty = Node FeatureTable.empty
 
@@ -216,7 +232,7 @@ struct
     | fold _ [] _ (Node _) _ = error "fold: key too short"
     | fold _ (_::_) _ (Leaf _) _ = error "fold: key too long"
 
-  fun get_first _ getter [] (Leaf xs) = Library.get_first getter xs
+  fun get_first _ getter ([] : FeatureTable.key list) (Leaf xs) = Library.get_first getter xs
     | get_first compat getter (k::ks) (Node children) =
         FeatureTable.get_first
           ( fn (k', child) =>
@@ -324,7 +340,18 @@ end;
 
 structure Term_Index = Make_Term_Index(val feature_positions = e_fp6m_positions);
 
-structure Top_Symbol_Index = Make_Term_Index(val feature_positions = [[]]);
+structure Top_Symbol_Index =
+struct
+  structure inner = Make_Term_Index(val feature_positions = [[]])
+  open inner
+
+  fun pretty_index ctxt =
+    pretty
+      (Pretty.str o @{make_string})
+      ( apply2 (Slam_Common.pretty_term' ctxt)
+        #> (fn (lhs, rhs) => Pretty.block [lhs, Pretty.str " \<mapsto> ", rhs])
+      )
+end
 
 signature SUBSUMPTION_INDEX =
 sig
