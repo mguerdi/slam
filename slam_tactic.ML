@@ -61,17 +61,6 @@ fun slam_tac options ctxt goal_term ths i st0 =
         else raise e
     fun contains_const name t =
       fold_aterms (fn (Const (name', _)) => (fn b => b orelse name = name') | _ => I) t false
-    (* Sledgehammer does not know that slam requires lemmas characterizing if-then-else, because
-    metis doesn't need them (thanks to the Meson clausifier). *)
-    val extra_lemmas =
-      if Config.get ctxt Slam_Common.presimplify then
-        if contains_const @{const_name "HOL.If"} (Thm.prop_of st0)
-          then @{thms "HOL.if_True" "HOL.if_False"}
-          else []
-        else []
-    val () = if not (null extra_lemmas) then Slam_Common.trace_msg ctxt (fn () =>
-      "adding extra lemmas:\n" ^ cat_lines (map (Thm.string_of_thm ctxt) ths)) else ()
-    val ths = ths @ extra_lemmas
     val atomized_ths = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) ths
     fun tac ctxt' i' =
       (* FIXME: why are we doing this??? *)

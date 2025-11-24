@@ -1494,6 +1494,9 @@ val bool_simp_var_lemmas =
   (* FIXME: evaluate performance *)
   , @{lemma "\<And>P. (\<forall>x. P) = P" by auto}
   , @{lemma "\<And>P. (\<exists>x. P) = P" by auto}
+  , @{lemma "\<And>s t. (if True then s else t) = s" by auto}
+  , @{lemma "\<And>s t. (if False then s else t) = t" by auto}
+  , @{lemma "\<And>b s. (if b then s else s) = s" by auto}
   ]
 
 fun split_bool_simp_rule th =
