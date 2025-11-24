@@ -40,7 +40,7 @@ sig
   val trace_positive_simplify_reflect : bool Config.T
   val trace_negative_simplify_reflect : bool Config.T
   val trace_simp_outer_claus : bool Config.T
-  val trace_simp_bool_rw : bool Config.T
+  val trace_bool_simp : bool Config.T
   val trace_simp_false_elim : bool Config.T
   val trace_syntactic_tautology_deletion1 : bool Config.T
   val trace_syntactic_tautology_deletion2 : bool Config.T
@@ -85,7 +85,7 @@ sig
   val trace_msg_positive_simplify_reflect : Proof.context -> (unit -> string) -> unit
   val trace_msg_negative_simplify_reflect : Proof.context -> (unit -> string) -> unit
   val trace_msg_simp_outer_claus : Proof.context -> (unit -> string) -> unit
-  val trace_msg_simp_bool_rw : Proof.context -> (unit -> string) -> unit
+  val trace_msg_bool_simp : Proof.context -> (unit -> string) -> unit
   val trace_msg_simp_false_elim : Proof.context -> (unit -> string) -> unit
   (*
   val trace_msg_syntactic_tautology_deletion1 : Proof.context -> (unit -> string) -> unit
@@ -148,7 +148,7 @@ sig
   val rule_positive_simplify_reflect : bool Config.T
   val rule_negative_simplify_reflect : bool Config.T
   val rule_simp_outer_claus : bool Config.T
-  val rule_simp_bool_rw : bool Config.T
+  val rule_bool_simp : bool Config.T
   val rule_simp_false_elim : bool Config.T
   val rule_syntactic_tautology_deletion1 : bool Config.T
   val rule_syntactic_tautology_deletion2 : bool Config.T
@@ -243,7 +243,7 @@ val trace_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_r
 val trace_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_trace_positive_simplify_reflect\<close> (K false)
 val trace_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_trace_negative_simplify_reflect\<close> (K false)
 val trace_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>slam_trace_simp_outer_claus\<close> (K false)
-val trace_simp_bool_rw = Attrib.setup_config_bool \<^binding>\<open>slam_trace_simp_bool_rw\<close> (K false)
+val trace_bool_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_bool_simp\<close> (K false)
 val trace_simp_false_elim = Attrib.setup_config_bool \<^binding>\<open>slam_trace_simp_false_elim\<close> (K false)
 val trace_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>slam_trace_syntactic_tautology_deletion1\<close> (K false)
 val trace_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>slam_trace_syntactic_tautology_deletion2\<close> (K false)
@@ -297,7 +297,7 @@ fun trace_msg_rewrite_lits ctxt msg = if Config.get ctxt trace_rewrite_lits then
 fun trace_msg_positive_simplify_reflect ctxt msg = if Config.get ctxt trace_positive_simplify_reflect then trace_msg ctxt msg else ();
 fun trace_msg_negative_simplify_reflect ctxt msg = if Config.get ctxt trace_negative_simplify_reflect then trace_msg ctxt msg else ();
 fun trace_msg_simp_outer_claus ctxt msg = if Config.get ctxt trace_simp_outer_claus then trace_msg ctxt msg else ();
-fun trace_msg_simp_bool_rw ctxt msg = if Config.get ctxt trace_simp_bool_rw then trace_msg ctxt msg else ();
+fun trace_msg_bool_simp ctxt msg = if Config.get ctxt trace_bool_simp then trace_msg ctxt msg else ();
 fun trace_msg_simp_false_elim ctxt msg = if Config.get ctxt trace_simp_false_elim then trace_msg ctxt msg else ();
 (*
 fun trace_msg_syntactic_tautology_deletion1 ctxt msg = if Config.get ctxt trace_syntactic_tautology_deletion1 then trace_msg ctxt msg else ();
@@ -367,7 +367,7 @@ val rule_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_rew
 val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_positive_simplify_reflect\<close> (K rule_default)
 val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_negative_simplify_reflect\<close> (K rule_default)
 val rule_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>slam_rule_simp_outer_claus\<close> (K rule_default)
-val rule_simp_bool_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_simp_bool_rw\<close> (K rule_default)
+val rule_bool_simp = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_simp\<close> (K rule_default)
 val rule_simp_false_elim = Attrib.setup_config_bool \<^binding>\<open>slam_rule_simp_false_elim\<close> (K rule_default)
 val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>slam_rule_syntactic_tautology_deletion1\<close> (K rule_default)
 val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>slam_rule_syntactic_tautology_deletion2\<close> (K rule_default)
