@@ -169,6 +169,7 @@ sig
   val insert : (key * 'a) -> 'a T -> 'a T
   val fold : (FeatureTable.key * FeatureTable.key -> bool) -> key -> ('a -> 'b -> 'b) -> 'a T -> 'b -> 'b
   val get_first : (FeatureTable.key * FeatureTable.key -> bool) -> ('a -> 'b option) -> key -> 'a T -> 'b option
+  val pretty : (FeatureTable.key -> Pretty.T) -> ('a -> Pretty.T) -> 'a T -> string
 end;
 
 (* feature is
@@ -183,6 +184,31 @@ struct
   datatype 'a T =
     Leaf of 'a list
   | Node of ('a T) FeatureTable.table
+
+  fun pretty' (pk : FeatureTable.key -> Pretty.T) (pa : 'a -> Pretty.T) : 'a T -> Pretty.T =
+    let
+      fun go (Leaf xs) = Pretty.list "[" "]" (map pa xs)
+        | go (Node tab) = Pretty.block [ Pretty.str "Node", go_tab tab ]
+      and go_tab tab =
+        tab
+        |> FeatureTable.dest
+        |> map (fn (k, v) => Pretty.list "(" ")" [pk k, go v])
+        |> Pretty.list "{" "}"
+    in
+      go
+    end
+
+  fun pretty (pk : FeatureTable.key -> Pretty.T) (pa : 'a -> Pretty.T) : 'a T -> string =
+    Pretty.string_of o pretty' pk pa
+
+    (*
+    error "pretty unimplemented"
+    Pretty.block
+      [ Pretty.str (@{make_string} (#id c) ^ ":")
+      , Syntax.pretty_term ctxt (term_of c)
+      , Pretty.str (" (" ^ (Slam_Log.name_of inference) ^ " " ^ premises ^ ")")
+      ]
+      *)
 
   val empty = Node FeatureTable.empty
 
@@ -216,7 +242,7 @@ struct
     | fold _ [] _ (Node _) _ = error "fold: key too short"
     | fold _ (_::_) _ (Leaf _) _ = error "fold: key too long"
 
-  fun get_first _ getter [] (Leaf xs) = Library.get_first getter xs
+  fun get_first _ getter ([] : FeatureTable.key list) (Leaf xs) = Library.get_first getter xs
     | get_first compat getter (k::ks) (Node children) =
         FeatureTable.get_first
           ( fn (k', child) =>
@@ -324,7 +350,18 @@ end;
 
 structure Term_Index = Make_Term_Index(val feature_positions = e_fp6m_positions);
 
-structure Top_Symbol_Index = Make_Term_Index(val feature_positions = [[]]);
+structure Top_Symbol_Index =
+struct
+  structure inner = Make_Term_Index(val feature_positions = [[]])
+  open inner
+
+  fun pretty_index ctxt =
+    pretty
+      (Pretty.str o @{make_string})
+      ( apply2 (Slam_Common.pretty_term' ctxt)
+        #> (fn (lhs, rhs) => Pretty.block [lhs, Pretty.str " \<mapsto> ", rhs])
+      )
+end
 
 signature SUBSUMPTION_INDEX =
 sig
