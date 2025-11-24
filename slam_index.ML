@@ -52,24 +52,14 @@ fun is_symbol (DB _) = true
   | is_symbol (FOConst _) = true
   | is_symbol _ = false
 
-(* In the sense of the translation for fingerprint indexing, i.e. if the head is
-a variable or the head's type's return type (domain) is a TVar
-   Q: What if it contains a TVar? Why is that okay?
-   A: Probably because only function types can lead to eta expansion?
-   Q: Okay, but what if the return type is a type synonym for a function type?
-   A: ??? (not possible?)
-*)
-fun return_is_tvar T = is_TVar (body_type T)
-
-(* FIXME: figure out if considering TVar return types as variables is necessary.
-We're not doing \<eta>-expansion so it might not be *)
 (* regarding \<eta> long/short:
 https://github.com/leanprover-community/duper/blob/ff6e7e5aadc6f9b3080fa3454d993a296d7484c9/Duper/Fingerprint.lean#L130
 I'm not sure if I believe this. *)
 fun is_var_head _ (Var _) = true
-  | is_var_head Ts (Bound i) = return_is_tvar (nth Ts i)
+  | is_var_head _ (Bound i) = false
   | is_var_head _ (Abs _) = error "abs head encountered (not beta-normal)"
-  | is_var_head _ t = return_is_tvar (fastype_of t)
+  | is_var_head _ (_ $ _) = error "app head encountered (not a head)"
+  | is_var_head _ t = false
 
 fun feature_of (Free (name, _)) = FOFree name
   | feature_of (Const (name, _)) = FOConst name
