@@ -180,6 +180,8 @@ sig
   (* These cases would normally be handled by FluidSup *)
   val sup_into_fluid : bool Config.T
   val sup_into_deeply_occuring : bool Config.T
+  val sup_into_non_eligible : bool Config.T
+  val sup_from_non_eligible : bool Config.T
 
   val unify_search_bound : int Config.T
   val unify_timeout_ms : int Config.T
@@ -408,6 +410,9 @@ fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get c
 val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_fluid\<close> (K true)
 
 val sup_into_deeply_occuring = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_deeply_occuring\<close> (K true)
+
+val sup_into_non_eligible = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_non_eligible\<close> (K false)
+val sup_from_non_eligible = Attrib.setup_config_bool \<^binding>\<open>slam_sup_from_non_eligible\<close> (K false)
 
 val forward_rewrite_countdown = Attrib.setup_config_int \<^binding>\<open>slam_forward_rewrite_countdown\<close> (K 10)
 
