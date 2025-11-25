@@ -945,7 +945,7 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
             (c, d)
             |> apply2 (JClause.norm_beta_eta_qeta_env ctxt unifier)
             |> apply2 (JClause.recompute_selected ctxt)
-          val u_eligible = JClause.is_eligible_full_pos c (u_pos, u_eligibility)
+          fun u_eligible () = JClause.is_eligible_full_pos c (u_pos, u_eligibility)
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
           fun tt'_eligible () = JClause.is_eligible_cpos d (cp, tt'_eligibility)
           (* val _ = writeln ("c_comp_d " ^ @{make_string} c_comp_d) *)
@@ -961,9 +961,9 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
           if Partial_Ord.is_less_equal (t_cmp_t' ()) then
             fail NONE (fn () => "t\<sigma> \<preceq> t'\<sigma>: " ^
               Slam_Common.pretty_term ctxt t ^ " \<preceq> " ^ Slam_Common.pretty_term ctxt t') else (* 5 *)
-          if not u_eligible then fail NONE (K "u not eligible") else (* 6 *)
+          if not (Config.get ctxt Slam_Common.sup_into_non_eligible) andalso not (u_eligible ()) then fail NONE (fn () => ("u not eligible in " ^ JClause.pretty_subterm ctxt c u_pos)) else (* 6 *)
           (* according to the thesis, side condition 7 is skipped for performance reasons *)
-          if not (tt'_eligible ()) then fail NONE (fn () => ("t \<approx> t' not eligible in" ^ JClause.pretty_clause ctxt d)) else (* 8 *)
+          if not (Config.get ctxt Slam_Common.sup_from_non_eligible) andalso not (tt'_eligible ()) then fail NONE (fn () => ("t \<approx> t' not eligible in" ^ JClause.pretty_clause ctxt d)) else (* 8 *)
           (* FXIME 9. 10. *)
           JClause.combine ctxt (d' ()) (ct' ())
           |> JClause.norm_negative_predicate_literals ctxt
@@ -996,22 +996,36 @@ fun sup_given_into_active
   let
     (* the equality literals that are being eliminated *)
     val ts_in_given_clause : (term * ((JLit.lpos * JClause.cpos) * JClause.eligibility)) list =
-      (Slam_Common.cartesian_product
-        [JLit.Left, JLit.Right]
-        (JClause.potentially_eligible_positive_cposs_of given_clause)
-      )
-      |> map (fn (lp, (cp, eligibility)) =>
-          (JClause.subterm_at_full_pos given_clause ([], lp, cp), ((lp, cp), eligibility))
-      )
+      if Config.get ctxt Slam_Common.sup_from_non_eligible
+        then
+          (Slam_Common.cartesian_product
+            [JLit.Left, JLit.Right]
+            (JClause.positive_cposs_of given_clause)
+          )
+          |> map (fn (lp, cp) =>
+              (JClause.subterm_at_full_pos given_clause ([], lp, cp), ((lp, cp), JClause.Unknown))
+          )
+        else
+          (Slam_Common.cartesian_product
+            [JLit.Left, JLit.Right]
+            (JClause.potentially_eligible_positive_cposs_of given_clause)
+          )
+          |> map (fn (lp, (cp, eligibility)) =>
+              (JClause.subterm_at_full_pos given_clause ([], lp, cp), ((lp, cp), eligibility))
+          )
     fun candidate_green_subterms t : (JClause.T * JClause.full_pos * JClause.eligibility) list =
       Term_Index.get_unifiables t green_index
       (* FIXME: replace this by `map`, once we delete from the index. *)
       |> map_filter (fn (id, fp) =>
         case Slam_Clause_Set.lookup active id of
           SOME active_clause =>
-            (case JClause.is_potentially_eligible_full_pos active_clause fp of
-              SOME eligibility => SOME (active_clause, fp, eligibility)
-            | NONE => NONE)
+            if Config.get ctxt Slam_Common.sup_into_non_eligible
+              then
+                SOME (active_clause, fp, JClause.Unknown)
+              else
+                (case JClause.is_potentially_eligible_full_pos active_clause fp of
+                  SOME eligibility => SOME (active_clause, fp, eligibility)
+                | NONE => NONE)
           | NONE => NONE)
   in
     ts_in_given_clause
@@ -1031,8 +1045,13 @@ fun sup_active_into_given
 =
   let
     val green_subterms_given : (term * JClause.full_pos * JClause.eligibility) list =
-      JClause.potentially_eligible_green_full_poss_of given_clause
-      |> map (fn (fp, eligibility) => (JClause.subterm_at_full_pos given_clause fp, fp, eligibility))
+      if Config.get ctxt Slam_Common.sup_into_non_eligible
+        then
+          JClause.green_full_poss_of given_clause
+          |> map (fn fp => (JClause.subterm_at_full_pos given_clause fp, fp, JClause.Unknown))
+        else
+          JClause.potentially_eligible_green_full_poss_of given_clause
+          |> map (fn (fp, eligibility) => (JClause.subterm_at_full_pos given_clause fp, fp, eligibility))
     fun candidate_active_lits t : (JClause.T * (JLit.lpos * JClause.cpos) * JClause.eligibility) list =
       Term_Index.get_unifiables t green_index
       |> map_filter (fn (id, fp) =>
@@ -1040,9 +1059,13 @@ fun sup_active_into_given
              ([], lp, cp) =>
                (case Slam_Clause_Set.lookup active id of
                  SOME active_clause =>
-                   (case JClause.is_potentially_eligible_positive_cpos active_clause cp of
-                     SOME eligibility => SOME (active_clause, (lp, cp), eligibility)
-                   | NONE => NONE)
+                    if Config.get ctxt Slam_Common.sup_from_non_eligible
+                      then
+                        SOME (active_clause, (lp, cp), JClause.Unknown)
+                      else
+                        (case JClause.is_potentially_eligible_positive_cpos active_clause cp of
+                          SOME eligibility => SOME (active_clause, (lp, cp), eligibility)
+                        | NONE => NONE)
                  | NONE => NONE)
            | _ => NONE (* only want top-level terms *)
          )
