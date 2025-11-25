@@ -1641,7 +1641,7 @@ fun bool_simp
     fun repeat_simp_subterm countdown fp (state as { clause, archive }) =
       if countdown < 0
         then
-          ( warning "bool_simp: more than 1000 simplification steps in subterm";
+          ( warning "bool_simp: more than 10 simplification steps in subterm";
             { clause = clause, archive = archive }
           )
         else
@@ -1664,7 +1664,7 @@ fun bool_simp
       JClause.fold_postorder_with_green_full_pos (fn fp => fn _ => f fp)
   in
     fold_postorder_over_green_full_pos
-      (repeat_simp_subterm 1000)
+      (repeat_simp_subterm 10)
       clause
       { clause = clause, archive = [] }
   end
