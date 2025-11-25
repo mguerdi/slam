@@ -136,7 +136,7 @@ type simp_clause = int * JClause.T
 *)
 
 fun simplify only_first ctxt simp_funs clause =
-  let val countdown = 10 in
+  let val countdown = 100 in
   if only_first
     then simplify_first ctxt simp_funs [clause] [] countdown
     else simplify_all ctxt simp_funs countdown clause
