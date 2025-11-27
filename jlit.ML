@@ -283,7 +283,7 @@ fun as_oriented_for_pretty lit lp =
     val (s, t, b) = dest (orient lp lit)
     val a = fastype_of s
   in
-    \<^instantiate>\<open>'a=a and s and t in term \<open><s \<approx>> t>\<close>\<close>
+    \<^instantiate>\<open>'a=a and s and t in term \<open>\<langle><\<lblot>s \<approx>~-> t\<rblot>>\<rangle>\<close>\<close>
   end
 
 (* lp points to the lhs of the rewrite rule *)
