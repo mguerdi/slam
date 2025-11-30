@@ -35,6 +35,6 @@ RUN mkdir mirabelle_output
 # create mountpoint for sledgehammer-cache volume
 RUN mkdir sledgehammer_cache
 
-COPY ./evaluation/slam_patched/replay_mirabelle_sledgehammer_session.sh ./
+COPY --chown=isabelle:isabelle ./evaluation/slam_patched/replay_mirabelle_sledgehammer_session.sh ./
 RUN chmod u+x ./replay_mirabelle_sledgehammer_session.sh
 ENTRYPOINT ["./replay_mirabelle_sledgehammer_session.sh"]
