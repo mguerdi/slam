@@ -34,6 +34,16 @@ def is_replay_line(line):
 #   result:                                                                                                           (34 ms)
 
 
+# "Session"
+def session_of_goal(goal):
+    return goal.split(".")[0]
+
+
+# "Session.Theory"
+def theory_of_goal(goal):
+    return ".".join(goal.split(".")[1:])
+
+
 @total_ordering
 class ResultKind(Enum):
     # don't change: smaller is better
@@ -108,13 +118,16 @@ class Result:
             return self.kind < other.kind
 
 
-def parse_file(filename, timeout_ms):
+def parse_file(filename, timeout_ms, only_theory, only_session):
     with open(filename) as f:
         s = f.read()
     lines = [
         squeezed for line in s.strip().split("\n") if is_replay_line(squeezed := squeeze(line))
     ]
     # print("\n".join(lines[:20]))
+
+    excluded_not_from_theory_or_session = 0
+
     calls = []
     for line in lines:
         # See "Terminology" above.
@@ -142,7 +155,16 @@ def parse_file(filename, timeout_ms):
         else:
             raise RuntimeError("Line has neither slam nor metis:\n" + line)
         result = Result("(" + (tail.split("(")[-1]), timeout_ms)
-        calls.append({"goal": goal, "method": method, "command": command, "facts": facts, "result": result, "dubious_goal": None})
+        if only_theory and theory_of_goal(goal) != only_theory:
+            excluded_not_from_theory_or_session += 1
+            pass
+        if only_session and session_of_goal(goal) != only_session:
+            excluded_not_from_theory_or_session += 1
+            pass
+        else:
+            calls.append({"goal": goal, "method": method, "command": command, "facts": facts, "result": result, "dubious_goal": None})
+
+    print("EXCLUDED", excluded_not_from_theory_or_session, "GOALS NOT FROM SPECIFIED THEORY OR SESSION")
     return calls
 
 
@@ -576,7 +598,22 @@ if __name__ == "__main__":
         required=True,
         help="Exclude calls where metis and slam were invoked with different sets of lemmas. Possible values: none, all, slam_better, slam_better_and_metis_dubious."
     )
+    parser.add_argument(
+        "-th",
+        "--theory",
+        type=str,
+        help="Only include goals from the given theory."
+    )
+    parser.add_argument(
+        "-se",
+        "--session",
+        type=str,
+        help="Only include goals from the given session."
+    )
     args = parser.parse_args()
+
+    if args.theory and args.session:
+        raise RuntimeError("specify at most on of --theory and --session")
 
     if sum(bool(arg) for arg in (args.plot_cactus, args.plot_cactus_scaled_metis, args.plot_scatter, args.plot_hist)) > 1:
         raise RuntimeError("specify at most one of --plot-cactus, --plot-cactus-scaled-metis, --plot-scatter and --plot-hist")
@@ -626,7 +663,7 @@ if __name__ == "__main__":
             commit = "UNKOWN_COMMIT"
         print(filename, commit)
         try:
-            calls = parse_file(filename, args.timeout_ms)
+            calls = parse_file(filename, args.timeout_ms, args.theory, args.session)
             label = dirname + " " + commit
             # label = "commit " + commit
             summarize(
@@ -636,17 +673,24 @@ if __name__ == "__main__":
             print(f"skipping {filename} (not found)")
         print()
 
+    if args.theory:
+        title_prefix = f"Theory {args.theory}: "
+    elif args.session:
+        title_prefix = f"Session {args.session}: "
+    else:
+        title_prefix = ""
+
     if args.plot_cactus:
         plt.xlabel("time [ms]")
         plt.ylabel("number of goals solved")
         plt.legend()
-        # plt.title("metis vs. slam")
+        plt.title(title_prefix + "metis vs. slam")
 
     if args.plot_cactus_scaled_metis:
         plt.xlabel("time [ms]")
         plt.ylabel("number of goals solved")
         plt.legend()
-        plt.title("FAKE! RUNS HAVE BEEN SCALED SO THAT METIS RUNS HAVE THE SAME HEIGHT!")
+        plt.title(title_prefix + "FAKE! RUNS HAVE BEEN SCALED SO THAT METIS RUNS HAVE THE SAME HEIGHT!")
 
     if args.plot_scatter:
         plt.xscale("log")
@@ -655,14 +699,14 @@ if __name__ == "__main__":
         plt.xlabel("metis time [ms]")
         plt.ylabel("slam time [ms]")
         plt.legend()
-        # plt.title("metis vs. slam times")
+        plt.title(title_prefix + "metis vs. slam times")
 
     if args.plot_hist:
         plt.xscale("log")
         plt.xlabel("time [ms]")
         plt.ylabel("count")
         plt.legend()
-        # plt.title("histograms")
+        plt.title(title_prefix + "histograms")
 
     if plot_any:
         if args.save_plot:
