@@ -8,39 +8,34 @@ datatype 'a type_arg_wrapper = Skolem_Type_Arg (inner: "'a itself")
 
 term "Skolem_Type_Arg TYPE(bool)"
 
-ML_val \<open>
-  val t = @{term "Skolem_Type_Arg"}
-  val c = @{const Skolem_Type_Arg(bool)}
-\<close>
-
 (* Used for pretty printing expression with a highlighted subterm. *)
 
-definition highlight :: "'a \<Rightarrow> 'a" where
-  "highlight subterm = subterm"
+definition slam_highlight :: "'a \<Rightarrow> 'a" where
+  "slam_highlight subterm = subterm"
 
 syntax
-  "_highlight" :: "'a \<Rightarrow> 'a" (\<open><_>\<close>)
+  "_slam_highlight" :: "'a \<Rightarrow> 'a" (\<open>\<langle><\<lblot>_\<rblot>>\<rangle>\<close>)
 
 syntax_consts
-  "_highlight" \<rightleftharpoons> highlight
+  "_slam_highlight" \<rightleftharpoons> slam_highlight
 
 translations
-  "<t>" \<rightleftharpoons> "CONST highlight t"
+  "\<langle><\<lblot>t\<rblot>>\<rangle>" \<rightleftharpoons> "CONST slam_highlight t"
 
 (* Used for pretty printing oriented literals. *)
 
-definition orient :: "'a \<Rightarrow> 'a \<Rightarrow> bool" where
-  "orient l r = (l = r)"
+definition slam_orient :: "'a \<Rightarrow> 'a \<Rightarrow> bool" where
+  "slam_orient l r = (l = r)"
 
-syntax orient :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
+syntax slam_orient :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
 
-syntax "_orient" :: "'a \<Rightarrow> 'a \<Rightarrow> bool" (\<open><_ \<approx>> _>\<close>)
+syntax "_slam_orient" :: "'a \<Rightarrow> 'a \<Rightarrow> bool" (\<open>\<langle><\<lblot>_ \<approx>~-> _\<rblot>>\<rangle>\<close>)
 
 syntax_consts
-  "_orient" \<rightleftharpoons> orient
+  "_slam_orient" \<rightleftharpoons> slam_orient
 
 translations
-  "<l \<approx>> r>" \<rightleftharpoons> "CONST orient l r"
+  "\<langle><\<lblot>l \<approx>~-> r\<rblot>>\<rangle>" \<rightleftharpoons> "CONST slam_orient l r"
 
 ML_file \<open>Tools/Slam/slam_common.ML\<close>
 ML_file \<open>Tools/Slam/slam_id.ML\<close>

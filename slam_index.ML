@@ -118,9 +118,17 @@ fun could_unify (f1, f2) =
     could_unify_asym f1 f2 orelse could_unify_asym f2 f1
   end
 
+(* S1 S2  A  B  N (term)
+S1     X  X  X  X
+S2  X     X  X  X
+ A           X  X
+ B
+ N  X  X  X  X
+(pattern) *)
 fun could_match (BelowVar, _) = true
   | could_match (AnonymousVar, InvalidPosition) = false
   | could_match (AnonymousVar, BelowVar) = false
+  | could_match (AnonymousVar, _) = true
   | could_match (InvalidPosition, InvalidPosition) = true
   | could_match (InvalidPosition, _) = false
   (* lhs will be a symbol *)

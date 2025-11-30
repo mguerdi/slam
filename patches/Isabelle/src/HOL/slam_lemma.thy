@@ -27,12 +27,6 @@ ML \<open>
 lemma arg_cong_contrapositive: \<open>s x \<noteq> s' x \<Longrightarrow> s \<noteq> s'\<close>
   by auto
 
-lemma sup_full_inference:
-  "   (\<not>D \<Longrightarrow> t \<noteq> t' \<Longrightarrow> False)
-  \<Longrightarrow> (\<not>C' \<Longrightarrow> \<not>(L t) \<Longrightarrow> False)
-  \<Longrightarrow> \<not>D \<Longrightarrow> \<not>C' \<Longrightarrow> \<not>(L t') \<Longrightarrow> False"
-  by auto
-
 lemma forall_hoist_just_to_be_safe:
   "((\<forall>x. P x) = True \<Longrightarrow> (\<forall>x. P x) = False \<Longrightarrow> False) \<equiv> (\<And>x.((\<forall>x. P x) = True \<Longrightarrow> P x = False \<Longrightarrow> False))"
   by auto

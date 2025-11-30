@@ -606,7 +606,7 @@ fun pretty_subterm' ctxt t p =
     val subterm = subterm_at t p
     val a = fastype_of subterm
     val highlighted_subterm =
-      \<^instantiate>\<open>subterm and 'a=a in term "<subterm>"\<close>
+      \<^instantiate>\<open>subterm and 'a=a in term "\<langle><\<lblot>subterm\<rblot>>\<rangle>"\<close>
   in
     Slam_Common.pretty_term' ctxt (context highlighted_subterm)
   end
