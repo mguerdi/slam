@@ -132,7 +132,7 @@ diff --git a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML b/src/HOL/
 new file mode 100644
 --- /dev/null
 +++ b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML
-@@ -0,0 +1,247 @@
+@@ -0,0 +1,252 @@
 +(* Uses results from Mirabelle's sledgehammer action to rerun the preplay only (without calling the
 +external provers). *)
 +(* Only works with ATPs *)
@@ -369,11 +369,16 @@ new file mode 100644
 +        run_methods "metis" ^ "\n" ^ run_methods "slam"
 +      end
 +
++    fun run_with_timeout args =
++      Timeout.apply timeout run args
++      handle Timeout.TIMEOUT timed_out_after =>
++        ("MIRABELLE SLEDGEHAMMER REPLAY TIMEOUT AFTER " ^ @{make_string} timed_out_after)
++
 +    fun finalize () = "mirabelle sledgehammer replay done"
 +  in
 +    (
 +    (* error "make_action unimplemented"; *)
-+    (init_msg, {run = run, finalize = finalize})
++    (init_msg, {run = run_with_timeout, finalize = finalize})
 +    )
 +  end
 +
