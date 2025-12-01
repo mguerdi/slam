@@ -88,7 +88,7 @@ fun slam_tac options ctxt goal_term ths i st0 =
                   case Slam_Common.get_proof_reconstruction_mode context of
                     (* st is something like A \<Longrightarrow> B \<Longrightarrow> #False *)
                     (* we provide #False *)
-                    Slam_Common.Cheat => ALLGOALS (Skip_Proof.cheat_tac context) st
+                    Slam_Common.Cheat => error "Cheat proof reconstruction no longer implemented"
                   | _ => reconstruct_proof final_state st
                 end
             | ((Slam.MaybeSat, final_state), _) => Seq.empty
