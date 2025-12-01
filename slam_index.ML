@@ -85,38 +85,26 @@ fun feature_at Ts p (Abs (_, T, t)) = feature_at (T::Ts) p t
       else feature_at Ts is (nth args (i-1))
       end
 
-fun could_unify (f1, f2) =
-  let
-    (* could_unify_asym implements the following, where
-    X = False
-       S1 S2  A  B  N
-    S1     X  X  X  X
-    S2  X     X  X  X
-     A              X
-     B               
-     N  X  X  X      
-    transposed:
-       S1 S2  A  B  N
-    S1     X        X
-    S2  X           X      
-     A  X  X        X
-     B  X  X         
-     N  X  X  X      
-    disjunction of those two is the desired table.
-    *)
-      (* full case distinctions when lhs is not a symbol *)
-    fun could_unify_asym BelowVar _ = true
-      | could_unify_asym AnonymousVar InvalidPosition = false
-      | could_unify_asym AnonymousVar _ = true
-      | could_unify_asym InvalidPosition BelowVar = true
-      | could_unify_asym InvalidPosition InvalidPosition = true
-      | could_unify_asym InvalidPosition _ = false
-      (* lhs will be a symbol *)
-      | could_unify_asym s t = s = t
-  in
-    (* symmetrize *)
-    could_unify_asym f1 f2 orelse could_unify_asym f2 f1
-  end
+(*
+   S1 S2  A  B  N
+S1     X        X
+S2  X           X
+ A              X
+ B
+ N  X  X  X
+*)
+fun could_unify (AnonymousVar, InvalidPosition) = false
+  | could_unify (AnonymousVar, _) = true
+  | could_unify (BelowVar, _) = true
+  | could_unify (InvalidPosition, BelowVar) = true
+  | could_unify (InvalidPosition, InvalidPosition) = true
+  | could_unify (InvalidPosition, _) = false
+  (* lhs will be a symbol *)
+  | could_unify (f1, AnonymousVar) = true
+  | could_unify (f1, BelowVar) = true
+  | could_unify (f1, InvalidPosition) = false
+  (* both will be a symbol *)
+  | could_unify (f1, f2) = f1 = f2
 
 (* S1 S2  A  B  N (term)
 S1     X  X  X  X
