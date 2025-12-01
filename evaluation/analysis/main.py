@@ -118,11 +118,9 @@ class Result:
             return self.kind < other.kind
 
 
-def parse_file(filename, timeout_ms, only_theory, only_session):
-    with open(filename) as f:
-        s = f.read()
+def parse_file(mirabelle_log, timeout_ms, only_theory, only_session):
     lines = [
-        squeezed for line in s.strip().split("\n") if is_replay_line(squeezed := squeeze(line))
+        squeezed for line in mirabelle_log.strip().split("\n") if is_replay_line(squeezed := squeeze(line))
     ]
     # print("\n".join(lines[:20]))
 
@@ -655,22 +653,32 @@ if __name__ == "__main__":
         runs_dirs = ["runs/" + dirname for dirname in runs_dirs_relative]
 
     for i, dirname in enumerate(runs_dirs):
-        filename = dirname + "/mirabelle.log"
         try:
             with open(dirname + "/commit") as c:
                 commit = c.read()[:7]
         except FileNotFoundError as e:
             commit = "UNKOWN_COMMIT"
-        print(filename, commit)
-        try:
-            calls = parse_file(filename, args.timeout_ms, args.theory, args.session)
-            label = dirname + " " + commit
-            # label = "commit " + commit
-            summarize(
-                calls, label, args.plot_cactus, args.plot_cactus_scaled_metis, args.plot_scatter, args.plot_hist, i, args.exclude_differing_facts
-            )
-        except FileNotFoundError:
-            print(f"skipping {filename} (not found)")
+        print(dirname, commit)
+
+        filepath = dirname + "/mirabelle.log"
+        if os.path.isfile(filepath):
+            with open(filepath) as f:
+                mirabelle_log = f.read()
+        else:
+            mirabelle_output_dir = dirname + "/mirabelle_output"
+            session_log_dirs = [name for name in os.listdir(mirabelle_output_dir) if os.path.isdir(mirabelle_output_dir + "/" + name)]
+            mirabelle_log = ""
+            for session_log_dir in session_log_dirs:
+                filepath = dirname + "/mirabelle_output/" + session_log_dir + "/mirabelle.log"
+                with open(filepath) as f:
+                    mirabelle_log += f.read()
+
+        calls = parse_file(mirabelle_log, args.timeout_ms, args.theory, args.session)
+
+        label = dirname + " " + commit
+        summarize(
+            calls, label, args.plot_cactus, args.plot_cactus_scaled_metis, args.plot_scatter, args.plot_hist, i, args.exclude_differing_facts
+        )
         print()
 
     if args.theory:
