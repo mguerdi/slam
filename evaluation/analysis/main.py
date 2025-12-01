@@ -150,8 +150,11 @@ def parse_file(mirabelle_log, timeout_ms, only_theory, only_session):
                 facts = options_and_facts[options_and_facts.index(")")+2:]
             else:
                 facts = options_and_facts
+        elif "MIRABELLE SLEDGEHAMMER REPLAY TIMEOUT AFTER" in line:
+            print(line)
+            continue
         else:
-            raise RuntimeError("Line has neither slam nor metis:\n" + line)
+            raise RuntimeError("Line is neither slam nor metis invocation nor mirabelle timeout:\n" + line)
         result = Result("(" + (tail.split("(")[-1]), timeout_ms)
         if only_theory and theory_of_goal(goal) != only_theory:
             excluded_not_from_theory_or_session += 1
