@@ -1,5 +1,4 @@
 (* Wrappers around Isabelles unfication functions. *)
-
 signature SLAM_UNIFY =
 sig
   (* from unify.ML *)
@@ -54,11 +53,11 @@ fun silence_context ctxt =
     ctxt
     |> Context.the_proof
     |> Context_Position.set_visible false
-    |> (fn ctxt => Config.put Unify.unify_trace_bound (Config.get ctxt Unify.search_bound) ctxt)
+    |> (fn ctxt => Config.put Slam_Isabelle_Unify.unify_trace_bound (Config.get ctxt Slam_Isabelle_Unify.search_bound) ctxt)
     |> Proof_Context.background_theory
         (fn thy => thy
           |> Context_Position.set_visible_global false
-          |> Config.put_global Unify.unify_trace_bound (Config.get_global thy Unify.search_bound))
+          |> Config.put_global Slam_Isabelle_Unify.unify_trace_bound (Config.get_global thy Slam_Isabelle_Unify.search_bound))
     |> Context.Proof
 
 fun impl_smash_unifiers ctxt tus env =
@@ -75,7 +74,7 @@ fun impl_smash_unifiers ctxt tus env =
     val env = Envir.merge (Envir.empty maxidx, env)
     val tus = map (apply2 give_to_undefined) tus
   in
-    Unify.smash_unifiers ctxt tus env
+    Slam_Isabelle_Unify.smash_unifiers ctxt tus env
   end
 
 fun smash_unifiers ctxt = with_timeout ctxt oo impl_smash_unifiers ctxt
@@ -116,7 +115,7 @@ fun impl_shallow_first_smash_unifiers ctxt tus env =
   mk_impl_shallow_first
     ctxt
     (fn search_bound =>
-      impl_smash_unifiers (Config.put_generic Unify.search_bound search_bound ctxt) tus env)
+      impl_smash_unifiers (Config.put_generic Slam_Isabelle_Unify.search_bound search_bound ctxt) tus env)
 
 fun shallow_first_smash_unifiers ctxt = with_timeout ctxt oo impl_shallow_first_smash_unifiers ctxt
 
@@ -130,7 +129,7 @@ fun impl_matchers ctxt maxidx pairs =
     val v_term = Var (("maxidxforcer_term", maxidx), dummyT)
     val pairs = map (apply2 give_to_undefined) ((v_pattern, v_term) :: pairs)
   in
-    Unify.matchers ctxt pairs
+    Slam_Isabelle_Unify.matchers ctxt pairs
   end
 
 fun matchers ctxt = with_timeout ctxt oo impl_matchers ctxt
@@ -140,7 +139,7 @@ fun impl_shallow_first_matchers ctxt maxidx pairs =
   mk_impl_shallow_first
     ctxt
     (fn search_bound =>
-      impl_matchers (Config.put_generic Unify.search_bound search_bound ctxt) maxidx pairs)
+      impl_matchers (Config.put_generic Slam_Isabelle_Unify.search_bound search_bound ctxt) maxidx pairs)
 
 fun shallow_first_matchers ctxt = with_timeout ctxt oo impl_shallow_first_matchers ctxt
 
