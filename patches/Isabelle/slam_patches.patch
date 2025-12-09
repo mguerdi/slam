@@ -132,7 +132,7 @@ diff --git a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML b/src/HOL/
 new file mode 100644
 --- /dev/null
 +++ b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML
-@@ -0,0 +1,252 @@
+@@ -0,0 +1,325 @@
 +(* Uses results from Mirabelle's sledgehammer action to rerun the preplay only (without calling the
 +external provers). *)
 +(* Only works with ATPs *)
@@ -191,24 +191,75 @@ new file mode 100644
 +      error ("find_mini_preplay_input: didn't find " ^ @{make_string} file)
 +  end
 +
-+fun get_mini_preplay_inputs pos pre (lines : string list) =
++
++structure Mini_Preplay_Input_Key: KEY =
++struct
++  type key = { thy_name: string, line_number: int, offset: int };
++  val ord = int_ord o apply2 #offset ||| int_ord o apply2 #line_number ||| string_ord o apply2 #thy_name
++end
++
++
++structure Mini_Preplay_Input_Table = Table(Mini_Preplay_Input_Key)
++
++
++fun collect_mini_preplay_inputs
++  (lines : string list)
++  : Sledgehammer.mini_preplay_input list Mini_Preplay_Input_Table.table
++=
 +  let
 +    val search_string_action = "0.sledgehammer"
-+    (* compare Export.export *)
-+    val search_string_thy = Context.theory_long_name (Proof.theory_of pre)
-+    val search_string_pos =
-+      (@{make_string} (the (Position.line_of pos)))
-+      ^ ":"
-+      ^ (@{make_string} (the (Position.offset_of pos)))
 +    val search_string_mini_preplay_input = "some mini_preplay_input ("
-+
-+    fun line_matches line =
++    fun is_preplay_line line =
 +      String.isSubstring search_string_action line
-+      andalso String.isSubstring search_string_thy line
-+      andalso String.isSubstring search_string_pos line
 +      andalso String.isSubstring search_string_mini_preplay_input line
++    val preplay_lines = filter is_preplay_line lines
 +
-+    val matches = filter line_matches lines
++    fun parse_key line : Mini_Preplay_Input_Key.key =
++      (* line is of the form
++      0.sledgehammer goal.apply     22924ms DataRefinementIBP.Statements 30:1158  some mini_preplay_input (SOME ...
++      *)
++      let
++        val words =
++          line
++          |> space_explode " "
++          |> filter_out (fn s => String.size s = 0)
++        (* sanity checks *)
++        val () =
++          if nth words 0 <> "0.sledgehammer"
++            then
++              error
++                ("collect_mini_preplay_inputs: sanity check 1 failed for line: " ^ @{make_string} line)
++          else if not (String.isPrefix "goal." (nth words 1))
++            then
++              error
++                ("collect_mini_preplay_inputs: sanity check 2 failed for line: " ^ @{make_string} line)
++          else if not (String.isSuffix "ms" (nth words 2))
++            then
++              error
++                ("collect_mini_preplay_inputs: sanity check 3 failed for line: " ^ @{make_string} line)
++          else if nth words 5 <> "some"
++            then
++              error
++                ("collect_mini_preplay_inputs: sanity check 4 failed for line: " ^ @{make_string} line)
++          else if nth words 6 <> "mini_preplay_input"
++            then
++              error
++                ("collect_mini_preplay_inputs: sanity check 5 failed for line: " ^ @{make_string} line)
++          else ()
++        val thy_name = nth words 3
++        val line_number_and_offset = space_explode ":" (nth words 4)
++        val () =
++          if length line_number_and_offset <> 2
++            then error ("collect_mini_preplay_inputs: invalid position: " ^ @{make_string} (nth words 4))
++            else ()
++        val (line_number, offset) : int * int =
++          case map Int.fromString line_number_and_offset of
++            [SOME line_number, SOME offset] => (line_number, offset)
++          | _ =>
++              error ("collect_mini_preplay_inputs: can't parse position: " ^ @{make_string} (nth words 4))
++      in
++        { thy_name = thy_name, line_number = line_number, offset = offset }
++      end
 +
 +    fun get_sexpr line =
 +      let
@@ -219,10 +270,34 @@ new file mode 100644
 +        Substring.string sexpr
 +      end
 +
-+    val mini_preplay_inputs =
-+      map (Sledgehammer.deserialize_mini_preplay_input_option o get_sexpr) matches
++    fun key_value_pair_of line =
++      case Sledgehammer.deserialize_mini_preplay_input_option (get_sexpr line) of
++        SOME mini_preplay_input => SOME (parse_key line, mini_preplay_input)
++      | NONE => NONE
++
++    fun maybe_cons_list option =
++      case option of
++        SOME inner => Mini_Preplay_Input_Table.cons_list inner
++      | NONE => I
 +  in
-+    mini_preplay_inputs
++    fold (maybe_cons_list o key_value_pair_of) preplay_lines Mini_Preplay_Input_Table.empty
++  end
++
++fun get_mini_preplay_inputs pos pre (table : Sledgehammer.mini_preplay_input list Mini_Preplay_Input_Table.table) =
++  let
++    (* compare Export.export *)
++    val thy_name = Context.theory_long_name (Proof.theory_of pre)
++    val line_number =
++      case Position.line_of pos of
++        SOME line_number => line_number
++      | NONE => error ("get_mini_preplay_inputs: no line number: " ^ @{make_string} pre)
++    val offset =
++      case Position.offset_of pos of
++        SOME offset => offset
++      | NONE => error ("get_mini_preplay_inputs: no byte offset: " ^ @{make_string} pre)
++    val key = { thy_name = thy_name, line_number = line_number, offset = offset }
++  in
++    Mini_Preplay_Input_Table.lookup_list table key
 +  end
 +
 +(* run_atp : mode \<rightarrow> string \<rightarrow> params \<rightarrow> prover_problem \<rightarrow> prover_slice \<rightarrow> prover_result *)
@@ -263,16 +338,18 @@ new file mode 100644
 +    (* mirabelle_sledgehammer.ML *)
 +    val params = Sledgehammer_Commands.default_params \<^theory> arguments
 +    val init_msg = "Params for sledgehammer: " ^ Sledgehammer_Prover.string_of_params params
-+    
++
++    val mini_preplay_input_table = collect_mini_preplay_inputs (read_mirabelle_log_lines output_dir)
++
 +    fun run ({theory_index, pos, pre, ...} : Mirabelle.command) =
 +      let
 +        (* Read cached prover_result's that were written by the sledgehammer action.
 +        Keys: theory name, line, offset *)
 +
 +        val mini_preplay_inputs =
-+          get_mini_preplay_inputs pos pre (read_mirabelle_log_lines output_dir)
++          get_mini_preplay_inputs pos pre mini_preplay_input_table
 +
-+        val mini_preplay_input_option =
++        val mini_preplay_input =
 +          if mini_preplay_inputs <> []
 +            then nth mini_preplay_inputs (length mini_preplay_inputs - 1)
 +            else
@@ -284,10 +361,6 @@ new file mode 100644
 +              in
 +                error ("No mini preplay input for " ^ search_string_pos)
 +              end
-+        val mini_preplay_input =
-+          case mini_preplay_input_option of
-+            SOME mini_preplay_input => mini_preplay_input
-+          | NONE => error ("mini preplay input for " ^ @{make_string} (theory_index, pos) ^ "is NONE")
 +
 +        (* Call Sledgehammer.preplay_prover_result. *)
 +        (* This emulates what happens in the following sequence of function calls:

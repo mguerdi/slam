@@ -4,14 +4,14 @@
 Add-ons to Higher-Order Unification, outside the inference kernel.
 *)
 
-signature UNIFY =
+signature SLAM_ISABELLE_UNIFY =
 sig
-  include UNIFY
+  include SLAM_ISABELLE_UNIFY
   val matchers: Context.generic -> (term * term) list -> Envir.env Seq.seq
   val matcher: Context.generic -> term list -> term list -> Envir.env option
 end;
 
-structure Unify: UNIFY =
+structure Slam_Isabelle_Unify: SLAM_ISABELLE_UNIFY =
 struct
 
 (*Pattern matching*)
@@ -76,7 +76,7 @@ fun matchers _ [] = Seq.single Envir.init
         val empty = Envir.empty maxidx';
       in
         Seq.append
-          (Seq.map_filter result (Unify.smash_unifiers context pairs' empty))
+          (Seq.map_filter result (Slam_Isabelle_Unify.smash_unifiers context pairs' empty))
           (first_order_matchers thy pairs empty)
       end;
 
@@ -84,6 +84,6 @@ fun matcher context ps os =
   if length ps <> length os then NONE
   else Seq.pull (matchers context (ps ~~ os)) |> Option.map #1;
 
-open Unify;
+open Slam_Isabelle_Unify;
 
 end;

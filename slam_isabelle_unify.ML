@@ -9,7 +9,7 @@ the terms to be unified already have the same type.  In resolution,
 this is assured because both have type "prop".
 *)
 
-signature UNIFY =
+signature SLAM_ISABELLE_UNIFY =
 sig
   val search_bound: int Config.T
   val unify_trace: bool Config.T
@@ -23,27 +23,27 @@ sig
   val smash_unifiers: Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq
 end
 
-structure Unify : UNIFY =
+structure Slam_Isabelle_Unify : SLAM_ISABELLE_UNIFY =
 struct
 
 (*Unification options*)
 
 (*unification quits above this depth*)
-val search_bound = Config.declare_int ("unify_search_bound", \<^here>) (K 60);
+val search_bound = Config.declare_int ("slam_isabelle_unify_search_bound", \<^here>) (K 60);
 
 
 (* diagnostics *)
 
-val unify_trace = Config.declare_bool ("unify_trace", \<^here>) (K false);
+val unify_trace = Config.declare_bool ("slam_isabelle_unify_trace", \<^here>) (K false);
 
 (*tracing starts above this depth, 0 for full*)
-val unify_trace_bound = Config.declare_int ("unify_trace_bound", \<^here>) (K 50);
+val unify_trace_bound = Config.declare_int ("slam_isabelle_unify_trace_bound", \<^here>) (K 50);
 
 (*print dpairs before calling SIMPL*)
-val unify_trace_simp = Config.declare_bool ("unify_trace_simp", \<^here>) (K false);
+val unify_trace_simp = Config.declare_bool ("slam_isabelle_unify_trace_simp", \<^here>) (K false);
 
 (*announce potential incompleteness of type unification*)
-val unify_trace_types = Config.declare_bool ("unify_trace_types", \<^here>) (K false);
+val unify_trace_types = Config.declare_bool ("slam_isabelle_unify_trace_types", \<^here>) (K false);
 
 fun cond_tracing ctxt msg =
   if Config.get_generic ctxt unify_trace andalso Context_Position.is_visible_generic ctxt then

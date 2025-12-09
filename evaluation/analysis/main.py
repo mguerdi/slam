@@ -118,11 +118,9 @@ class Result:
             return self.kind < other.kind
 
 
-def parse_file(filename, timeout_ms, only_theory, only_session):
-    with open(filename) as f:
-        s = f.read()
+def parse_file(mirabelle_log, timeout_ms, only_theory, only_session):
     lines = [
-        squeezed for line in s.strip().split("\n") if is_replay_line(squeezed := squeeze(line))
+        squeezed for line in mirabelle_log.strip().split("\n") if is_replay_line(squeezed := squeeze(line))
     ]
     # print("\n".join(lines[:20]))
 
@@ -152,8 +150,11 @@ def parse_file(filename, timeout_ms, only_theory, only_session):
                 facts = options_and_facts[options_and_facts.index(")")+2:]
             else:
                 facts = options_and_facts
+        elif "MIRABELLE SLEDGEHAMMER REPLAY TIMEOUT AFTER" in line:
+            print(line)
+            continue
         else:
-            raise RuntimeError("Line has neither slam nor metis:\n" + line)
+            raise RuntimeError("Line is neither slam nor metis invocation nor mirabelle timeout:\n" + line)
         result = Result("(" + (tail.split("(")[-1]), timeout_ms)
         if only_theory and theory_of_goal(goal) != only_theory:
             excluded_not_from_theory_or_session += 1
@@ -480,11 +481,10 @@ def summarize(calls, label, plot_cactus, plot_cactus_scaled_metis, plot_scatter,
 
     if plot_scatter:
         plt.rc("axes", axisbelow=True)
-        plt.grid(True, which="major", color="0.65")
+        plt.grid(True, which="major", color="0.5")
 
-        cm = plt.get_cmap('nipy_spectral')
-        color = cm(((135 * (invocation + 1)) % 360) / 360.)
-        plt.scatter(metis_both_success_times, slam_both_success_times, c=color, marker=".", label=label, s=1, alpha=0.5)
+        # cm = plt.get_cmap('nipy_spectral')
+        # color = cm(((135 * (invocation + 1)) % 360) / 360.)
 
         # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_long_times, marker='x')
@@ -493,7 +493,17 @@ def summarize(calls, label, plot_cactus, plot_cactus_scaled_metis, plot_scatter,
         min_time_minus = .4
         max_time_plus = max_time / .4
 
-        plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", label="diagonal")
+        # plt.hexbin(metis_both_success_times, slam_both_success_times, xscale="log", yscale="log", gridsize=140, lw=0.1, cmap="gnuplot2_r", extent=(np.log(min_time_minus), np.log(max_time_plus), np.log(min_time_minus), np.log(max_time_plus))) # , c=color, alpha=0.5) # , label=label)
+
+        plt.scatter(metis_both_success_times, slam_both_success_times, marker=".", s=14, lw=0, alpha=0.5) # , c=color, alpha=0.5) # , label=label)
+
+        plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", alpha=0.5) # , label="diagonal")
+
+        # for n in range(10):
+        #     xtimes = np.linspace(min_time_minus, max_time_plus)
+        #     ytimes = xtimes * 10**n
+        #     plt.plot(xtimes, ytimes, color="orange", alpha=0.5) # , label="diagonal")
+
         # plt.plot(metis_success_slam_fail_or_timeout_times, slam_fake_extrapolated_times, c=color, label=polyfit_label)
         plt.xlim(min_time_minus, max_time_plus)
         plt.ylim(min_time_minus, max_time_plus)
@@ -655,22 +665,32 @@ if __name__ == "__main__":
         runs_dirs = ["runs/" + dirname for dirname in runs_dirs_relative]
 
     for i, dirname in enumerate(runs_dirs):
-        filename = dirname + "/mirabelle.log"
         try:
             with open(dirname + "/commit") as c:
                 commit = c.read()[:7]
         except FileNotFoundError as e:
             commit = "UNKOWN_COMMIT"
-        print(filename, commit)
-        try:
-            calls = parse_file(filename, args.timeout_ms, args.theory, args.session)
-            label = dirname + " " + commit
-            # label = "commit " + commit
-            summarize(
-                calls, label, args.plot_cactus, args.plot_cactus_scaled_metis, args.plot_scatter, args.plot_hist, i, args.exclude_differing_facts
-            )
-        except FileNotFoundError:
-            print(f"skipping {filename} (not found)")
+        print(dirname, commit)
+
+        filepath = dirname + "/mirabelle.log"
+        if os.path.isfile(filepath):
+            with open(filepath) as f:
+                mirabelle_log = f.read()
+        else:
+            mirabelle_output_dir = dirname + "/mirabelle_output"
+            session_log_dirs = [name for name in os.listdir(mirabelle_output_dir) if os.path.isdir(mirabelle_output_dir + "/" + name)]
+            mirabelle_log = ""
+            for session_log_dir in session_log_dirs:
+                filepath = dirname + "/mirabelle_output/" + session_log_dir + "/mirabelle.log"
+                with open(filepath) as f:
+                    mirabelle_log += f.read()
+
+        calls = parse_file(mirabelle_log, args.timeout_ms, args.theory, args.session)
+
+        label = dirname + " " + commit
+        summarize(
+            calls, label, args.plot_cactus, args.plot_cactus_scaled_metis, args.plot_scatter, args.plot_hist, i, args.exclude_differing_facts
+        )
         print()
 
     if args.theory:
@@ -698,8 +718,8 @@ if __name__ == "__main__":
 
         plt.xlabel("metis time [ms]")
         plt.ylabel("slam time [ms]")
-        plt.legend()
-        plt.title(title_prefix + "metis vs. slam times")
+        # plt.legend()
+        # plt.title(title_prefix + "metis vs. slam times")
 
     if args.plot_hist:
         plt.xscale("log")
