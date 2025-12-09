@@ -481,11 +481,10 @@ def summarize(calls, label, plot_cactus, plot_cactus_scaled_metis, plot_scatter,
 
     if plot_scatter:
         plt.rc("axes", axisbelow=True)
-        plt.grid(True, which="major", color="0.65")
+        plt.grid(True, which="major", color="0.5")
 
-        cm = plt.get_cmap('nipy_spectral')
-        color = cm(((135 * (invocation + 1)) % 360) / 360.)
-        plt.scatter(metis_both_success_times, slam_both_success_times, c=color, marker=".", label=label, s=1, alpha=0.5)
+        # cm = plt.get_cmap('nipy_spectral')
+        # color = cm(((135 * (invocation + 1)) % 360) / 360.)
 
         # plt.scatter(metis_both_success_times, [extrapolate(time) for time in metis_both_success_times], marker='.')
         # plt.scatter(metis_success_slam_fail_or_timeout_times, slam_fake_long_times, marker='x')
@@ -494,7 +493,17 @@ def summarize(calls, label, plot_cactus, plot_cactus_scaled_metis, plot_scatter,
         min_time_minus = .4
         max_time_plus = max_time / .4
 
-        plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", label="diagonal")
+        # plt.hexbin(metis_both_success_times, slam_both_success_times, xscale="log", yscale="log", gridsize=140, lw=0.1, cmap="gnuplot2_r", extent=(np.log(min_time_minus), np.log(max_time_plus), np.log(min_time_minus), np.log(max_time_plus))) # , c=color, alpha=0.5) # , label=label)
+
+        plt.scatter(metis_both_success_times, slam_both_success_times, marker=".", s=14, lw=0, alpha=0.5) # , c=color, alpha=0.5) # , label=label)
+
+        plt.plot([min_time_minus, max_time_plus], [min_time_minus, max_time_plus], color="red", alpha=0.5) # , label="diagonal")
+
+        # for n in range(10):
+        #     xtimes = np.linspace(min_time_minus, max_time_plus)
+        #     ytimes = xtimes * 10**n
+        #     plt.plot(xtimes, ytimes, color="orange", alpha=0.5) # , label="diagonal")
+
         # plt.plot(metis_success_slam_fail_or_timeout_times, slam_fake_extrapolated_times, c=color, label=polyfit_label)
         plt.xlim(min_time_minus, max_time_plus)
         plt.ylim(min_time_minus, max_time_plus)
@@ -709,8 +718,8 @@ if __name__ == "__main__":
 
         plt.xlabel("metis time [ms]")
         plt.ylabel("slam time [ms]")
-        plt.legend()
-        plt.title(title_prefix + "metis vs. slam times")
+        # plt.legend()
+        # plt.title(title_prefix + "metis vs. slam times")
 
     if args.plot_hist:
         plt.xscale("log")
