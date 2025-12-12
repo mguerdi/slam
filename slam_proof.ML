@@ -1125,6 +1125,7 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
     |> HClause.map_hthm (Slam_Proof_Util.norm_negative_predicate_literals ctxt)
   end
 
+(* FIXME: see Pure/General/graph.ML *)
 (* Topological sort of a rooted DAG without cycle detection. Note that the parent / children
 terminology is swapped compared to that of clauses. *)
 fun toposort_acyclic_rooted fuel (lookup_children: int -> int list) (i: int) (visited, sorted) =

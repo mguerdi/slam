@@ -1481,7 +1481,14 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
   end
   end
 
-val bool_simp_var_lemmas =
+datatype bool_simp_rule_kind =
+    BoolSimpBasic
+  | BoolSimpQuantifier
+  | BoolSimpIfThenElse
+
+(* basic lemmas that aren't ground *)
+val bool_simp_basic_var_lemmas =
+  map (pair BoolSimpBasic)
   [
     @{lemma "\<And>b. (\<not>\<not>b) = b" by auto}
     (* Leo-III simp, see section 4.2.1 of Extensional Paramodulation for Higher-Order Logic and its
@@ -1513,27 +1520,41 @@ val bool_simp_var_lemmas =
   , @{lemma "\<And>b. (b \<longrightarrow> \<not> b) = (\<not> b)" by auto}
   , @{lemma "\<And>b. (\<not> b \<longrightarrow> b) = b" by auto}
   , @{lemma "\<And>b. (b \<longrightarrow> b) = True" by auto}
+]
+
+val bool_simp_quantifier_lemmas =
+  map (pair BoolSimpQuantifier)
+  [
   (* Computing Small Clause Normal Forms *)
-  (* FIXME: evaluate performance *)
-  , @{lemma "\<And>P. (\<forall>x. P) = P" by auto}
+    @{lemma "\<And>P. (\<forall>x. P) = P" by auto}
   , @{lemma "\<And>P. (\<exists>x. P) = P" by auto}
-  , @{lemma "\<And>s t. (if True then s else t) = s" by auto}
+  ]
+
+val bool_simp_if_then_else_lemmas =
+  map (pair BoolSimpIfThenElse)
+  [
+    @{lemma "\<And>s t. (if True then s else t) = s" by auto}
   , @{lemma "\<And>s t. (if False then s else t) = t" by auto}
   , @{lemma "\<And>b s. (if b then s else s) = s" by auto}
   ]
 
-fun split_bool_simp_rule th =
-  th
-  |> Thm.prop_of
-  |> HOLogic.dest_Trueprop
-  |> HOLogic.dest_eq
+fun split_bool_simp_rule (kind, th) =
+  ( kind
+  , th
+    |> Thm.prop_of
+    |> HOLogic.dest_Trueprop
+    |> HOLogic.dest_eq
+  )
 
 val bool_simp_rules =
-  bool_rw_non_var_rules true @ map split_bool_simp_rule bool_simp_var_lemmas
+  map (pair BoolSimpBasic) (bool_rw_non_var_rules true)
+  @ map split_bool_simp_rule bool_simp_basic_var_lemmas
+  @ map split_bool_simp_rule bool_simp_quantifier_lemmas
+  @ map split_bool_simp_rule bool_simp_if_then_else_lemmas
 
 val bool_simp_rules_index =
   Top_Symbol_Index.empty
-  |> fold (fn (lhs, rhs) => Top_Symbol_Index.insert_term (lhs, (lhs, rhs))) bool_simp_rules
+  |> fold (fn (kind, (lhs, rhs)) => Top_Symbol_Index.insert_term (lhs, (kind, (lhs, rhs)))) bool_simp_rules
 
 (* FIXME: duplication with impl_infer_bool_rw_eq_neq_fa_ex_hoist *)
 fun impl_simp_bool_rw
@@ -1618,6 +1639,12 @@ fun simp_bool_rw ctxt (c, u_pos, eligibility) =
   end
 *)
 
+fun bool_simp_kind_enabled ctxt kind =
+  case kind of
+    BoolSimpBasic => true
+  | BoolSimpQuantifier => Config.get ctxt Slam_Common.bool_simp_quantifiers
+  | BoolSimpIfThenElse => Config.get ctxt Slam_Common.bool_simp_if_then_else
+
 fun bool_simp 
   ctxt
   clause
@@ -1634,8 +1661,10 @@ fun bool_simp
         Top_Symbol_Index.get_first_of_generalizations
           subterm
           bool_simp_rules_index
-          ( fn (lhs, rhs) =>
-              impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
+          ( fn (kind, (lhs, rhs)) =>
+            if bool_simp_kind_enabled ctxt kind
+              then impl_simp_bool_rw ctxt tracer (c, fp, JClause.Unknown) lhs rhs
+              else NONE
           )
       end
     fun repeat_simp_subterm countdown fp (state as { clause, archive }) =

@@ -169,6 +169,9 @@ sig
   datatype sup_variable_condition = None | FirstOrder | Approximate
   val get_sup_variable_condition : Proof.context -> sup_variable_condition
 
+  val bool_simp_quantifiers : bool Config.T
+  val bool_simp_if_then_else : bool Config.T
+
   val forward_rewrite_countdown : int Config.T
 
   val arg_cong_as_simpl : bool Config.T
@@ -407,12 +410,16 @@ fun parse_sup_variable_condition "none" = None
 
 fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
 
+(* FIXME: split into sup_into_var_headed, ... *)
 val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_fluid\<close> (K true)
 
 val sup_into_deeply_occuring = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_deeply_occuring\<close> (K true)
 
 val sup_into_non_eligible = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_non_eligible\<close> (K false)
 val sup_from_non_eligible = Attrib.setup_config_bool \<^binding>\<open>slam_sup_from_non_eligible\<close> (K false)
+
+val bool_simp_quantifiers = Attrib.setup_config_bool \<^binding>\<open>slam_bool_simp_quantifiers\<close> (K true)
+val bool_simp_if_then_else = Attrib.setup_config_bool \<^binding>\<open>slam_bool_simp_if_then_else\<close> (K true)
 
 val forward_rewrite_countdown = Attrib.setup_config_int \<^binding>\<open>slam_forward_rewrite_countdown\<close> (K 10)
 
