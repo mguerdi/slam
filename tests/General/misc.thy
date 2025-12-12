@@ -6,6 +6,12 @@ begin
 
 notation (output) "Pure.prop" ("#_" [1000] 1000)
 
+lemma "(if True = True then a else b) = a"
+  using
+    [[slam_trace, slam_presimplify=false, slam_bool_simp_if_then_else=false]]
+    HOL.if_True
+  by slam
+
 lemma funs_eq_then_comp_id_eq:
   shows "f = g \<Longrightarrow> (\<And> x. f x = (id o g) x)"
   (* by (metis fun.map_id) *)
@@ -21,8 +27,7 @@ lemma funs_eq_then_comp_id_eq_restricted:
         slam_rule_arg_cong,
         slam_rule_clause_subsumption,
         slam_rule_e_res,
-        slam_rule_rewrite_negative_lits,
-        slam_rule_rewrite_positive_lits
+        slam_rule_rewrite_lits
         ]]
   by slam (* 53 ms *)
 
@@ -49,12 +54,12 @@ lemma funext_test_restricted:
     [[ slam_disable_all,
         slam_rule_forall_rw,
         slam_rule_sup,
-        slam_rule_bool_rw,
+        slam_rule_bool_simp,
         slam_rule_clause_subsumption,
         slam_rule_eq_hoist,
         slam_rule_false_elim,
         slam_rule_e_res ]]
-  using ext by slam (* 28 ms *)
+  using ext by slam (* 80 ms *)
 
 lemma ap_eq_test:
   shows "g = f \<Longrightarrow> (\<And> x. f x = g x)"
@@ -79,11 +84,13 @@ lemma ap_fa_eq_test_restricted:
         slam_rule_forall_rw,
         slam_rule_arg_cong,
         slam_rule_bool_rw,
+        slam_rule_bool_simp,
         slam_rule_eq_hoist,
         slam_rule_bool_hoist,
         slam_rule_false_elim,
         metis_trace ]]
-  by slam (* 16 ms *)
+  (* by slam (* 16 ms *) *)
+  using [[slam_meson, slam_trace, slam_rule_e_res]] by slam (* 11 ms *)
 
 lemma
   shows "(1 :: nat) + 1 = 2"

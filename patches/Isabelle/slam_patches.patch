@@ -132,7 +132,7 @@ diff --git a/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML b/src/HOL/
 new file mode 100644
 --- /dev/null
 +++ b/src/HOL/Tools/Mirabelle/mirabelle_sledgehammer_replay.ML
-@@ -0,0 +1,325 @@
+@@ -0,0 +1,327 @@
 +(* Uses results from Mirabelle's sledgehammer action to rerun the preplay only (without calling the
 +external provers). *)
 +(* Only works with ATPs *)
@@ -439,7 +439,9 @@ new file mode 100644
 +            |> prefix_lines (Sledgehammer.short_string_of_sledgehammer_outcome outcome ^ " ")
 +          end
 +      in
-+        run_methods "metis" ^ "\n" ^ run_methods "slam"
++        #proof_methods params
++        |> map run_methods
++        |> space_implode "\n"
 +      end
 +
 +    fun run_with_timeout args =
