@@ -1,0 +1,6 @@
+CONTAINER ID                                                       IMAGE                                  COMMAND                                                                       CREATED        STATUS        PORTS     NAMES
+8fcd895d557c2654e51349dd419e16ea3ccefbdb1c9b32a5ab552e241b57019f   mguerdi/isabelle-slam-patched:latest   "./replay_mirabelle_sledgehammer_session.sh Grothendieck_Schemes"             13 hours ago   Up 13 hours             interesting_sanderson
+74ef47b3831deedda67e066cbed08fdc1640580c47d53f2128439516754d6a6d   mguerdi/isabelle-slam-patched:latest   "./replay_mirabelle_sledgehammer_session.sh Progress_Tracking"                15 hours ago   Up 15 hours             laughing_swirles
+fedc56b07e8428fb8f5366bfcc65ee4f1405a4d0e4647f21ef706bfb3b4bad70   mguerdi/isabelle-slam-patched:latest   "./replay_mirabelle_sledgehammer_session.sh Multirelations_Heterogeneous"     15 hours ago   Up 15 hours             romantic_keldysh
+369235b03b3d763d24c5f51e4b1930e3136debf9400561c4a48fd4325452d7ed   mguerdi/isabelle-slam-patched:latest   "./replay_mirabelle_sledgehammer_session.sh Stone_Kleene_Relation_Algebras"   15 hours ago   Up 15 hours             bold_knuth
+
