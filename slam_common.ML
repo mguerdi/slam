@@ -47,6 +47,8 @@ sig
   val trace_clause_subsumption : bool Config.T
   val trace_equality_subsumption : bool Config.T
 
+  val trace_detailed_origin : bool Config.T
+
   (* report how many milliseconds the given clause procedure took to find a contradiction *)
   val report_main_loop_timing : bool Config.T
 
@@ -104,12 +106,18 @@ sig
   val type_pat_setup : theory -> theory
   val term_schem_setup : theory -> theory
   val verbose_of : Proof.context -> Proof.context
+  val label_pretty : string -> Pretty.T -> Pretty.T
   val pretty_term : Proof.context -> term -> string
   val pretty_term' : Proof.context -> term -> Pretty.T
   val pretty_typ : Proof.context -> typ -> string
+  val pretty_terms' : Proof.context -> term list -> Pretty.T
   val pretty_terms : Proof.context -> term list -> string
+  val pretty_tyenv' : Proof.context -> Type.tyenv -> Pretty.T
   val pretty_tyenv : Proof.context -> Type.tyenv -> string
+  val pretty_tenv' : Proof.context -> Envir.tenv -> Pretty.T
   val pretty_tenv : Proof.context -> Envir.tenv -> string
+  val pretty_env' : Proof.context -> Envir.env -> Pretty.T
+  val pretty_env : Proof.context -> Envir.env -> string
   val raw_pp_typ : typ -> Pretty.T
   val raw_pp_term : term -> Pretty.T
   val I : 'a -> 'a
@@ -254,6 +262,8 @@ val trace_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<
 val trace_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>slam_trace_syntactic_tautology_deletion2\<close> (K false)
 val trace_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_trace_clause_subsumption\<close> (K false)
 val trace_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_trace_equality_subsumption\<close> (K false)
+
+val trace_detailed_origin = Attrib.setup_config_bool \<^binding>\<open>slam_trace_detailed_origin\<close> (K false)
 
 (* FIXME: actually use this config option *)
 val report_main_loop_timing = Attrib.setup_config_bool \<^binding>\<open>slam_report_main_loop_timing\<close> (K false)
@@ -546,21 +556,36 @@ fun pretty_helper aux env = env
   |> map (fn (s1, s2) => Pretty.block [s1, Pretty.str " := ", s2])
   |> Pretty.enum "," "[" "]"
 
-fun pretty_tyenv ctxt tyenv =
+fun pretty_tyenv' ctxt tyenv =
 let
   fun get_typs (v, (s, T)) = (TVar (v, s), T)
   val print = apply2 (Syntax.pretty_typ ctxt)
 in
-  "tyenv:" ^ Pretty.string_of (pretty_helper (print o get_typs) tyenv)
+  pretty_helper (print o get_typs) tyenv
 end
 
-fun pretty_tenv ctxt tenv =
+val pretty_tyenv = Pretty.string_of oo pretty_tyenv'
+
+fun pretty_tenv' ctxt tenv =
 let
   fun get_trms (v, (T, t)) = (Var (v, T), t)
   val print = apply2 (Syntax.pretty_term ctxt)
 in
-  "tenv:" ^ Pretty.string_of (pretty_helper (print o get_trms) tenv)
+  pretty_helper (print o get_trms) tenv
 end;
+
+val pretty_tenv = Pretty.string_of oo pretty_tenv'
+
+fun label_pretty name pretty = Pretty.block ([Pretty.str (name ^ "="), pretty])
+
+fun pretty_env' ctxt env =
+  Pretty.block (
+    [ label_pretty "ty" (pretty_tyenv' ctxt (Envir.type_env env))
+    , label_pretty "tm" (pretty_tenv' ctxt (Envir.term_env env))
+    ]
+  )
+
+val pretty_env = Pretty.string_of oo pretty_env'
 
 (* from the cookbook
 (* switch to unpretty printer *)

@@ -1211,7 +1211,7 @@ fun reconstruct_manual
         val () = Slam_Common.trace_msg ctxt (fn () =>
           "RECONSTRUCTING:\n"
           ^ JClause.pretty_clause ctxt clause
-          ^ "\n(origin: " ^ @{make_string} (JClause.origin clause) ^ ")" )
+          ^ "\n(origin: " ^ Slam_Log.pretty ctxt (JClause.origin clause) ^ ")" )
         val replayed: HClause.hthm =
           replay_inference ctxt clause_db (JClause.origin clause) reconstructed_clause_db
         val () =

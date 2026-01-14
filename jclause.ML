@@ -408,11 +408,16 @@ fun pretty_clause' ctxt c =
     val premises = case inference of
       Slam_Log.Invalid => "[Invalid]"
     | _ => @{make_string} (Slam_Log.premises inference)
+    val pretty_inference =
+      if Config.get ctxt Slam_Common.trace_detailed_origin
+        then Slam_Log.pretty' ctxt inference
+        else Pretty.str ((Slam_Log.name_of inference) ^ " " ^ premises)
   in
     Pretty.block
       [ Pretty.str (@{make_string} (#id c) ^ ":")
       , Syntax.pretty_term ctxt (term_of c)
-      , Pretty.str (" (" ^ (Slam_Log.name_of inference) ^ " " ^ premises ^ ")")
+      , Pretty.str " "
+      , Pretty.block [Pretty.str "(", pretty_inference, Pretty.str ")"]
       ]
   end
 
