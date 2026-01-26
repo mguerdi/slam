@@ -29,6 +29,7 @@ sig
   (* law: JLit.term_of (lit_at cp c) = JTerm.subterm_at (as_tpos c) (term_of c) *)
   val as_tpos : int -> cpos -> JTerm.tpos
   val dummy : JLit.T list -> T
+  val empty : T
   val refresh_id : Proof.context -> unit -> T -> T
   val add_literal : Proof.context -> JLit.T -> T -> T
   val combine : Proof.context -> T -> T -> T

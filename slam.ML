@@ -36,6 +36,7 @@ sig
   val simp_rewrite_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
+  val simp_flex_flex : Proof.context -> JClause.T -> JClause.T option
   (* val simp_bool_rw : Proof.context -> clause_term -> JClause.T list *)
   val infer_eq_neq_outer_claus : Proof.context -> clause_lit -> JClause.T list
   val infer_sup : Proof.context -> clause_lit_side -> clause_term -> JClause.T list
@@ -298,6 +299,23 @@ fun simp_delete_resolved_lits ctxt c =
             (Slam_Log.DeleteResolvedLits { premise = JClause.id c, cposs = cposs })
           |> trace_concl ctxt tracer
         ))
+  end
+
+(* FlexFlexSimp from "A Higher-Order Vampire" *)
+fun simp_flex_flex ctxt c =
+  let
+    val tracer =
+      mk_tracer ctxt Slam_Common.trace_msg_flex_flex_simp "(FlexFlexSimp)"
+    fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    val () = tracer (fn () => JClause.pretty_clause ctxt c)
+    fun is_smashable lit =
+      (* Check if a literal can be made false by a smash unifier. This includes ?x \<noteq> ?y. *)
+      JLit.is_negative lit andalso JLit.both_sides (JTerm.is_variable_headed) lit
+  in
+    if not (forall is_smashable (JClause.literals c)) then fail NONE (K "not all flex-flex") else
+    JClause.empty
+    |> JClause.set_origin ctxt (Slam_Log.FlexFlexSimp { premise = JClause.id c })
+    |> SOME
   end
 
 (* Rewriting of positive (RP) or negative literals (RN) simplification (Schulz) *)
@@ -2111,12 +2129,16 @@ fun forward_simplify
               (if_cfg
                 Slam_Common.rule_delete_resolved_lits
                 (Seq.single (simp_delete_resolved_lits ctxt))))
+        val flex_flex_simp_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          if_cfg
+            Slam_Common.rule_flex_flex_simp
+            (Seq.make (fn () => Option.map (rpair Seq.empty) (simp_flex_flex ctxt c)))
         val neg_ext_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           if Config.get ctxt Slam_Common.neg_ext_as_simpl
             then
               if_cfg
-                Slam_Common.rule_neg_ext (
-                  Seq.of_list (
+                Slam_Common.rule_neg_ext
+                ( Seq.of_list (
                     JClause.potentially_eligible_cposs_of c
                     |> map (fn (cp, eligibility) => (c, cp, eligibility))
                     |> maps (infer_neg_ext ctxt)
@@ -2144,6 +2166,7 @@ fun forward_simplify
           ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
           @ [dd_dr_rewrites]
+          @ [flex_flex_simp_rewrites]
           @ [neg_ext_rewrites]
           @ [arg_cong_rewrites] )
       end

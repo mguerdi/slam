@@ -1,6 +1,6 @@
 infix H_THEN_ALL_NEW H_THEN H_THEN'
 
-(* detailed proof and proof reconstruction *) 
+(* detailed proof and proof reconstruction *)
 signature SLAM_PROOF =
 sig
   (* type proof_step *)
@@ -81,15 +81,19 @@ sig
     { premise: HClause.hthm
     , cposs: JClause.cpos list }
     -> HClause.hthm
+  val reconstruct_flex_flex_simp:
+    Proof.context
+    -> { premise: HClause.hthm }
+    -> HClause.hthm
   val reconstruct_positive_simplify_reflect:
-    Proof.context 
+    Proof.context
     -> { unit: HClause.hthm
        , unit_orientation: JLit.lpos
        , right_premise: HClause.hthm
        , disagreement: JClause.full_pos }
     -> HClause.hthm
   val reconstruct_negative_simplify_reflect:
-    Proof.context 
+    Proof.context
     -> { unit: HClause.hthm
        , unit_orientation: JLit.lpos
        , right_premise: HClause.hthm
@@ -149,7 +153,7 @@ fun reconstruct_arg_cong_one_var ctxt var premise =
   let
     val (s, s', true) = HClause.dest_lit_cterm_at 0 premise
     val T = Thm.ctyp_of_cterm var
-    val rT = s |> Thm.ctyp_of_cterm |> Thm.dest_ctyp1 
+    val rT = s |> Thm.ctyp_of_cterm |> Thm.dest_ctyp1
     val lemma = HClause.of_lemma (\<^instantiate>\<open>s and s' and x=var and 'a=T and 'b=rT in
       lemma \<open>(s :: 'a \<Rightarrow> 'b) x \<noteq> s' x \<Longrightarrow> s \<noteq> s'\<close> by auto\<close>)
   in
@@ -192,7 +196,7 @@ fun reconstruct_sup
       |> Thm.concl_of
       |> HOLogic.dest_Trueprop
       |> HOLogic.dest_eq
-    
+
     (* val () = writeln ("\<not>C \<Longrightarrow> False : " ^ @{make_string} right_premise) *)
     (* t = t' \<Longrightarrow> \<not>C\<langle>t'\<rangle>\<^sub>p \<Longrightarrow> False *)
     val t_eq_t'_imp_Ct' =
@@ -529,6 +533,35 @@ fun reconstruct_delete_resolved_lits { premise, cposs } =
     fold impl_delete_resolved_lit sorted premise
   end
 
+fun reconstruct_flex_flex_simp
+  ctxt
+  { premise }
+=
+  let
+    val lits = HClause.lits premise
+    val all_neg = not (exists #3 lits)
+    val () = if not all_neg then error "reconstruct_flex_flex_simp: not all negative" else ()
+    val flex_flex_pairs = lits |> map (fn stb => (Thm.term_of (#1 stb), Thm.term_of (#2 stb)))
+    (* compare Thm.flexflex_rule *)
+    val unifiers =
+      Slam_Unify.smash_unifiers
+        (Context.Proof ctxt)
+        flex_flex_pairs
+        (Envir.empty (HClause.maxidx_of premise))
+    val unifier =
+      case Seq.pull unifiers of
+        SOME (unifier, _) => unifier
+      | NONE => error "reconstruct_flex_flex_simp: no unifier"
+    val instantiated = HClause.map_hthm (Slam_Proof_Util.envir_norm_thm ctxt unifier) premise
+    val empty_clause =
+      funpow
+        (HClause.nprems_of instantiated)
+        (fn hthm => (HClause.RSN @{thm "HOL.refl"} (1, hthm)))
+        instantiated
+  in
+    empty_clause
+  end
+
 fun reconstruct_positive_simplify_reflect
   ctxt
   { unit, unit_orientation, right_premise, disagreement }
@@ -543,7 +576,7 @@ fun reconstruct_positive_simplify_reflect
          , subterm = disagreement }
   in
    reconstruct_delete_resolved_lits
-     { premise = with_resolved_literal 
+     { premise = with_resolved_literal
      , cposs = [#3 disagreement] }
   end
 
@@ -606,7 +639,7 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal, quant_in
     (*the tactical THEN performs one tactic followed by another*)
     (* from TACTICAL.THEN *)
     fun (tac1 H_THEN' tac2) i st = Seq.maps (tac2 i) (tac1 i st);
-    
+
     (*Apply second tactic to all subgoals emerging from the first --
       following usual convention for subgoal-based tactics.*)
     (* from TACTICAL.THEN_ALL_NEW *)
@@ -674,7 +707,7 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal, quant_in
     fun demorgan_tac ctxt = FIRST' [not_and_tac ctxt, not_or_tac ctxt]
 
     fun and_tac ctxt = resolve_tac ctxt @{thms HOL.conjI} (* P \<Longrightarrow> Q \<Longrightarrow> P \<and> Q *)
-    
+
     fun or_tac_1 ctxt = resolve_tac ctxt @{thms HOL.disjI1} (* P \<Longrightarrow> P \<or> Q *)
     fun or_tac_2 ctxt = resolve_tac ctxt @{thms HOL.disjI2} (* Q \<Longrightarrow> P \<or> Q *)
     (* doubles the number of clauses *)
@@ -771,7 +804,7 @@ fun reconstruct_simp_outer_claus ctxt { premise: HClause.hthm, literal, quant_in
 
     fun oc th =
       case quant_info of
-        NONE => 
+        NONE =>
           th
           |> tac_to_hthm_tac (oc_non_quant_tac ctxt) literal
           |> the_up_to_two
@@ -809,7 +842,7 @@ fun reconstruct_neg_ext ctxt { premise, literal, skolems } =
     val lemma =
       (* FIXME: move construction of HClause.hthm into neg_ext_lemma function *)
       { th = Slam_Lemma.neg_ext_lemma ctxt (s, s') (skolem_const, skolem_with_args, skolem_def)
-      , skolems = [(skolem_const, skolem_def)] 
+      , skolems = [(skolem_const, skolem_def)]
       }
     (*
     val T = s |> Thm.ctyp_of_cterm |> Thm.dest_ctyp0
@@ -916,7 +949,7 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
           | NONE => error
               ("premise " ^ @{make_string} (clause_db id) ^ " missing from reconstructed clauses"))
     fun get_and_instantiate (substitution: Envir.env) (shift: int option) (id: int) =
-      get_thm id 
+      get_thm id
       |> HClause.incr_indexes (the_default 0 shift)
       |> HClause.map_hthm (Slam_Proof_Util.envir_norm_thm ctxt substitution)
     val conclusion =
@@ -963,8 +996,8 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
             { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
       | Slam_Log.NeqHoist { premise, subterm, substitution } =>
           reconstruct_neq_hoist
-           ctxt
-           { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
+            ctxt
+            { premise = get_and_instantiate substitution NONE premise, subterm = subterm }
       | Slam_Log.ForallHoist { premise, subterm, substitution, fresh_x } =>
           let
             val { uninstantiated_premise, predicate, subterm, fresh_x } =
@@ -1039,14 +1072,16 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
       | Slam_Log.FluidLoobHoist { premise, subterm, substitution } =>
           error "manual FluidLoobHoist reconstruction unimplemented"
       | Slam_Log.Ext =>
-          error "manual Ext reconstruction unimplemented" 
+          error "manual Ext reconstruction unimplemented"
       | Slam_Log.Choice =>
-          error "manual Choice reconstruction unimplemented" 
+          error "manual Choice reconstruction unimplemented"
       | Slam_Log.DeleteDuplicatedLits { premise, duplicate_cposs } =>
           reconstruct_delete_duplicated_lits
             { premise = get_thm premise, duplicate_cposs = duplicate_cposs }
       | Slam_Log.DeleteResolvedLits { premise, cposs } =>
           reconstruct_delete_resolved_lits { premise = get_thm premise, cposs = cposs }
+      | Slam_Log.FlexFlexSimp { premise } =>
+          reconstruct_flex_flex_simp ctxt { premise = get_thm premise }
       | Slam_Log.RewritePositiveLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution } =>
           reconstruct_sup
             ctxt
@@ -1117,7 +1152,7 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
           Slam_Log.EqualitySubsumption { unit = f unit, disagreement = disagreement, substitution = substitution }
       | Slam_Log.Invalid =>
           Slam_Log.Invalid
-*)    
+*)
       | origin => error ("replay_inference unimplemented for " ^ @{make_string} origin)
   in
     conclusion
@@ -1225,7 +1260,7 @@ fun reconstruct_manual
       in
         Inttab.update_new (JClause.id clause, replayed) reconstructed_clause_db
       end
-    val reconstructed_clause_db = fold replay_and_insert clauses Inttab.empty 
+    val reconstructed_clause_db = fold replay_and_insert clauses Inttab.empty
   in
     case Inttab.lookup reconstructed_clause_db id of
       SOME reconstructed_contradiction =>
@@ -1236,7 +1271,7 @@ fun reconstruct_manual
 
 fun reconstruct ctxt (clause_db : int -> JClause.T) id =
   case Slam_Common.get_proof_reconstruction_mode ctxt of
-    Slam_Common.Manual => reconstruct_manual ctxt clause_db id 
+    Slam_Common.Manual => reconstruct_manual ctxt clause_db id
   | _ => error "Only Manual reconstruction is implemented."
 
 end;

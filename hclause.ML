@@ -9,13 +9,13 @@ sig
     sk1 = (\<lambda>\<dots> SOME\<dots>) \<Longrightarrow> \<dots> \<Longrightarrow> skN = \<dots> \<Longrightarrow> False
   is turned into
     False
-  by first generalizing the free variables sK1, \<dots>, skN to obtain 
+  by first generalizing the free variables sK1, \<dots>, skN to obtain
     ?sk1 = (\<lambda>\<dots> SOME\<dots>) \<Longrightarrow> \<dots> \<Longrightarrow> ?skN = \<dots> \<Longrightarrow> False
   and applying the trivial substitution solving the premises.
 
   This module contains the necessary utilities to carry along the skolem premises during proof
   reconstruction, making sure they are always to the left of the actual clause. *)
-  
+
   (* The \<dots>_raw functions do not take into account the skolem premises and consider them to be part
   of the clause. *)
 
@@ -28,13 +28,14 @@ sig
   val map_hthm : (thm -> thm) -> hthm -> hthm
   val traverse_hthm : (thm -> thm list) -> hthm -> hthm list
   val seq_traverse_hthm : (thm -> thm Seq.seq) -> hthm -> hthm Seq.seq
-  
+
   val cprop_without_skolem_prems : hthm -> cterm
-  
+
   val of_lemma : thm -> hthm
-  
+
   val maxidx_of : hthm -> int
   val nprems_of : hthm -> int
+  val lits : hthm -> (cterm * cterm * bool) list
 
   val make_last: JClause.cpos -> hthm -> hthm
   val move_last_to: JClause.cpos -> hthm -> hthm
@@ -56,16 +57,18 @@ sig
 
   val hol_of_clause: Proof.context -> bool -> JClause.T -> cterm
 
-  val merge_duplicated_lit_last: hthm -> hthm 
-  
+  val merge_duplicated_lit_last: hthm -> hthm
+
   (* 1-based *)
   val comp_no_flatten_no_incr: hthm * int -> int -> hthm -> hthm
   val comp_no_flatten: hthm * int -> int -> hthm -> hthm
   val compose : thm * int * hthm -> hthm
 
   val incr_indexes : int -> hthm -> hthm
-  
+
   val congruence_wrt_subterm_position : Proof.context -> term * term -> hthm -> JClause.full_pos -> hthm
+
+  val RSN : thm -> int * hthm -> hthm
 end
 
 structure HClause: HCLAUSE =
@@ -151,9 +154,32 @@ fun orient_positive_consequent_lit JLit.Left C = C
 
 fun nprems_of { th, skolems } = Thm.nprems_of th - length skolems
 
+fun negated_lits_trueprop { th = th, skolems = skolems } =
+  let
+    val negated_lits = Drule.strip_imp_prems (Thm.cprop_of th)
+    val () = \<^assert> (@{cprop "False"} aconvc Drule.strip_imp_concl (Thm.cprop_of th))
+  in
+    List.drop (negated_lits, length skolems)
+  end
+
+fun dest_negated_lit_trueprop ct =
+  let
+    val negated_lit = dest_Trueprop ct
+    val negated_lit_is_positive = not (can HOLogic.dest_not (Thm.term_of negated_lit))
+    val (left, right) =
+      negated_lit
+      |> (if negated_lit_is_positive then I else Thm.dest_arg)
+      |> Drule.strip_comb
+      |> (fn (_, [left, right]) => (left, right))
+  in
+    (left, right, not negated_lit_is_positive)
+  end
+
+fun lits ht = negated_lits_trueprop ht |> map dest_negated_lit_trueprop
+
 (* Given 1 and (\<not>A \<Longrightarrow> \<not>B \<Longrightarrow> False) returns \<not>B.
 Terminology: A and B are the literals of the above clause! *)
-fun negated_lit_trueprop_cterm_at_raw cpos th = 
+fun negated_lit_trueprop_cterm_at_raw cpos th =
   let
     val negated_lits = Drule.strip_imp_prems (Thm.cprop_of th)
     val () = \<^assert> (@{cprop "False"} aconvc Drule.strip_imp_concl (Thm.cprop_of th))
@@ -161,8 +187,8 @@ fun negated_lit_trueprop_cterm_at_raw cpos th =
     nth negated_lits cpos
   end
 
-fun negated_lit_trueprop_cterm_at cpos { th = th, skolems = skolems } = 
-  negated_lit_trueprop_cterm_at_raw (cpos + length skolems) th 
+fun negated_lit_trueprop_cterm_at cpos { th = th, skolems = skolems } =
+  negated_lit_trueprop_cterm_at_raw (cpos + length skolems) th
 
 fun dest_lit_cterm_at cpos hol_clause =
   let
@@ -171,7 +197,7 @@ fun dest_lit_cterm_at cpos hol_clause =
     val (left, right) =
       negated_lit
       |> (if negated_lit_is_positive then I else Thm.dest_arg)
-      |> Drule.strip_comb 
+      |> Drule.strip_comb
       |> (fn (_, [left, right]) => (left, right))
   in
     (left, right, not negated_lit_is_positive)
@@ -187,7 +213,7 @@ fun negated_lit_trueprop_term_at_raw cpos (hol_clause: term) =
   in
     nth negated_lits cpos
   end
-  
+
 
 (* Given 1 and (\<not>A \<Longrightarrow> \<not>B \<Longrightarrow> False) returns \<not>B.
 Terminology: A and B are the literals of the above clause! *)
@@ -210,7 +236,7 @@ fun map_equality_at_lpos JLit.Left f (Const ("HOL.eq", _) $ x $ y) = HOLogic.mk_
   | map_equality_at_lpos JLit.Right f (Const ("HOL.eq", _) $ x $ y) = HOLogic.mk_eq (x, f y)
   | map_equality_at_lpos _ _ t =
       error ("map_equality_at_lpos: not an equality: " ^ @{make_string} t)
-  
+
 fun map_at_lpos pos f (@{term "HOL.Not"} $ t) =
       HOLogic.mk_not (map_equality_at_lpos pos f t)
   | map_at_lpos pos f t = map_equality_at_lpos pos f t
@@ -233,7 +259,7 @@ Orthogonal
 Must-haves:
 1. We need to decide on one particular normal form during reconstruction and stick to it.
   Decision: Stick to o\<lambda>Sups normal form. Problem: This is far from what we're doing right now...
-2. 
+2.
 *)
 (* This only makes sense for green subterms because of potential differences between the normal form
 of o\<lambda>Sup and the one used in proof reconstruction. *)
@@ -295,7 +321,7 @@ fun hol_clause_pos_of_full_pos ((tpos, lpos, cpos), target_literal_is_positive) 
   | ERes of { premise: int, literal: JClause_Pos.cpos }
   | EFact of { premise: int, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos }
   (* FIXME: can this be meaningfully viewed as a kind of superposition? *)
-  | ArgCong 
+  | ArgCong
   |
 
 fun proof_steps_of_inference *)
@@ -303,7 +329,7 @@ fun proof_steps_of_inference *)
 (* Turn slam clause [A, B, C] into formula \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False, avoiding double negations. *)
 fun hol_of_clause ctxt close c =
   let
-    val negated_literals = 
+    val negated_literals =
       JClause.literals c
       |> map JLit.negate (* avoid double negations *)
       |> map JLit.term_of
@@ -415,6 +441,9 @@ e.g. some helper lemma. *)
 fun compose (th_left, i, { th, skolems }) =
   { th = Drule.compose (th_left, i + length skolems, th), skolems = skolems }
 
+fun RSN (tha : thm) (i, { th, skolems } : hthm) =
+  { th = Thm.RSN (tha, (i + length skolems, th)), skolems = skolems } : hthm
+
 (* C = \<not>C' \<Longrightarrow> A \<Longrightarrow> A \<Longrightarrow> False *)
 (* ============================= *)
 (*      \<not>C' \<Longrightarrow> A \<Longrightarrow> False      *)
@@ -462,11 +491,11 @@ fun congruence_wrt_subterm_position ctxt eq (c as { skolems, ... }) subterm_posi
       \<^instantiate>\<open>x=ct and y=ct' and f=C_abs and 'a=cT in
         lemma \<open>(x :: 'a) = y \<Longrightarrow> PROP f x \<Longrightarrow> PROP f y\<close> by auto\<close>
       (* Get's rid of the PROP f x premise *)
-      |> (fn th => Drule.compose (thm_of c, 2, th)) 
+      |> (fn th => Drule.compose (thm_of c, 2, th))
       (* Move the skolem premises that are part of PROP f y above to the very left. *)
       |> Slam_Proof_Util.move_prems_left 2 (length skolems) 1
   in
-    { th = C_congruence_wrt_subterm_position, skolems = skolems } 
+    { th = C_congruence_wrt_subterm_position, skolems = skolems }
   end
 
 end

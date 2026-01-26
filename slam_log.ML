@@ -34,6 +34,7 @@ sig
   | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos, orientation: JLit.lpos } list }
   (* FIXME: | DeleteResolvedLits of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env } *)
   | DeleteResolvedLits of { premise: 'a, cposs: JClause_Pos.cpos list }
+  | FlexFlexSimp of { premise: 'a }
   | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | PositiveSimplifyReflect of { unit: 'a, unit_shift: int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, disagreement: JClause_Pos.full_pos }
@@ -94,6 +95,7 @@ datatype 'a inference =
   (** simplification **)
   | DeleteDuplicatedLits of { premise: 'a, duplicate_cposs: { duplicate: JClause_Pos.cpos, duplicate_of: JClause_Pos.cpos, orientation: JLit.lpos } list }
   | DeleteResolvedLits of { premise: 'a, cposs: JClause_Pos.cpos list }
+  | FlexFlexSimp of { premise: 'a }
   | RewritePositiveLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | RewriteNegativeLits of { unit: 'a, unit_shift: int, unit_orientation: JLit.lpos, right_premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | PositiveSimplifyReflect of { unit: 'a, unit_shift: int, matcher: Envir.env, unit_orientation: JLit.lpos, right_premise: 'a, disagreement: JClause_Pos.full_pos }
@@ -133,6 +135,7 @@ fun is_simplification (Axiom _) = false
   | is_simplification Choice = false
   | is_simplification (DeleteDuplicatedLits _) = true
   | is_simplification (DeleteResolvedLits _) = true
+  | is_simplification (FlexFlexSimp _) = true
   | is_simplification (RewritePositiveLits _) = true
   | is_simplification (RewriteNegativeLits _) = true
   | is_simplification (PositiveSimplifyReflect _) = true
@@ -167,6 +170,7 @@ fun premises (Axiom _) = []
   | premises Choice = error "Choice undefined"
   | premises (DeleteDuplicatedLits { premise, ... }) = [premise]
   | premises (DeleteResolvedLits { premise, ... }) = [premise]
+  | premises (FlexFlexSimp { premise }) = [premise]
   | premises (RewritePositiveLits { unit, right_premise, ... }) = [unit, right_premise]
   | premises (RewriteNegativeLits { unit, right_premise, ... }) = [unit, right_premise]
   | premises (PositiveSimplifyReflect { unit, right_premise, ... }) = [unit, right_premise]
@@ -302,6 +306,7 @@ fun name_of (Axiom _) = "Axiom"
   | name_of Choice = "Choice" 
   | name_of (DeleteDuplicatedLits _) = "DeleteDuplicatedLits" 
   | name_of (DeleteResolvedLits _) = "DeleteResolvedLits" 
+  | name_of (FlexFlexSimp _) = "FlexFlexSimp"
   | name_of (RewritePositiveLits _) = "RewritePositiveLits" 
   | name_of (RewriteNegativeLits _) = "RewriteNegativeLits" 
   | name_of (PositiveSimplifyReflect _) = "PositiveSimplifyReflect" 
@@ -353,7 +358,8 @@ fun pretty' ctxt (inference: int inference) =
   | DeleteDuplicatedLits { premise, duplicate_cposs }
       => lst [str "DeleteDuplicatedLits", @{mk_pty} premise, @{mk_pty} duplicate_cposs]
   | DeleteResolvedLits { premise, cposs }
-       => lst [str "DeleteResolvedLits", @{mk_pty} premise, @{mk_pty} cposs]
+      => lst [str "DeleteResolvedLits", @{mk_pty} premise, @{mk_pty} cposs]
+  | FlexFlexSimp { premise } => lst [str "FlexFlexSimp", @{mk_pty} premise]
   | RewritePositiveLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution }
        => lst [str "RewritePositiveLits", @{mk_pty} unit, lbl "shift" (@{mk_pty} unit_shift), @{mk_pty} unit_orientation, @{mk_pty} right_premise, @{mk_pty} subterm, penv substitution]
   | RewriteNegativeLits { unit, unit_shift, unit_orientation, right_premise, subterm, substitution }

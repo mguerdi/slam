@@ -113,9 +113,11 @@ fun is_negative_or_negativoid_cfg ctxt =
     then is_negativoid
     else is_negative
 
-val is_flex_sided = any_side JTerm.is_variable_headed
+val is_flex_sided = any_side JTerm.is_variable_headed_comb
 
-val is_flex_flex = both_sides JTerm.is_variable_headed
+(* Note: not the same terminology as "A higher-order Vampire", where only negative literals can be
+"flex-flex" *)
+val is_flex_flex = both_sides JTerm.is_variable_headed_comb
 
 (* forgets orientation *)
 fun map f (Lit { lhs, rhs, pol, ... }) = mk (f lhs, f rhs, pol)
