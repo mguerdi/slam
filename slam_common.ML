@@ -119,6 +119,8 @@ sig
   val pretty_tenv : Proof.context -> Envir.tenv -> string
   val pretty_env' : Proof.context -> Envir.env -> Pretty.T
   val pretty_env : Proof.context -> Envir.env -> string
+  val pretty_preunifier' : Proof.context -> Envir.env * (term * term) list -> Pretty.T
+  val pretty_preunifier : Proof.context -> Envir.env * (term * term) list -> string
   val raw_pp_typ : typ -> Pretty.T
   val raw_pp_term : term -> Pretty.T
   val I : 'a -> 'a
@@ -586,11 +588,22 @@ fun label_pretty name pretty = Pretty.block ([Pretty.str (name ^ "="), pretty])
 fun pretty_env' ctxt env =
   Pretty.block (
     [ label_pretty "ty" (pretty_tyenv' ctxt (Envir.type_env env))
+    , Pretty.brk 1
     , label_pretty "tm" (pretty_tenv' ctxt (Envir.term_env env))
     ]
   )
 
 val pretty_env = Pretty.string_of oo pretty_env'
+
+fun pretty_preunifier' ctxt (env, flex_flex_pairs) =
+  Pretty.block
+    [ pretty_env' ctxt env
+    , Pretty.brk 1
+    (* from pretty_thm_raw from more_thm.ML *)
+    , label_pretty "ff" (Pretty.list "[" "]" (map (Pretty.block o Syntax.pretty_flexpair ctxt) flex_flex_pairs))
+    ]
+
+val pretty_preunifier = Pretty.string_of oo pretty_preunifier'
 
 (* from the cookbook
 (* switch to unpretty printer *)

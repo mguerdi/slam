@@ -7,7 +7,7 @@ sig
     Axiom of { thm: thm }
   | NegatedConjecture of { thm: thm }
   (* proper inferences *)
-  | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, preunifier: Slam_Unify.preunifier }
   | FluidSup
   | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
   | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -55,7 +55,7 @@ sig
 
   val is_simplification : 'a inference -> bool
   val premises : 'a inference -> 'a list
-  val premises_shift_substitution : int inference -> { id: int, shift: int, substitution: Envir.env } list
+  (* val premises_shift_substitution : int inference -> { id: int, shift: int, substitution: Envir.env } list *)
   val name_of : 'a inference -> string
   val pretty' : Proof.context -> int inference -> Pretty.T
   val pretty : Proof.context -> int inference -> string
@@ -70,7 +70,7 @@ datatype 'a inference =
   | NegatedConjecture of { thm: thm }
   (* proper inferences *)
   (** general **)
-  | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, substitution: Envir.env }
+  | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, preunifier: Slam_Unify.preunifier }
   | FluidSup
   | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
   | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
@@ -181,6 +181,8 @@ fun premises (Axiom _) = []
   | premises Invalid = error "\"Invalid\" inference encountered"
   | premises _ = error "Slam_Log.premises: unimplemented"
 
+(* FIXME: delete? *)
+(*
 fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_premise, substitution, ... })
       = [{ id = left_premise, shift = left_premise_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (RewritePositiveLits { unit, unit_shift, right_premise, substitution, ... })
@@ -223,6 +225,7 @@ fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_p
       in
         premises |> map (fn id => { id = id, shift = 0, substitution = Envir.init })
       end
+*)
 
 (* Building blocks of proofs (inspired by metis_reconstruct.ML):
 
@@ -328,14 +331,15 @@ fun pretty' ctxt (inference: int inference) =
     val lbl = Slam_Common.label_pretty
     val lst = Pretty.enum ";" "{" "}"
     val penv = Slam_Common.pretty_env' ctxt
+    val ppreunif  = Slam_Common.pretty_preunifier' ctxt
     val pretty_skolems' = list "[" "]" o map (fn (t1, t2, t3) => Slam_Common.pretty_terms' ctxt [t1, t2, t3])
     fun pretty_subrule' subrule = Pretty.block [Slam_Common.pretty_term' ctxt (#1 subrule), str " \<mapsto> ", Slam_Common.pretty_term' ctxt (#2 subrule)]
   in
   case inference of
     Axiom { thm } => lst [str "Axiom", Thm.pretty_thm ctxt thm]
   | NegatedConjecture { thm } => lst [str "NegatedConjecture", Thm.pretty_thm ctxt thm]
-  | Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution }
-     => lst [str "Sup", lbl "left" (@{mk_pty} left_premise), lbl "shift" (@{mk_pty} left_premise_shift), @{mk_pty} literal, lbl "right" (@{mk_pty} right_premise), @{mk_pty} subterm, penv substitution]
+  | Sup { left_premise, left_premise_shift, right_premise, literal, subterm, preunifier }
+     => lst [str "Sup", lbl "left" (@{mk_pty} left_premise), lbl "shift" (@{mk_pty} left_premise_shift), @{mk_pty} literal, lbl "right" (@{mk_pty} right_premise), @{mk_pty} subterm, ppreunif preunifier]
   | FluidSup => str "FluidSup"
   | ERes { premise, literal, substitution} => lst [str "ERes", @{mk_pty} premise, @{mk_pty} literal, penv substitution]
   | EFact { premise, left_literal, right_literal, substitution } => lst [str "EFact", @{mk_pty} premise, @{mk_pty} left_literal, @{mk_pty} right_literal, penv substitution]

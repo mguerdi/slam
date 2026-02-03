@@ -962,13 +962,29 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
           thm
           |> hclause_of_axiom ctxt
           |> HClause.map_hthm (Slam_Proof_Util.envir_norm_thm ctxt Envir.init)
-      | Slam_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, substitution } =>
-          reconstruct_sup
-            ctxt
-            { left_premise = get_and_instantiate substitution (SOME left_premise_shift) left_premise
-            , right_premise = get_and_instantiate substitution NONE right_premise
-            , literal = literal
-            , subterm = subterm }
+      | Slam_Log.Sup { left_premise, left_premise_shift, right_premise, literal, subterm, preunifier } =>
+          let
+            (* apply the preunifier, weakening by flex-flex pairs *)
+            val left_premise =
+              get_and_instantiate Envir.init (SOME left_premise_shift) left_premise
+              |> HClause.apply_preunifier ctxt preunifier
+            val target_term =
+              left_premise
+              |> HClause.orient_lit_at literal
+              |> HClause.dest_lit_at (#2 literal)
+              |> #1
+            (* apply only the preunifier's substitution *)
+            val right_premise =
+              get_and_instantiate (#1 preunifier) NONE right_premise
+              |> HClause.resolve_disagreements_modulo_flex_flex ctxt subterm target_term
+          in
+            reconstruct_sup
+              ctxt
+              { left_premise = left_premise
+              , right_premise = right_premise
+              , literal = literal
+              , subterm = subterm }
+          end
       (*
       | Slam_Log.FluidSup =>
           Slam_Log.FluidSup

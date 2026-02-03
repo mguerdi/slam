@@ -935,6 +935,12 @@ fun variable_condition ctxt u =
 (* Sup inference *)
 fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
   let
+    (* Strategy for for delayed unification
+      1. apply the preunifier to D, introducing flex-flex constraints as negative literals
+      2. apply only the substitution to C
+      3. The fact that t\<sigma> and u\<sigma> are not equal doesn't matter because we're replacing u\<sigma> by t'\<sigma>
+          anyways. (We do however need to rewrite t\<sigma> into u\<sigma> later in proof reconstruction).
+    *)
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_sup "Sup"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () =>
@@ -956,20 +962,22 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
     let
       val () = tracer (fn () =>
         Slam_Common.pretty_term ctxt t ^ " ?= " ^ Slam_Common.pretty_term ctxt u)
-      val unifiers = Slam_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env
-      val (unifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) unifiers
-      val () = if 0 = length unifiers then fail () (K "no unifiers") else ()
-      fun build_conclusion unifier =
+      val preunifiers = Slam_Unify.preunifiers (Context.Proof ctxt) [(t, u)] env
+      val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
+      val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
+      fun build_conclusion (substitution, flex_flex_pairs) =
         let
           val (c, d) =
             (c, d)
-            |> apply2 (JClause.norm_beta_eta_qeta_env ctxt unifier)
+            |> apply2 (JClause.norm_beta_eta_qeta_env ctxt substitution)
             |> apply2 (JClause.recompute_selected ctxt)
           fun u_eligible () = JClause.is_eligible_full_pos c (u_pos, u_eligibility)
           (* This checks for strict eligibility of cp because the literal at cp is positive. *)
           fun tt'_eligible () = JClause.is_eligible_cpos d (cp, tt'_eligibility)
           (* val _ = writeln ("c_comp_d " ^ @{make_string} c_comp_d) *)
-          fun d' () = JClause.delete_lit_at ctxt cp d
+          fun d' () =
+            JClause.delete_lit_at ctxt cp d
+            |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) flex_flex_pairs
           (* this relies on normalization not destroying green / top level positions, i.e.
           (t = t')\<sigma> = (t\<sigma> = t'\<sigma>) and C<u>\<sigma> = C\<sigma><u\<sigma>> *)
           val t_eq_t' = JLit.orient lp (JClause.lit_at cp d)
@@ -996,12 +1004,12 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
                 , right_premise = JClause.id c
                 , literal = (lp, cp)
                 , subterm = u_pos
-                , substitution = unifier })
+                , preunifier = (substitution, flex_flex_pairs) })
           |> trace_concl ctxt tracer
           |> SOME
         end
     in
-      map_filter build_conclusion unifiers
+      map_filter build_conclusion preunifiers
     end
   end
 

@@ -69,6 +69,9 @@ sig
   val congruence_wrt_subterm_position : Proof.context -> term * term -> hthm -> JClause.full_pos -> hthm
 
   val RSN : thm -> int * hthm -> hthm
+
+  val apply_preunifier : Proof.context -> Slam_Unify.preunifier -> hthm -> hthm
+  val resolve_disagreements_modulo_flex_flex : Proof.context -> JClause.full_pos -> term -> hthm -> hthm
 end
 
 structure HClause: HCLAUSE =
@@ -497,5 +500,152 @@ fun congruence_wrt_subterm_position ctxt eq (c as { skolems, ... }) subterm_posi
   in
     { th = C_congruence_wrt_subterm_position, skolems = skolems }
   end
+
+(* FIXME: redundancy with Slam_Proof.impl_delete_duplicated_lit *)
+(* FIXME: not needed but might still be useful later *)
+fun delete_aconv_duplicated_lit
+  (delete_pos : JClause.cpos)
+  (keep_pos : JClause.cpos)
+  (clause : hthm)
+=
+  let
+    val () = if delete_pos = keep_pos then
+      error ("delete_duplicated_lit: delete_pos and keep_pos are equal " ^
+        "(value=" ^ @{make_string} delete_pos ^ ")")
+      else ()
+    (* If the literal that is being deleted is to left of the one that we keep, the latters position
+    shifts by one to the left. *)
+    val final_keep_pos =
+      if delete_pos < keep_pos then keep_pos - 1 else keep_pos
+    (* aconv of lits *)
+    val delete_lit = JLit.mk (dest_lit_at delete_pos clause)
+    val keep_lit = JLit.mk (dest_lit_at keep_pos clause)
+    val orientation =
+      case JLit.aconv_as (delete_lit, keep_lit) of
+        SOME orientation => orientation
+      | NONE => error "delete_duplicated_lit: literals aren't aconv'able"
+  in
+    clause
+    (* orient literal to be deleted *)
+    |> orient_lit_at (orientation, delete_pos)
+    (* delete *)
+    |> make_last keep_pos
+    |> make_last delete_pos
+    |> merge_duplicated_lit_last
+    (* move kept literal back *)
+    |> move_last_to final_keep_pos
+  end
+
+(* FIXME: not needed but might still be useful later *)
+fun local_rw
+  ctxt
+  (negative_literal : JClause.cpos * JLit.lpos)
+  (subterm_position : JClause.full_pos)
+  (clause : hthm)
+  : hthm
+=
+  let
+    val (s, t, b) = dest_lit_at (#1 negative_literal) clause
+    val () = if b then error "local_rw: not a negative_literal" else ()
+    val (lhs, rhs) = case #2 negative_literal of JLit.Left => (s, t) | JLit.Right => (t, s)
+    val conditional_rewritten_clause =
+      congruence_wrt_subterm_position ctxt (lhs, rhs) clause subterm_position
+    val rewritten_clause =
+      delete_aconv_duplicated_lit 0 (#1 negative_literal) conditional_rewritten_clause
+  in
+    rewritten_clause
+  end
+
+(* Introduce flex-flex pair as a negative literal into a clause. This is redundant with Isabelle's
+internal tracking of flex-flex contraints on theorems. The flex-flex pairs attached to the theorem
+are required to make the variable names (in heads of flex-flex pairs) during reconstruction match
+those during proof search. The negative literals are required because they are present - and
+reasoned about - during proof search. *)
+fun weaken_by_flex_flex_pair
+  ctxt
+  (flex_flex_pair : term * term)
+  (clause : hthm)
+=
+  let
+    (* L\<^sub>1 \<Longrightarrow> ... \<Longrightarrow> L\<^sub>n \<Longrightarrow> False *)
+                          (* False \<Longrightarrow> \<not>lit \<Longrightarrow> False *)
+    (* L\<^sub>1 \<Longrightarrow> ... \<Longrightarrow> L\<^sub>n \<Longrightarrow>           \<not>lit \<Longrightarrow> False *)
+    val (lhs, rhs) = flex_flex_pair
+    val lit = JLit.mk (lhs, rhs, false)
+    val () = if not (JLit.is_flex_flex lit) then error "weaken_with_lit: not a flex-flex pair" else ()
+    val (lhs, rhs) = apply2 (Thm.cterm_of ctxt) (lhs, rhs)
+    val T = Thm.ctyp_of_cterm lhs
+    val weakening_clause =
+      \<^instantiate>\<open>
+        'a=T and lhs and rhs in lemma \<open>False \<Longrightarrow> (lhs :: 'a) = rhs \<Longrightarrow> False\<close> by auto
+      \<close>
+      |> of_lemma
+    val weakened_clause = comp_no_flatten_no_incr (clause, nprems_of clause) 1 weakening_clause
+  in
+    weakened_clause
+  end
+
+(* Introduces the flex-flex pairs as negative literals. *)
+fun apply_preunifier
+  ctxt
+  ((substitution, flex_flex_pairs) : Slam_Unify.preunifier)
+  (clause : hthm)
+=
+  let
+    val normed_clause = map_hthm (Slam_Proof_Util.envir_norm_thm ctxt substitution) clause
+    val normed_clause_with_flex_flex_lits =
+      fold (weaken_by_flex_flex_pair ctxt) flex_flex_pairs normed_clause
+  in
+    normed_clause_with_flex_flex_lits
+  end
+
+(* Resolve disagreements between the terms, introducing flex-flex constraints into the thm. *)
+fun resolve_disagreements_modulo_flex_flex
+  (ctxt : Proof.context)
+  (green_subterm_position : JClause.full_pos)
+  (target_term : term)
+  (clause : hthm)
+=
+  let
+    val green_subterm = green_subterm_at_full_pos (hterm_of clause) green_subterm_position
+    (* has flex-flex pairs attached to thm *)
+    val subterm_eq_target_term: hthm =
+      Slam_Proof_Util.refl_modulo_flex_flex ctxt (green_subterm, target_term)
+      |> of_lemma
+    val eq_implies_rewritten: hthm =
+      congruence_wrt_subterm_position
+        ctxt
+        (green_subterm, target_term)
+        clause
+        green_subterm_position
+    val rewritten = comp_no_flatten_no_incr (subterm_eq_target_term, 0) 1 eq_implies_rewritten
+    fun sanity_check () =
+      let
+        val new_subterm = green_subterm_at_full_pos (hterm_of rewritten) green_subterm_position
+      in
+        if not (new_subterm aconv target_term) then error (
+          "resolve_disagreements_modulo_flex_flex: new_subterm\n"
+          ^ Slam_Common.pretty_term ctxt new_subterm ^ "\nis not equal to target_term\n"
+          ^ Slam_Common.pretty_term ctxt target_term)
+        else ()
+      end
+    (* FIXME: hide behind debug flag *)
+    val () = sanity_check ()
+  in
+    rewritten
+  end
+
+(* Apply preunifier to a clause, introducing flex-flex pairs as negative literals.
+Rewrite subterm into target term, introducing flex-flex pairs as tpairs on the thm. *)
+fun norm_preunifier
+  (ctxt : Proof.context)
+  (clause : hthm)
+  (preunifier : Slam_Unify.preunifier)
+  (green_subterm_position : JClause.full_pos)
+  (target_term : term)
+=
+  clause
+  |> apply_preunifier ctxt preunifier
+  |> resolve_disagreements_modulo_flex_flex ctxt green_subterm_position target_term
 
 end

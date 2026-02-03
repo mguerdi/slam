@@ -52,4 +52,9 @@ ML_val \<open>
   val () = \<^assert> (eqh (c', empty))
 \<close>
 
+ML_val \<open>
+  val c = mkh @{term_schem "?x a \<noteq> ?y b \<Longrightarrow> False"}
+  val () = \<^assert_cant>\<open>Slam_Proof.reconstruct_flex_flex_simp @{context} { premise = c }\<close>
+\<close>
+
 end
