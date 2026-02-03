@@ -312,8 +312,10 @@ fun simp_flex_flex ctxt c =
       (* Check if a literal can be made false by a smash unifier. This includes ?x \<noteq> ?y. *)
       JLit.is_negative lit andalso JLit.both_sides (JTerm.is_variable_headed) lit
   in
+    if JClause.is_false c then fail NONE (K "already a contradiction") else
     if not (forall is_smashable (JClause.literals c)) then fail NONE (K "not all flex-flex") else
     JClause.empty
+    |> JClause.refresh_id ctxt ()
     |> JClause.set_origin ctxt (Slam_Log.FlexFlexSimp { premise = JClause.id c })
     |> SOME
   end
