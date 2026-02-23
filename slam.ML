@@ -2033,8 +2033,21 @@ fun infer_neg_cong_fun ctxt (c, cpos, eligibility) =
     val ((f, ss), (g, ts)) = apply2 strip_comb (f_ss, g_ts)
   in
   if not (f aconv g) then fail [] (K "unequal heads") else
-  let val () = if (length ss = length ts) then () else error "infer_neg_cong_fun: assertion failed" in
-  if not (exists JTerm.has_functional_type ss) then fail [] (K "no argument has functional type") else
+  let
+    val () = if (length ss = length ts) then () else error "infer_neg_cong_fun: assertion failed"
+    fun has_functional_typed_args () = exists JTerm.has_functional_type ss
+    fun has_variable_headed_args () =
+      exists JTerm.is_variable_headed_comb ss orelse exists JTerm.is_variable_headed_comb ts
+    val has_revealable_args =
+      has_functional_typed_args () orelse
+        (Config.get ctxt Slam_Common.neg_cong_fun_reveal_variable_headed
+          andalso has_variable_headed_args ())
+    fun no_revealable_args_msg () =
+      if Config.get ctxt Slam_Common.neg_cong_fun_reveal_variable_headed
+        then "no argument has functional type or is variable-headed"
+        else "no argument has functional type"
+  in
+  if not has_revealable_args then fail [] no_revealable_args_msg else
   let
     val disj_pairs = map (uncurry JLit.mk_neq) (ss ~~ ts)
   in
