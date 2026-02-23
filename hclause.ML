@@ -72,6 +72,9 @@ sig
 
   val apply_preunifier : Proof.context -> Slam_Unify.preunifier -> hthm -> hthm
   val resolve_disagreements_modulo_flex_flex : Proof.context -> JClause.full_pos -> term -> hthm -> hthm
+
+  val pretty' : Proof.context -> hthm -> Pretty.T
+  val pretty : Proof.context -> hthm -> string
 end
 
 structure HClause: HCLAUSE =
@@ -647,5 +650,10 @@ fun norm_preunifier
   clause
   |> apply_preunifier ctxt preunifier
   |> resolve_disagreements_modulo_flex_flex ctxt green_subterm_position target_term
+
+fun pretty' ctxt { skolems, th } =
+  Pretty.list "{" "}" [Pretty.str (@{make_string} skolems), Thm.pretty_thm ctxt th]
+
+val pretty = Pretty.string_of oo pretty'
 
 end

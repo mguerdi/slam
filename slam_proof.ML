@@ -1268,7 +1268,7 @@ fun reconstruct_manual
         val () =
           if not (expected_conclusion aconvc (HClause.cprop_without_skolem_prems replayed))
             then Slam_Common.trace_msg ctxt (fn () =>
-              "RECONSTRUCTION: WARNING: reconstructed clause " ^ @{make_string} replayed ^ " does not match expected conclusion " ^ @{make_string} expected_conclusion
+              "RECONSTRUCTION: WARNING: reconstructed clause " ^ HClause.pretty ctxt replayed ^ " does not match expected conclusion " ^ @{make_string} expected_conclusion
               (* ^ "\n (compared " ^ Slam_Common.pretty_term (Slam_Common.verbose_of ctxt) (Thm.prop_of replayed) ^ " and " ^ Slam_Common.pretty_term (Slam_Common.verbose_of ctxt) (Thm.term_of expected_conclusion) ^ ")" *)
               (* ^ "\n (compared " ^ @{make_string} (Thm.prop_of replayed) ^ " and " ^ @{make_string} (Thm.term_of expected_conclusion) ^ ")" *)
               )
