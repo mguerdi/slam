@@ -334,6 +334,22 @@ fun pretty' ctxt (inference: int inference) =
     val ppreunif  = Slam_Common.pretty_preunifier' ctxt
     val pretty_skolems' = list "[" "]" o map (fn (t1, t2, t3) => Slam_Common.pretty_terms' ctxt [t1, t2, t3])
     fun pretty_subrule' subrule = Pretty.block [Slam_Common.pretty_term' ctxt (#1 subrule), str " \<mapsto> ", Slam_Common.pretty_term' ctxt (#2 subrule)]
+    fun pretty_quant_info (quant_info : (term * (term, term * term * term) Slam_Common.either) option) =
+      lbl "quant_info" (Pretty.list "{" "}" (
+        case quant_info of
+          NONE => []
+        | SOME (t, Slam_Common.Left fresh_var) =>
+            [ lbl "pred" (Slam_Common.pretty_term' ctxt t)
+            , lbl "fresh_var" (Slam_Common.pretty_term' ctxt fresh_var)
+            ]
+        | SOME (t, Slam_Common.Right (sk1, sk2, sk3)) =>
+            [ lbl "pred" (Slam_Common.pretty_term' ctxt t)
+            , lbl "sk" (Slam_Common.pretty_term' ctxt sk1)
+            , lbl "sk_with_args" (Slam_Common.pretty_term' ctxt sk2)
+            , lbl "sk_def" (Slam_Common.pretty_term' ctxt sk3)
+            ]
+        )
+      )
   in
   case inference of
     Axiom { thm } => lst [str "Axiom", Thm.pretty_thm ctxt thm]
@@ -373,7 +389,7 @@ fun pretty' ctxt (inference: int inference) =
   | NegativeSimplifyReflect { unit, unit_shift , matcher, unit_orientation, right_premise, literal }
        => lst [str "NegativeSimplifyReflect", @{mk_pty} unit, lbl "shift" (@{mk_pty} unit_shift), penv matcher, @{mk_pty} unit_orientation, @{mk_pty} right_premise, @{mk_pty} literal]
   | SimpPosNegOuterClaus { premise, literal, conclusion_index, quant_info }
-       => lst [str "SimpPosNegOuterClaus", @{mk_pty} premise, @{mk_pty} literal, @{mk_pty} conclusion_index, @{mk_pty} quant_info]
+       => lst [str "SimpPosNegOuterClaus", @{mk_pty} premise, @{mk_pty} literal, @{mk_pty} conclusion_index, pretty_quant_info quant_info]
   | SimpBoolRw { premise, subterm, subrule, substitution }
        => lst [str "SimpBoolRw", @{mk_pty} premise, @{mk_pty} subterm, pretty_subrule' subrule, penv substitution]
   | SimpFalseElim { premise, literal, substitution }
