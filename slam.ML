@@ -962,7 +962,10 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
     let
       val () = tracer (fn () =>
         Slam_Common.pretty_term ctxt t ^ " ?= " ^ Slam_Common.pretty_term ctxt u)
-      val preunifiers = Slam_Unify.preunifiers (Context.Proof ctxt) [(t, u)] env
+      val preunifiers =
+        if Config.get ctxt Slam_Common.delayed_unification
+          then Slam_Unify.preunifiers (Context.Proof ctxt) [(t, u)] env
+          else Slam_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env |> Seq.map (rpair [])
       val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
       val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
       fun build_conclusion (substitution, flex_flex_pairs) =

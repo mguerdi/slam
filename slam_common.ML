@@ -167,6 +167,8 @@ sig
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
 
+  val delayed_unification : bool Config.T
+
   val unifier_cutoff : int Config.T
   val get_unifier_cutoff : Proof.context -> int
 
@@ -397,6 +399,8 @@ val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_ru
 val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_rule_equality_subsumption\<close> (K rule_default)
 
 fun rule_enabled ctxt rule_cfg = not (Config.get ctxt disable_all) orelse Config.get ctxt rule_cfg
+
+val delayed_unification = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification\<close> (K true)
 
 val unifier_cutoff = Attrib.setup_config_int \<^binding>\<open>slam_unifier_cutoff\<close> (K 2)
 fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
