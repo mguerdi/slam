@@ -1206,6 +1206,7 @@ fun toposort_clauses clause_db contradiction =
   |> #2
   |> rev
 
+(* FIXME: can everything be simplified using Drule.abs_def? *)
 fun discharge_skolem_prems ctxt ({ th, skolems } : HClause.hthm) : thm =
   let
     (* FIXME: what about TFrees? (hidden polymorphism?) *)
