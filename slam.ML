@@ -961,7 +961,7 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
     case variable_condition ctxt u of SOME msg => fail [] (K msg) | NONE =>
     let
       val () = tracer (fn () =>
-        Slam_Common.pretty_term ctxt t ^ " ?= " ^ Slam_Common.pretty_term ctxt u)
+        Slam_Common.pretty_term ctxt t ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt u)
       val preunifiers =
         if Config.get ctxt Slam_Common.delayed_unification
           then Slam_Unify.preunifiers (Context.Proof ctxt) [(t, u)] env
@@ -1113,18 +1113,20 @@ fun infer_eres (ctxt : Proof.context) (c, cp, eligibility) =
   let
     val tracer = mk_tracer ctxt Slam_Common.trace_msg_e_res "ERes"
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
-    val () = tracer (fn () =>
-      "start: " ^ JClause.pretty_clause ctxt c ^ ", literal: " ^ @{make_string} cp)
+    val () = tracer (fn () => "start: " ^ JClause.pretty_lit ctxt c cp)
     val (u, u', is_pos_eq) = JLit.dest (JClause.lit_at cp c)
     val unifiers =
       Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
     val (unifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) unifiers
+    val () = if 0 = length unifiers then fail () (K "no unifiers") else ()
     fun build_conclusion unifier =
       let
         val () = tracer (K "build_conclusion")
         val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier |> JClause.recompute_selected ctxt
       in
-        if not (JClause.is_eligible_cpos c (cp, eligibility)) then fail NONE (K "literal not eligible") else
+        if not (JClause.is_eligible_cpos c (cp, eligibility)) then fail NONE (fn () =>
+          JClause.pretty_lit ctxt c cp ^ " not eligible (" ^ @{make_string} eligibility ^ ")")
+        else
         c
         |> JClause.delete_lit_at ctxt cp
         |> JClause.norm_negative_predicate_literals ctxt
