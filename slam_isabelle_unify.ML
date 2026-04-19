@@ -21,6 +21,10 @@ sig
   val unifiers: Context.generic * Envir.env * ((term * term) list) ->
     (Envir.env * (term * term) list) Seq.seq
   val smash_unifiers: Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq
+  val SIMPL: Context.generic ->
+      Envir.env * ((string * typ) list * term * term) list ->
+        Envir.env * ((string * typ) list * term * term) list *
+        ((string * typ) list * term * term) list
 end
 
 structure Slam_Isabelle_Unify : SLAM_ISABELLE_UNIFY =
