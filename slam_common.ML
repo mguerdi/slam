@@ -47,6 +47,8 @@ sig
   val trace_clause_subsumption : bool Config.T
   val trace_equality_subsumption : bool Config.T
 
+  val trace_detailed_origin : bool Config.T
+
   (* report how many milliseconds the given clause procedure took to find a contradiction *)
   val report_main_loop_timing : bool Config.T
 
@@ -81,6 +83,7 @@ sig
   val trace_msg_neg_cong_fun : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_duplicated_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_resolved_lits : Proof.context -> (unit -> string) -> unit
+  val trace_msg_flex_flex_simp : Proof.context -> (unit -> string) -> unit
   val trace_msg_rewrite_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_positive_simplify_reflect : Proof.context -> (unit -> string) -> unit
   val trace_msg_negative_simplify_reflect : Proof.context -> (unit -> string) -> unit
@@ -104,12 +107,20 @@ sig
   val type_pat_setup : theory -> theory
   val term_schem_setup : theory -> theory
   val verbose_of : Proof.context -> Proof.context
+  val label_pretty : string -> Pretty.T -> Pretty.T
   val pretty_term : Proof.context -> term -> string
   val pretty_term' : Proof.context -> term -> Pretty.T
   val pretty_typ : Proof.context -> typ -> string
+  val pretty_terms' : Proof.context -> term list -> Pretty.T
   val pretty_terms : Proof.context -> term list -> string
+  val pretty_tyenv' : Proof.context -> Type.tyenv -> Pretty.T
   val pretty_tyenv : Proof.context -> Type.tyenv -> string
+  val pretty_tenv' : Proof.context -> Envir.tenv -> Pretty.T
   val pretty_tenv : Proof.context -> Envir.tenv -> string
+  val pretty_env' : Proof.context -> Envir.env -> Pretty.T
+  val pretty_env : Proof.context -> Envir.env -> string
+  val pretty_preunifier' : Proof.context -> Envir.env * (term * term) list -> Pretty.T
+  val pretty_preunifier : Proof.context -> Envir.env * (term * term) list -> string
   val raw_pp_typ : typ -> Pretty.T
   val raw_pp_term : term -> Pretty.T
   val I : 'a -> 'a
@@ -144,6 +155,7 @@ sig
   (* simplifications *)
   val rule_delete_duplicated_lits : bool Config.T
   val rule_delete_resolved_lits : bool Config.T
+  val rule_flex_flex_simp : bool Config.T
   val rule_rewrite_lits : bool Config.T
   val rule_positive_simplify_reflect : bool Config.T
   val rule_negative_simplify_reflect : bool Config.T
@@ -154,6 +166,8 @@ sig
   val rule_syntactic_tautology_deletion2 : bool Config.T
   val rule_clause_subsumption : bool Config.T
   val rule_equality_subsumption : bool Config.T
+
+  val delayed_unification : bool Config.T
 
   val unifier_cutoff : int Config.T
   val get_unifier_cutoff : Proof.context -> int
@@ -168,6 +182,8 @@ sig
   val sup_variable_condition : string Config.T
   datatype sup_variable_condition = None | FirstOrder | Approximate
   val get_sup_variable_condition : Proof.context -> sup_variable_condition
+
+  val neg_cong_fun_reveal_variable_headed : bool Config.T
 
   val bool_simp_quantifiers : bool Config.T
   val bool_simp_if_then_else : bool Config.T
@@ -193,6 +209,9 @@ sig
 
   val debug_check_clauses : bool Config.T
   val debug_prefix_clause_id_with_hash : bool Config.T
+
+  val debug_messages: bool Unsynchronized.ref
+  val debug_msg: (unit -> string) -> unit
 
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
   val time_and_trace : ((unit -> string) -> unit) -> ('a -> 'b) -> 'a -> 'b
@@ -244,6 +263,7 @@ val trace_neg_ext = Attrib.setup_config_bool \<^binding>\<open>slam_trace_neg_ex
 val trace_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>slam_trace_neg_cong_fun\<close> (K false)
 val trace_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_delete_duplicated_lits\<close> (K false)
 val trace_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_delete_resolved_lits\<close> (K false)
+val trace_flex_flex_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_flex_flex_simp\<close> (K false)
 val trace_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_rewrite_lits\<close> (K false)
 val trace_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_trace_positive_simplify_reflect\<close> (K false)
 val trace_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_trace_negative_simplify_reflect\<close> (K false)
@@ -254,6 +274,8 @@ val trace_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<
 val trace_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>slam_trace_syntactic_tautology_deletion2\<close> (K false)
 val trace_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_trace_clause_subsumption\<close> (K false)
 val trace_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_trace_equality_subsumption\<close> (K false)
+
+val trace_detailed_origin = Attrib.setup_config_bool \<^binding>\<open>slam_trace_detailed_origin\<close> (K false)
 
 (* FIXME: actually use this config option *)
 val report_main_loop_timing = Attrib.setup_config_bool \<^binding>\<open>slam_report_main_loop_timing\<close> (K false)
@@ -298,6 +320,7 @@ fun trace_msg_neg_ext ctxt msg = if Config.get ctxt trace_neg_ext then trace_msg
 fun trace_msg_neg_cong_fun ctxt msg = if Config.get ctxt trace_neg_cong_fun then trace_msg ctxt msg else ();
 fun trace_msg_delete_duplicated_lits ctxt msg = if Config.get ctxt trace_delete_duplicated_lits then trace_msg ctxt msg else ();
 fun trace_msg_delete_resolved_lits ctxt msg = if Config.get ctxt trace_delete_resolved_lits then trace_msg ctxt msg else ();
+fun trace_msg_flex_flex_simp ctxt msg = if Config.get ctxt trace_flex_flex_simp then trace_msg ctxt msg else ();
 fun trace_msg_rewrite_lits ctxt msg = if Config.get ctxt trace_rewrite_lits then trace_msg ctxt msg else ();
 fun trace_msg_positive_simplify_reflect ctxt msg = if Config.get ctxt trace_positive_simplify_reflect then trace_msg ctxt msg else ();
 fun trace_msg_negative_simplify_reflect ctxt msg = if Config.get ctxt trace_negative_simplify_reflect then trace_msg ctxt msg else ();
@@ -332,7 +355,7 @@ fun parse_proof_reconstruction_mode "cheat" = Cheat
 val proof_reconstruction =
   Attrib.setup_config_string
     \<^binding>\<open>slam_proof_reconstruction\<close>
-    (K (string_of_proof_reconstruction_mode Manual))
+    (K (string_of_proof_reconstruction_mode Cheat))
 (* val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>slam_proof_reconstruction\<close> (K true) *)
 
 fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)
@@ -368,6 +391,7 @@ val rule_choice = Attrib.setup_config_bool \<^binding>\<open>slam_rule_choice\<c
 (* simplifications *)
 val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_duplicated_lits\<close> (K rule_default)
 val rule_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_resolved_lits\<close> (K rule_default)
+val rule_flex_flex_simp = Attrib.setup_config_bool \<^binding>\<open>slam_rule_flex_flex_simp\<close> (K rule_default)
 val rule_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_rewrite_lits\<close> (K rule_default)
 val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_positive_simplify_reflect\<close> (K rule_default)
 val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_negative_simplify_reflect\<close> (K rule_default)
@@ -380,6 +404,8 @@ val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_ru
 val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_rule_equality_subsumption\<close> (K rule_default)
 
 fun rule_enabled ctxt rule_cfg = not (Config.get ctxt disable_all) orelse Config.get ctxt rule_cfg
+
+val delayed_unification = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification\<close> (K true)
 
 val unifier_cutoff = Attrib.setup_config_int \<^binding>\<open>slam_unifier_cutoff\<close> (K 2)
 fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
@@ -409,6 +435,8 @@ fun parse_sup_variable_condition "none" = None
       ^ " (must be either of \"none\", \"first_order\" or \"approximate\")")
 
 fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
+
+val neg_cong_fun_reveal_variable_headed = Attrib.setup_config_bool \<^binding>\<open>slam_neg_cong_fun_reveal_variable_headed\<close> (K false)
 
 (* FIXME: split into sup_into_var_headed, ... *)
 val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_fluid\<close> (K true)
@@ -546,21 +574,47 @@ fun pretty_helper aux env = env
   |> map (fn (s1, s2) => Pretty.block [s1, Pretty.str " := ", s2])
   |> Pretty.enum "," "[" "]"
 
-fun pretty_tyenv ctxt tyenv =
+fun pretty_tyenv' ctxt tyenv =
 let
   fun get_typs (v, (s, T)) = (TVar (v, s), T)
   val print = apply2 (Syntax.pretty_typ ctxt)
 in
-  "tyenv:" ^ Pretty.string_of (pretty_helper (print o get_typs) tyenv)
+  pretty_helper (print o get_typs) tyenv
 end
 
-fun pretty_tenv ctxt tenv =
+val pretty_tyenv = Pretty.string_of oo pretty_tyenv'
+
+fun pretty_tenv' ctxt tenv =
 let
   fun get_trms (v, (T, t)) = (Var (v, T), t)
   val print = apply2 (Syntax.pretty_term ctxt)
 in
-  "tenv:" ^ Pretty.string_of (pretty_helper (print o get_trms) tenv)
+  pretty_helper (print o get_trms) tenv
 end;
+
+val pretty_tenv = Pretty.string_of oo pretty_tenv'
+
+fun label_pretty name pretty = Pretty.block ([Pretty.str (name ^ "="), pretty])
+
+fun pretty_env' ctxt env =
+  Pretty.block (
+    [ label_pretty "ty" (pretty_tyenv' ctxt (Envir.type_env env))
+    , Pretty.brk 1
+    , label_pretty "tm" (pretty_tenv' ctxt (Envir.term_env env))
+    ]
+  )
+
+val pretty_env = Pretty.string_of oo pretty_env'
+
+fun pretty_preunifier' ctxt (env, flex_flex_pairs) =
+  Pretty.block
+    [ pretty_env' ctxt env
+    , Pretty.brk 1
+    (* from pretty_thm_raw from more_thm.ML *)
+    , label_pretty "ff" (Pretty.list "[" "]" (map (Pretty.block o Syntax.pretty_flexpair ctxt) flex_flex_pairs))
+    ]
+
+val pretty_preunifier = Pretty.string_of oo pretty_preunifier'
 
 (* from the cookbook
 (* switch to unpretty printer *)
@@ -592,6 +646,9 @@ fun raw_pp_term  (Const (c, T)) = pp_constr "Const" (pp_pair (pp_qstr c, raw_pp_
 end;
 
 (** common utilities **)
+
+val debug_messages = Unsynchronized.ref false
+fun debug_msg msg = if !debug_messages then writeln (msg ()) else ()
 
 (* from HOL/Tools/Mirabelle/mirabelle.ML *)
 fun cpu_time_milliseconds f x =

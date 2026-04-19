@@ -9,13 +9,13 @@ sig
     sk1 = (\<lambda>\<dots> SOME\<dots>) \<Longrightarrow> \<dots> \<Longrightarrow> skN = \<dots> \<Longrightarrow> False
   is turned into
     False
-  by first generalizing the free variables sK1, \<dots>, skN to obtain 
+  by first generalizing the free variables sK1, \<dots>, skN to obtain
     ?sk1 = (\<lambda>\<dots> SOME\<dots>) \<Longrightarrow> \<dots> \<Longrightarrow> ?skN = \<dots> \<Longrightarrow> False
   and applying the trivial substitution solving the premises.
 
   This module contains the necessary utilities to carry along the skolem premises during proof
   reconstruction, making sure they are always to the left of the actual clause. *)
-  
+
   (* The \<dots>_raw functions do not take into account the skolem premises and consider them to be part
   of the clause. *)
 
@@ -28,13 +28,14 @@ sig
   val map_hthm : (thm -> thm) -> hthm -> hthm
   val traverse_hthm : (thm -> thm list) -> hthm -> hthm list
   val seq_traverse_hthm : (thm -> thm Seq.seq) -> hthm -> hthm Seq.seq
-  
+
   val cprop_without_skolem_prems : hthm -> cterm
-  
+
   val of_lemma : thm -> hthm
-  
+
   val maxidx_of : hthm -> int
   val nprems_of : hthm -> int
+  val lits : hthm -> (cterm * cterm * bool) list
 
   val make_last: JClause.cpos -> hthm -> hthm
   val move_last_to: JClause.cpos -> hthm -> hthm
@@ -56,16 +57,24 @@ sig
 
   val hol_of_clause: Proof.context -> bool -> JClause.T -> cterm
 
-  val merge_duplicated_lit_last: hthm -> hthm 
-  
+  val merge_duplicated_lit_last: hthm -> hthm
+
   (* 1-based *)
   val comp_no_flatten_no_incr: hthm * int -> int -> hthm -> hthm
   val comp_no_flatten: hthm * int -> int -> hthm -> hthm
   val compose : thm * int * hthm -> hthm
 
   val incr_indexes : int -> hthm -> hthm
-  
+
   val congruence_wrt_subterm_position : Proof.context -> term * term -> hthm -> JClause.full_pos -> hthm
+
+  val RSN : thm -> int * hthm -> hthm
+
+  val apply_preunifier : Proof.context -> Slam_Unify.preunifier -> hthm -> hthm
+  val resolve_disagreements_modulo_flex_flex : Proof.context -> JClause.full_pos -> term -> hthm -> hthm
+
+  val pretty' : Proof.context -> hthm -> Pretty.T
+  val pretty : Proof.context -> hthm -> string
 end
 
 structure HClause: HCLAUSE =
@@ -151,9 +160,32 @@ fun orient_positive_consequent_lit JLit.Left C = C
 
 fun nprems_of { th, skolems } = Thm.nprems_of th - length skolems
 
+fun negated_lits_trueprop { th = th, skolems = skolems } =
+  let
+    val negated_lits = Drule.strip_imp_prems (Thm.cprop_of th)
+    val () = \<^assert> (@{cprop "False"} aconvc Drule.strip_imp_concl (Thm.cprop_of th))
+  in
+    List.drop (negated_lits, length skolems)
+  end
+
+fun dest_negated_lit_trueprop ct =
+  let
+    val negated_lit = dest_Trueprop ct
+    val negated_lit_is_positive = not (can HOLogic.dest_not (Thm.term_of negated_lit))
+    val (left, right) =
+      negated_lit
+      |> (if negated_lit_is_positive then I else Thm.dest_arg)
+      |> Drule.strip_comb
+      |> (fn (_, [left, right]) => (left, right))
+  in
+    (left, right, not negated_lit_is_positive)
+  end
+
+fun lits ht = negated_lits_trueprop ht |> map dest_negated_lit_trueprop
+
 (* Given 1 and (\<not>A \<Longrightarrow> \<not>B \<Longrightarrow> False) returns \<not>B.
 Terminology: A and B are the literals of the above clause! *)
-fun negated_lit_trueprop_cterm_at_raw cpos th = 
+fun negated_lit_trueprop_cterm_at_raw cpos th =
   let
     val negated_lits = Drule.strip_imp_prems (Thm.cprop_of th)
     val () = \<^assert> (@{cprop "False"} aconvc Drule.strip_imp_concl (Thm.cprop_of th))
@@ -161,8 +193,8 @@ fun negated_lit_trueprop_cterm_at_raw cpos th =
     nth negated_lits cpos
   end
 
-fun negated_lit_trueprop_cterm_at cpos { th = th, skolems = skolems } = 
-  negated_lit_trueprop_cterm_at_raw (cpos + length skolems) th 
+fun negated_lit_trueprop_cterm_at cpos { th = th, skolems = skolems } =
+  negated_lit_trueprop_cterm_at_raw (cpos + length skolems) th
 
 fun dest_lit_cterm_at cpos hol_clause =
   let
@@ -171,7 +203,7 @@ fun dest_lit_cterm_at cpos hol_clause =
     val (left, right) =
       negated_lit
       |> (if negated_lit_is_positive then I else Thm.dest_arg)
-      |> Drule.strip_comb 
+      |> Drule.strip_comb
       |> (fn (_, [left, right]) => (left, right))
   in
     (left, right, not negated_lit_is_positive)
@@ -187,7 +219,7 @@ fun negated_lit_trueprop_term_at_raw cpos (hol_clause: term) =
   in
     nth negated_lits cpos
   end
-  
+
 
 (* Given 1 and (\<not>A \<Longrightarrow> \<not>B \<Longrightarrow> False) returns \<not>B.
 Terminology: A and B are the literals of the above clause! *)
@@ -210,7 +242,7 @@ fun map_equality_at_lpos JLit.Left f (Const ("HOL.eq", _) $ x $ y) = HOLogic.mk_
   | map_equality_at_lpos JLit.Right f (Const ("HOL.eq", _) $ x $ y) = HOLogic.mk_eq (x, f y)
   | map_equality_at_lpos _ _ t =
       error ("map_equality_at_lpos: not an equality: " ^ @{make_string} t)
-  
+
 fun map_at_lpos pos f (@{term "HOL.Not"} $ t) =
       HOLogic.mk_not (map_equality_at_lpos pos f t)
   | map_at_lpos pos f t = map_equality_at_lpos pos f t
@@ -233,7 +265,7 @@ Orthogonal
 Must-haves:
 1. We need to decide on one particular normal form during reconstruction and stick to it.
   Decision: Stick to o\<lambda>Sups normal form. Problem: This is far from what we're doing right now...
-2. 
+2.
 *)
 (* This only makes sense for green subterms because of potential differences between the normal form
 of o\<lambda>Sup and the one used in proof reconstruction. *)
@@ -295,7 +327,7 @@ fun hol_clause_pos_of_full_pos ((tpos, lpos, cpos), target_literal_is_positive) 
   | ERes of { premise: int, literal: JClause_Pos.cpos }
   | EFact of { premise: int, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos }
   (* FIXME: can this be meaningfully viewed as a kind of superposition? *)
-  | ArgCong 
+  | ArgCong
   |
 
 fun proof_steps_of_inference *)
@@ -303,7 +335,7 @@ fun proof_steps_of_inference *)
 (* Turn slam clause [A, B, C] into formula \<not>A \<Longrightarrow> \<not>B \<Longrightarrow> \<not>C \<Longrightarrow> False, avoiding double negations. *)
 fun hol_of_clause ctxt close c =
   let
-    val negated_literals = 
+    val negated_literals =
       JClause.literals c
       |> map JLit.negate (* avoid double negations *)
       |> map JLit.term_of
@@ -415,6 +447,9 @@ e.g. some helper lemma. *)
 fun compose (th_left, i, { th, skolems }) =
   { th = Drule.compose (th_left, i + length skolems, th), skolems = skolems }
 
+fun RSN (tha : thm) (i, { th, skolems } : hthm) =
+  { th = Thm.RSN (tha, (i + length skolems, th)), skolems = skolems } : hthm
+
 (* C = \<not>C' \<Longrightarrow> A \<Longrightarrow> A \<Longrightarrow> False *)
 (* ============================= *)
 (*      \<not>C' \<Longrightarrow> A \<Longrightarrow> False      *)
@@ -462,11 +497,166 @@ fun congruence_wrt_subterm_position ctxt eq (c as { skolems, ... }) subterm_posi
       \<^instantiate>\<open>x=ct and y=ct' and f=C_abs and 'a=cT in
         lemma \<open>(x :: 'a) = y \<Longrightarrow> PROP f x \<Longrightarrow> PROP f y\<close> by auto\<close>
       (* Get's rid of the PROP f x premise *)
-      |> (fn th => Drule.compose (thm_of c, 2, th)) 
+      |> (fn th => Drule.compose (thm_of c, 2, th))
       (* Move the skolem premises that are part of PROP f y above to the very left. *)
       |> Slam_Proof_Util.move_prems_left 2 (length skolems) 1
   in
-    { th = C_congruence_wrt_subterm_position, skolems = skolems } 
+    { th = C_congruence_wrt_subterm_position, skolems = skolems }
   end
+
+(* FIXME: redundancy with Slam_Proof.impl_delete_duplicated_lit *)
+(* FIXME: not needed but might still be useful later *)
+fun delete_aconv_duplicated_lit
+  (delete_pos : JClause.cpos)
+  (keep_pos : JClause.cpos)
+  (clause : hthm)
+=
+  let
+    val () = if delete_pos = keep_pos then
+      error ("delete_duplicated_lit: delete_pos and keep_pos are equal " ^
+        "(value=" ^ @{make_string} delete_pos ^ ")")
+      else ()
+    (* If the literal that is being deleted is to left of the one that we keep, the latters position
+    shifts by one to the left. *)
+    val final_keep_pos =
+      if delete_pos < keep_pos then keep_pos - 1 else keep_pos
+    (* aconv of lits *)
+    val delete_lit = JLit.mk (dest_lit_at delete_pos clause)
+    val keep_lit = JLit.mk (dest_lit_at keep_pos clause)
+    val orientation =
+      case JLit.aconv_as (delete_lit, keep_lit) of
+        SOME orientation => orientation
+      | NONE => error "delete_duplicated_lit: literals aren't aconv'able"
+  in
+    clause
+    (* orient literal to be deleted *)
+    |> orient_lit_at (orientation, delete_pos)
+    (* delete *)
+    |> make_last keep_pos
+    |> make_last delete_pos
+    |> merge_duplicated_lit_last
+    (* move kept literal back *)
+    |> move_last_to final_keep_pos
+  end
+
+(* FIXME: not needed but might still be useful later *)
+fun local_rw
+  ctxt
+  (negative_literal : JClause.cpos * JLit.lpos)
+  (subterm_position : JClause.full_pos)
+  (clause : hthm)
+  : hthm
+=
+  let
+    val (s, t, b) = dest_lit_at (#1 negative_literal) clause
+    val () = if b then error "local_rw: not a negative_literal" else ()
+    val (lhs, rhs) = case #2 negative_literal of JLit.Left => (s, t) | JLit.Right => (t, s)
+    val conditional_rewritten_clause =
+      congruence_wrt_subterm_position ctxt (lhs, rhs) clause subterm_position
+    val rewritten_clause =
+      delete_aconv_duplicated_lit 0 (#1 negative_literal) conditional_rewritten_clause
+  in
+    rewritten_clause
+  end
+
+(* Introduce flex-flex pair as a negative literal into a clause. This is redundant with Isabelle's
+internal tracking of flex-flex contraints on theorems. The flex-flex pairs attached to the theorem
+are required to make the variable names (in heads of flex-flex pairs) during reconstruction match
+those during proof search. The negative literals are required because they are present - and
+reasoned about - during proof search. *)
+fun weaken_by_flex_flex_pair
+  ctxt
+  (flex_flex_pair : term * term)
+  (clause : hthm)
+=
+  let
+    (* L\<^sub>1 \<Longrightarrow> ... \<Longrightarrow> L\<^sub>n \<Longrightarrow> False *)
+                          (* False \<Longrightarrow> \<not>lit \<Longrightarrow> False *)
+    (* L\<^sub>1 \<Longrightarrow> ... \<Longrightarrow> L\<^sub>n \<Longrightarrow>           \<not>lit \<Longrightarrow> False *)
+    val (lhs, rhs) = flex_flex_pair
+    val lit = JLit.mk (lhs, rhs, false)
+    val () = if not (JLit.is_flex_flex lit) then error "weaken_with_lit: not a flex-flex pair" else ()
+    val (lhs, rhs) = apply2 (Thm.cterm_of ctxt) (lhs, rhs)
+    val T = Thm.ctyp_of_cterm lhs
+    val weakening_clause =
+      \<^instantiate>\<open>
+        'a=T and lhs and rhs in lemma \<open>False \<Longrightarrow> (lhs :: 'a) = rhs \<Longrightarrow> False\<close> by auto
+      \<close>
+      |> of_lemma
+    val weakened_clause = comp_no_flatten_no_incr (clause, nprems_of clause) 1 weakening_clause
+  in
+    weakened_clause
+  end
+
+(* Introduces the flex-flex pairs as negative literals. *)
+fun apply_preunifier
+  ctxt
+  ((substitution, flex_flex_pairs) : Slam_Unify.preunifier)
+  (clause : hthm)
+=
+  let
+    val () = Slam_Common.debug_msg (fn () => "applying: " ^ Slam_Common.pretty_preunifier ctxt ((substitution, flex_flex_pairs)))
+    val normed_clause = map_hthm (Slam_Proof_Util.envir_norm_thm ctxt substitution) clause
+    val () = Slam_Common.debug_msg (fn () => "normed_clause: " ^ @{make_string} normed_clause)
+    val normed_clause_with_flex_flex_lits =
+      fold (weaken_by_flex_flex_pair ctxt) flex_flex_pairs normed_clause
+    val () = Slam_Common.debug_msg (fn () => "normed_clause_with_flex_flex_lits: " ^ @{make_string} normed_clause_with_flex_flex_lits)
+  in
+    normed_clause_with_flex_flex_lits
+  end
+
+(* Resolve disagreements between the terms, introducing flex-flex constraints into the thm. *)
+fun resolve_disagreements_modulo_flex_flex
+  (ctxt : Proof.context)
+  (green_subterm_position : JClause.full_pos)
+  (target_term : term)
+  (clause : hthm)
+=
+  let
+    val green_subterm = green_subterm_at_full_pos (hterm_of clause) green_subterm_position
+    (* has flex-flex pairs attached to thm *)
+    val subterm_eq_target_term: hthm =
+      Slam_Proof_Util.refl_modulo_flex_flex ctxt (green_subterm, target_term)
+      |> of_lemma
+    val eq_implies_rewritten: hthm =
+      congruence_wrt_subterm_position
+        ctxt
+        (green_subterm, target_term)
+        clause
+        green_subterm_position
+    val rewritten = comp_no_flatten_no_incr (subterm_eq_target_term, 0) 1 eq_implies_rewritten
+    fun sanity_check () =
+      let
+        val new_subterm = green_subterm_at_full_pos (hterm_of rewritten) green_subterm_position
+      in
+        if not (new_subterm aconv target_term) then error (
+          "resolve_disagreements_modulo_flex_flex: new_subterm\n"
+          ^ Slam_Common.pretty_term ctxt new_subterm ^ "\nis not equal to target_term\n"
+          ^ Slam_Common.pretty_term ctxt target_term)
+        else ()
+      end
+    (* FIXME: hide behind debug flag *)
+    val () = sanity_check ()
+  in
+    rewritten
+  end
+
+(* Apply preunifier to a clause, introducing flex-flex pairs as negative literals.
+Rewrite subterm into target term, introducing flex-flex pairs as tpairs on the thm. *)
+fun norm_preunifier
+  (ctxt : Proof.context)
+  (clause : hthm)
+  (preunifier : Slam_Unify.preunifier)
+  (green_subterm_position : JClause.full_pos)
+  (target_term : term)
+=
+  clause
+  |> apply_preunifier ctxt preunifier
+  |> resolve_disagreements_modulo_flex_flex ctxt green_subterm_position target_term
+
+fun pretty' ctxt { skolems, th } =
+  Pretty.list "{" "}" [Pretty.str (@{make_string} skolems), Thm.pretty_thm ctxt th]
+
+val pretty = Pretty.string_of oo pretty'
 
 end

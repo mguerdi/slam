@@ -13,7 +13,8 @@ lemma sums_distrib:
   - zipperposition: Try this: by (metis (lifting) ext sum.distrib) (1.2 s) 
   - vampire: Try this: by (metis (mono_tags, lifting) sum.cong sum.distrib) (327 ms) 
   - cvc4: Try this: by (smt (verit) sum.cong sum.distrib) (176 ms) *)
-  using sum.distrib by slam (* 21 ms *)
+  using sum.distrib by slam (* 5 ms *)
+  (* using [[slam_meson]] sum.distrib by slam (* 3 ms *) *)
 
 (* without simplifications *)
 lemma sums_distrib_restricted:
@@ -45,13 +46,13 @@ lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j) + h i)
 lemma " P (\<Sum>i\<in>A. f i + h i + g i) (\<Prod>j\<in>B. f j * g j)
       = P ((\<Sum>i\<in>A. f i) + (\<Sum>i\<in>A. h i) + (\<Sum>i\<in>A. g i)) ((\<Prod>j\<in>B. f j) * (\<Prod>j\<in>B. g j))"
   (* by (metis (mono_tags, lifting) sum.cong sum.distrib prod.distrib) *)
-  by (slam (mono_tags, lifting) sum.cong sum.distrib prod.distrib)
+  by (slam sum.cong sum.distrib prod.distrib)
 
 lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j) + h i)
       = (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j) * (\<Prod>j\<in>B. g i j)) + (\<Sum>i\<in>A. h i)"
   (* 10 "clauses actually used" *)
   (* by (metis (no_types, lifting) prod.cong prod.distrib sum.cong sum.distrib) *)
-  by (slam (no_types, lifting) prod.cong prod.distrib sum.cong sum.distrib)
+  by (slam prod.cong prod.distrib sum.cong sum.distrib)
 
 lemma " (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j * g i j) + h i)
       = (\<Sum>i\<in>A. (\<Prod>j\<in>B. f i j) * (\<Prod>j\<in>B. g i j)) + (\<Sum>i\<in>A. h i)"
@@ -303,7 +304,9 @@ lemma
   (* by (metis (no_types, lifting) Suc_eq_plus1 add_Suc mult.commute sum.cong sum.distrib) (* 236 ms *) *)
 
   (* fastest: *)
-  by (slam (no_types, lifting) Suc_eq_plus1 add_Suc mult.commute sum.cong sum.distrib) (* 120 ms *)
+  (* FIXME: configurable favor_smal_dist_to_neg_conj, set to 5 *)
+  (* by (slam Suc_eq_plus1 add_Suc mult.commute sum.cong sum.distrib) (* 120 ms *) *)
+  sorry
 
   (* by (metis add.assoc add.commute mult_2 mult_2_right sum.distrib) *) (* very long *)
   (* by (slam add.assoc add.commute mult_2 mult_2_right sum.distrib) (* very long *) *)

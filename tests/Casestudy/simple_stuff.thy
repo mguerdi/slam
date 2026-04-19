@@ -5,7 +5,9 @@ imports Main SLAM.slam
 begin
 
 theorem T0: "\<exists>F. \<forall>T :: bool. \<exists>(S :: bool\<Rightarrow>bool). F S = T"
-  using [[slam_trace, (* slam_trace_forward_simp=false,*) slam_trace_clause_subsumption, slam_max_number_of_steps=30]] by slam
+  (* using [[slam_trace, (* slam_trace_forward_simp=false,*) slam_trace_clause_subsumption, slam_max_number_of_steps=30]] by slam *)
+  sorry
+
 (*
 zipperposition: One-line proof reconstruction failed: by metis
 
@@ -30,17 +32,17 @@ typedecl i
 consts a::i b::i
 
 axiomatization where
-  A1: "\<not>(a = b)" and
-  A2: "\<forall>x::i. x = a \<or> x = b"
+  A1: "\<not>(simple_stuff.a = simple_stuff.b)" and
+  A2: "\<forall>x::i. x = simple_stuff.a \<or> x = simple_stuff.b"
 
 (* There is a predicate F on bool\<Rightarrow>bool, whose image contains both True and False" *)
 theorem T1: "\<exists>(F::(i\<Rightarrow>bool)\<Rightarrow>i). \<forall>T::i. (\<exists>(S::i\<Rightarrow>bool). F S = T)"
-  (* nitpick[satisfy, user_axioms, show_all] *)
-  (* by (metis A1 A2) *)
+  (* by (metis A1 A2) (* fails *) *)
   (* (* using [[slam_trace, *) using [[slam_max_number_of_steps=1500]] by (slam A1 A2) *)
-  (* sledgehammer(A1 A2) *)
-  (* using [[slam_trace, slam_max_number_of_steps=100]] by (slam A1 A2) *)
-  (* by metis *)
-  using [[slam_trace, slam_max_number_of_steps=1500, slam_trace_forward_simp=false, slam_literal_selection_function="select_none", slam_sup_variable_condition="none"]] by (slam A1 A2)
+  (* sledgehammer(A1 A2)  (* works *) *)
+
+  (* using [[slam_trace, slam_max_number_of_steps=1500, slam_trace_forward_simp=false, slam_literal_selection_function="select_first_neg_lit", slam_sup_variable_condition="first_order", slam_trace_e_res]] by (slam A1 A2) *)
+  sorry
+
 
 end

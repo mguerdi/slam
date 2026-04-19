@@ -3,6 +3,9 @@ signature SLAM_UNIFY =
 sig
   (* from unify.ML *)
   val smash_unifiers: Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq
+  (* list of flex-flex pairs to which the substitution has been applied *)
+  type preunifier = Envir.env * (term * term) list
+  val preunifiers : Context.generic -> (term * term) list -> Envir.env -> preunifier Seq.seq
   val shallow_first_smash_unifiers : Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq
   (* from more_unify.ML *)
   val matchers: Context.generic -> int -> (term * term) list -> Envir.env Seq.seq
@@ -78,6 +81,52 @@ fun impl_smash_unifiers ctxt tus env =
   end
 
 fun smash_unifiers ctxt = with_timeout ctxt oo impl_smash_unifiers ctxt
+
+type preunifier = Envir.env * (term * term) list
+
+(* Apply substitution to the flex-flex pairs, ensure that they are still flex-flex after. *)
+fun to_preunifier ctxt (substitution, flex_flex_pairs) =
+  let
+    val normed_flex_flex_pairs = map (apply2 (Envir.norm_term substitution)) flex_flex_pairs
+    fun is_variable_headed_application t =
+      case t of (_ $ _) => JTerm.is_variable_headed t | _ => false
+    fun is_flex_flex (Abs (_, _, s), Abs (_, _, t)) = is_flex_flex (s, t)
+      | is_flex_flex (s, t) =
+          is_variable_headed_application s andalso is_variable_headed_application t
+    fun check_pair (i, (s, t)) =
+      if is_flex_flex (s, t)
+        then ()
+        else error (
+          "to_preunifier: not a flex-flex pair: "
+          ^ Slam_Common.pretty_term ctxt s ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt t
+          ^ " (previously " ^ let val (s', t') = nth flex_flex_pairs i in
+            Slam_Common.pretty_term ctxt s' ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt t'
+          end ^ ")"
+        )
+    val () = List.app check_pair (map_index I normed_flex_flex_pairs)
+  in
+    (substitution, normed_flex_flex_pairs)
+  end
+
+fun impl_preunifiers ctxt tus env =
+  let
+    (* val _ = Slam_Common.trace_msg (Context.the_proof ctxt) (fn () => "unifying: " ^ fold (curry (op ^)) (map ((fn (l, r) => l ^ " = " ^ r ^ ", ") o apply2 (Slam_Common.pretty_term (Context.the_proof ctxt))) tus) "") *)
+    (* disable very long Enter MATCH tracing messages when unification bound is exceeded *)
+    (* based on slience_methods from try0.ML *)
+    val ctxt = silence_context ctxt
+    val maxidx =
+      fold
+        (fn tu => fn maxidx => Int.max (maxidx, Int.max (apply2 maxidx_of_term tu)))
+        tus
+        ~1
+    val env = Envir.merge (Envir.empty maxidx, env)
+    val tus = map (apply2 give_to_undefined) tus
+  in
+    Slam_Isabelle_Unify.unifiers (ctxt, env, tus)
+    |> Seq.map (to_preunifier (Context.the_proof ctxt))
+  end
+
+fun preunifiers ctxt = with_timeout ctxt oo impl_preunifiers ctxt
 
 fun upto_exp first last =
   if first < 0 orelse last < first then error ("first (" ^ @{make_string} first ^ ") or last (" ^ @{make_string} last ^ ") too small") else

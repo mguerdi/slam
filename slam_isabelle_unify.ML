@@ -29,21 +29,20 @@ struct
 (*Unification options*)
 
 (*unification quits above this depth*)
-val search_bound = Config.declare_int ("slam_isabelle_unify_search_bound", \<^here>) (K 60);
-
+val search_bound = Attrib.setup_config_int \<^binding>\<open>slam_isabelle_unify_search_bound\<close> (K 60);
 
 (* diagnostics *)
 
-val unify_trace = Config.declare_bool ("slam_isabelle_unify_trace", \<^here>) (K false);
+val unify_trace = Attrib.setup_config_bool \<^binding>\<open>slam_isabelle_unify_trace\<close> (K false);
 
 (*tracing starts above this depth, 0 for full*)
-val unify_trace_bound = Config.declare_int ("slam_isabelle_unify_trace_bound", \<^here>) (K 50);
+val unify_trace_bound = Attrib.setup_config_int \<^binding>\<open>slam_isabelle_unify_trace_bound\<close> (K 50);
 
 (*print dpairs before calling SIMPL*)
-val unify_trace_simp = Config.declare_bool ("slam_isabelle_unify_trace_simp", \<^here>) (K false);
+val unify_trace_simp = Attrib.setup_config_bool \<^binding>\<open>slam_isabelle_unify_trace_simp\<close> (K false);
 
 (*announce potential incompleteness of type unification*)
-val unify_trace_types = Config.declare_bool ("slam_isabelle_unify_trace_types", \<^here>) (K false);
+val unify_trace_types = Attrib.setup_config_bool \<^binding>\<open>slam_isabelle_unify_trace_types\<close> (K false);
 
 fun cond_tracing ctxt msg =
   if Config.get_generic ctxt unify_trace andalso Context_Position.is_visible_generic ctxt then

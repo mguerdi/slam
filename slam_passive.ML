@@ -136,6 +136,7 @@ struct
 
   (* similar to `default_fun` in Zipperpositions clauseQueue.ml *)
   fun default_fun goal_symbols = combine
+    (* FIXME: make coefficients configurable, hyperparameter search *)
     [ (size_of_clause, 3)
     , (favor_all_ground_and_neg, 1)
     , (favor_small_num_vars, 1)

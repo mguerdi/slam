@@ -34,11 +34,11 @@ declare [[slam_rule_simp_outer_claus]]
 (* necessary *)
 declare [[slam_rule_clause_subsumption]]
 
-declare [[slam_rule_simp_bool_rw]]
+declare [[slam_rule_bool_simp]]
 declare [[slam_rule_simp_false_elim]]
 
 lemma paper_example_25:
   shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
-  by slam (* 167ms *)
+  by slam (* 14ms *)
 
 end

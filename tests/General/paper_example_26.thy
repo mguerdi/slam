@@ -9,6 +9,7 @@ lemma paper_example_26_all_rules:
   (* sledgehammer suggests only: *)
   (* by moura (* 5 ms *) *)
   by (slam) (* 34 ms *)
+  (* using [[slam_meson, slam_max_number_of_steps=1000]] by (slam) (* doesn't work *) *)
 
 (* Faithful reproduction of the proof of example 26 in the paper. *)
 

@@ -7,6 +7,7 @@ sig
   val with_fixed_vars : cterm list -> ctyp list -> Proof.context -> tactic -> tactic
   val with_all_vars_fixed : Proof.context -> tactic -> tactic
   val thm_to_not_imp_false : thm -> thm
+  val refl_modulo_flex_flex : Proof.context -> term * term -> thm
   (* 1-based *)
   val make_prem_last : int -> thm -> thm
   val move_last_prem_to : int -> thm -> thm
@@ -53,13 +54,13 @@ fun norm_negative_predicate_literals ctxt th =
         SELECT_GOAL do_guard i
       end
     val norm_tac =
-      [ @{lemma "True \<noteq> False \<Longrightarrow> False = False" by auto}
-      , @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
-      , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
-      , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}
-      , @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto} ]
-      |> map (fn lemma => (resolve_tac ctxt [lemma]))
-    val tac = FIRST' (guard_tac :: norm_tac)
+      [ ("False \<noteq> False", @{lemma "True \<noteq> False \<Longrightarrow> False = False" by auto})
+      , ("False \<noteq> t", @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto})
+      , ("True \<noteq> t", @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto})
+      , ("s \<noteq> False", @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto})
+      , ("s \<noteq> True", @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto}) ]
+      |> map (fn (name, lemma) => (name, resolve_tac ctxt [lemma]))
+    val tac = FIRST' (map (fn (name, tac) => K (print_tac ctxt ("before " ^ name)) THEN' tac THEN' K (print_tac ctxt ("after " ^ name))) (("guard_tac", guard_tac) :: norm_tac))
   in
     Seq.hd (ALLGOALS (TRY o tac) th)
   end
@@ -116,8 +117,11 @@ fun envir_norm_thm ctxt env th =
     val insts = Vartab.fold (cons o mk) tenv []
   in
     Thm.instantiate_beta (TVars.make instsT, Vars.make insts) th
+    |> tap (fn c => Slam_Common.debug_msg (fn () => "after instantiate_beta: " ^ @{make_string} c))
     |> Drule.eta_contraction_rule
+    |> tap (fn c => Slam_Common.debug_msg (fn () => "after eta_contraction_rule: " ^ @{make_string} c))
     |> norm_negative_predicate_literals ctxt
+    |> tap (fn c => Slam_Common.debug_msg (fn () => "after norm_negative_preicate_literals: " ^ @{make_string} c))
   end
 
 fun with_fixed_vars vars tvars ctxt tac th =
@@ -242,6 +246,21 @@ fun thm_to_not_imp_false th =
     if t aconv t'
       then result
       else error ("thm_to_not_imp_false")
+  end
+
+(* Assuming s and t are equal up to flex-flex pairs, create the theorem s = t [.] *)
+fun refl_modulo_flex_flex ctxt (s, t) =
+  let
+    val s_eq_t = HOLogic.mk_eq (s, t)
+    val s_ceq_t = Thm.cterm_of ctxt s_eq_t
+    val th = @{thm HOL.refl} INCR_COMP \<^instantiate>\<open>s_ceq_t in lemma\<open>s_ceq_t \<Longrightarrow> s_ceq_t\<close> by auto\<close>
+    val s_eq_t_after = HOLogic.dest_Trueprop (Thm.prop_of th)
+    val changed = not (s_eq_t aconv s_eq_t_after)
+  in
+    if changed then error ("eq_up_to_flex_flex: s=t changed from\n" 
+      ^ Slam_Common.pretty_term ctxt s_eq_t ^ "\nto\n" ^ Slam_Common.pretty_term ctxt s_eq_t_after)
+    else
+      th
   end
 
 (* With index 1 turn A \<Longrightarrow> B \<Longrightarrow> C \<Longrightarrow> False into B \<Longrightarrow> C \<Longrightarrow> A \<Longrightarrow> False *)

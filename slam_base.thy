@@ -37,6 +37,16 @@ syntax_consts
 translations
   "\<langle><\<lblot>l \<approx>~-> r\<rblot>>\<rangle>" \<rightleftharpoons> "CONST slam_orient l r"
 
+ML\<open>
+  (* compare ML_Pretty.make_string_fn *)
+  val make_pretty_fn =
+    "(fn x => Pretty.str (ML_Pretty.string_of (ML_system_pretty \
+      \(x, FixedInt.fromInt (ML_Print_Depth.get_print_depth ())))))";
+
+  val _ = Theory.setup
+    (ML_Antiquotation.inline (Binding.make ("mk_pty", \<^here>)) (Args.context >> K make_pretty_fn))
+\<close>
+
 ML_file \<open>slam_common.ML\<close>
 ML_file \<open>slam_id.ML\<close>
 ML_file \<open>jterm.ML\<close>
@@ -45,15 +55,15 @@ ML_file \<open>slam_order_reference.ML\<close>
 ML_file \<open>slam_order.ML\<close>
 ML_file \<open>slam_kbo.ML\<close>
 ML_file \<open>jlit.ML\<close>
+ML_file \<open>slam_fuel.ML\<close>
+ML_file \<open>slam_isabelle_unify.ML\<close>
+ML_file \<open>slam_isabelle_more_unify.ML\<close>
+ML_file \<open>slam_unify.ML\<close>
 ML_file \<open>jclause_pos.ML\<close>
 ML_file \<open>slam_log.ML\<close>
 ML_file \<open>jclause.ML\<close>
 ML_file \<open>slam_argo.ML\<close>
 ML_file \<open>slam_index.ML\<close>
-ML_file \<open>slam_fuel.ML\<close>
-ML_file \<open>slam_isabelle_unify.ML\<close>
-ML_file \<open>slam_isabelle_more_unify.ML\<close>
-ML_file \<open>slam_unify.ML\<close>
 ML_file \<open>slam_subsumption.ML\<close>
 ML_file \<open>slam_simplify.ML\<close>
 ML_file \<open>slam_passive.ML\<close>
