@@ -96,7 +96,7 @@ fun to_preunifier ctxt (substitution, flex_flex_pairs) =
     fun check_pair (i, (s, t)) =
       if is_flex_flex (s, t)
         then ()
-        else error (
+        else warning (
           "to_preunifier: not a flex-flex pair: "
           ^ Slam_Common.pretty_term ctxt s ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt t
           ^ " (previously " ^ let val (s', t') = nth flex_flex_pairs i in

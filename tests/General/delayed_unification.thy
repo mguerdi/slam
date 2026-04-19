@@ -880,4 +880,25 @@ ML\<open>
   val n = Thm.instantiate'
 \<close>
 
+(* There are "flex-flex pairs" of the form
+  ?B = ?f ?B
+which aren't really flex-flex pairs but are still returned as such (presumably because of the cyclic
+dependency). *)
+ML\<open>
+  val s_eq_t = @{term_schem "summ (?h::?'b \<Rightarrow> ?'a) (?B::?'b set) = (?g::?'b \<Rightarrow> ?'a) ((jsk349 ::?'b set \<Rightarrow> (?'b \<Rightarrow> ?'a) \<Rightarrow> (?'b \<Rightarrow> ?'a) \<Rightarrow> ?'b) (?B::?'b set) ?g (?h::?'b \<Rightarrow> ?'a))"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val unifiers =
+    Unify.unifiers
+      ( (Context.Proof @{context})
+      , (Envir.empty 10)
+      , [(s, t)]
+      )
+  val (unifier, ffs) = Seq.hd unifiers
+  val (cs, ct) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val pretty_unifier = Slam_Common.pretty_env' @{context} unifier
+  val pretty_ffs = map (apply2 (Thm.cterm_of @{context})) ffs
+  val (ics, ict) = apply2 (Thm.cterm_of @{context} o Envir.norm_term unifier) (s, t)
+\<close>
+
 end
