@@ -355,7 +355,7 @@ fun parse_proof_reconstruction_mode "cheat" = Cheat
 val proof_reconstruction =
   Attrib.setup_config_string
     \<^binding>\<open>slam_proof_reconstruction\<close>
-    (K (string_of_proof_reconstruction_mode Manual))
+    (K (string_of_proof_reconstruction_mode Cheat))
 (* val proof_reconstruction = Attrib.setup_config_bool \<^binding>\<open>slam_proof_reconstruction\<close> (K true) *)
 
 fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config.get ctxt proof_reconstruction)
