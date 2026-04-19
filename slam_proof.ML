@@ -182,6 +182,7 @@ fun reconstruct_sup
   , subterm = subterm_position }
 =
   let
+    val () = Slam_Common.debug_msg (fn () => "\<not>D \<Longrightarrow> False :" ^ @{make_string} left_premise)
     (* \<not>D' \<Longrightarrow> t \<approx> t' *)
     val notD'_imp_t_eq_t' =
       left_premise
@@ -189,7 +190,7 @@ fun reconstruct_sup
       |> HClause.negate_head ctxt
       (* FIXME: Use HClause.orient_lit_at before negate_head. *)
       |> HClause.map_hthm (HClause.orient_positive_consequent_lit literal_orientation)
-    (* val () = writeln ("\<not>D' \<Longrightarrow> t \<approx> t' :" ^ @{make_string} notD'_imp_t_eq_t') *)
+    val () = Slam_Common.debug_msg (fn () => "\<not>D' \<Longrightarrow> t \<approx> t' :" ^ @{make_string} notD'_imp_t_eq_t')
     val (t, t') =
       notD'_imp_t_eq_t'
       |> HClause.thm_of
@@ -197,11 +198,11 @@ fun reconstruct_sup
       |> HOLogic.dest_Trueprop
       |> HOLogic.dest_eq
 
-    (* val () = writeln ("\<not>C \<Longrightarrow> False : " ^ @{make_string} right_premise) *)
+    val () = Slam_Common.debug_msg (fn () => "\<not>C \<Longrightarrow> False : " ^ @{make_string} right_premise)
     (* t = t' \<Longrightarrow> \<not>C\<langle>t'\<rangle>\<^sub>p \<Longrightarrow> False *)
     val t_eq_t'_imp_Ct' =
       HClause.congruence_wrt_subterm_position ctxt (t, t') right_premise subterm_position
-    (* val () = writeln ("t = t' \<Longrightarrow> \<not>C\<langle>t'\<rangle>\<^sub>p \<Longrightarrow> False : " ^ @{make_string} t_eq_t'_imp_Ct') *)
+    val () = Slam_Common.debug_msg (fn () => "t = t' \<Longrightarrow> \<not>C\<langle>t'\<rangle>\<^sub>p \<Longrightarrow> False : " ^ @{make_string} t_eq_t'_imp_Ct')
 
     val length_of_D' = HClause.nprems_of notD'_imp_t_eq_t'
 
@@ -209,7 +210,7 @@ fun reconstruct_sup
     val notD'_imp_Ct': HClause.hthm =
       HClause.comp_no_flatten_no_incr
         (notD'_imp_t_eq_t', length_of_D') 1 t_eq_t'_imp_Ct'
-    (* val () = writeln ("\<not>D' \<Longrightarrow> \<not>C t' \<Longrightarrow> False : " ^ @{make_string} notD'_imp_Ct') *)
+    val () = Slam_Common.debug_msg (fn () => "\<not>D' \<Longrightarrow> \<not>C t' \<Longrightarrow> False : " ^ @{make_string} notD'_imp_Ct')
   in
     notD'_imp_Ct'
   end
@@ -967,7 +968,9 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
             (* apply the preunifier, weakening by flex-flex pairs *)
             val left_premise =
               get_and_instantiate Envir.init (SOME left_premise_shift) left_premise
+              |> tap (fn c => Slam_Common.debug_msg (fn () => "before apply_preunifier: " ^ @{make_string} c))
               |> HClause.apply_preunifier ctxt preunifier
+              |> tap (fn c => Slam_Common.debug_msg (fn () => "after apply_preunifier: " ^ @{make_string} c))
             val target_term =
               left_premise
               |> HClause.orient_lit_at literal

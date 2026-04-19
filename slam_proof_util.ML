@@ -54,13 +54,13 @@ fun norm_negative_predicate_literals ctxt th =
         SELECT_GOAL do_guard i
       end
     val norm_tac =
-      [ @{lemma "True \<noteq> False \<Longrightarrow> False = False" by auto}
-      , @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto}
-      , @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto}
-      , @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto}
-      , @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto} ]
-      |> map (fn lemma => (resolve_tac ctxt [lemma]))
-    val tac = FIRST' (guard_tac :: norm_tac)
+      [ ("False \<noteq> False", @{lemma "True \<noteq> False \<Longrightarrow> False = False" by auto})
+      , ("False \<noteq> t", @{lemma "True \<noteq> t \<Longrightarrow> False = t" by auto})
+      , ("True \<noteq> t", @{lemma "False \<noteq> t \<Longrightarrow> True = t" by auto})
+      , ("s \<noteq> False", @{lemma "s \<noteq> True \<Longrightarrow> s = False" by auto})
+      , ("s \<noteq> True", @{lemma "s \<noteq> False \<Longrightarrow> s = True" by auto}) ]
+      |> map (fn (name, lemma) => (name, resolve_tac ctxt [lemma]))
+    val tac = FIRST' (map (fn (name, tac) => K (print_tac ctxt ("before " ^ name)) THEN' tac THEN' K (print_tac ctxt ("after " ^ name))) (("guard_tac", guard_tac) :: norm_tac))
   in
     Seq.hd (ALLGOALS (TRY o tac) th)
   end
@@ -117,8 +117,11 @@ fun envir_norm_thm ctxt env th =
     val insts = Vartab.fold (cons o mk) tenv []
   in
     Thm.instantiate_beta (TVars.make instsT, Vars.make insts) th
+    |> tap (fn c => Slam_Common.debug_msg (fn () => "after instantiate_beta: " ^ @{make_string} c))
     |> Drule.eta_contraction_rule
+    |> tap (fn c => Slam_Common.debug_msg (fn () => "after eta_contraction_rule: " ^ @{make_string} c))
     |> norm_negative_predicate_literals ctxt
+    |> tap (fn c => Slam_Common.debug_msg (fn () => "after norm_negative_preicate_literals: " ^ @{make_string} c))
   end
 
 fun with_fixed_vars vars tvars ctxt tac th =

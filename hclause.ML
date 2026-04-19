@@ -595,9 +595,12 @@ fun apply_preunifier
   (clause : hthm)
 =
   let
+    val () = Slam_Common.debug_msg (fn () => "applying: " ^ Slam_Common.pretty_preunifier ctxt ((substitution, flex_flex_pairs)))
     val normed_clause = map_hthm (Slam_Proof_Util.envir_norm_thm ctxt substitution) clause
+    val () = Slam_Common.debug_msg (fn () => "normed_clause: " ^ @{make_string} normed_clause)
     val normed_clause_with_flex_flex_lits =
       fold (weaken_by_flex_flex_pair ctxt) flex_flex_pairs normed_clause
+    val () = Slam_Common.debug_msg (fn () => "normed_clause_with_flex_flex_lits: " ^ @{make_string} normed_clause_with_flex_flex_lits)
   in
     normed_clause_with_flex_flex_lits
   end
