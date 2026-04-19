@@ -24,6 +24,334 @@ lemma "(\<And>x y. P (x a) (y b)) \<Longrightarrow> (\<And>u v. \<not> P (u c) (
   , slam_rule_simp_false_elim
   ]] by slam
 
+(* A higher-order Vampire, Example 1 *)
+lemma "(\<And>x. x a b \<noteq> f b a \<or> x c d \<noteq> f b a) \<Longrightarrow> False"
+  using [[slam_delayed_unification=false]] by slam
+
+(* A higher-order Vampire, Example 1 *)
+lemma "(\<And>x. x a b \<noteq> f b a \<or> x c d \<noteq> f b a) \<Longrightarrow> False"
+  using [[slam_delayed_unification=true]] by slam
+
+lemma "(\<And>x. x a b \<noteq> f b a \<or> x c d \<noteq> f b a) \<Longrightarrow> False"
+using [[
+    slam_trace,
+    slam_disable_all,
+    slam_rule_simp_outer_claus,
+    slam_rule_e_res,
+    slam_rule_sup,
+    (* slightly closer to the example in the paper *)
+    slam_literal_selection_function="select_first_neg_lit",
+    slam_select_flex_sided,
+    slam_delayed_unification=true,
+    slam_unifier_cutoff=4 (* CRITICAL *)
+  ]] by slam
+
+ML_val \<open>
+  val s_eq_t = @{term_schem "?x a b = f b a"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val ctxt = @{context} |> Config.put Unify.search_bound 1 (* has no effect *)
+  val unifiers =
+    Unify.unifiers
+      ( (Context.Proof ctxt)
+      , (Envir.empty 10)
+      , [(s, t)]
+      )
+  val [uf1, uf2, uf3, uf4] = Seq.list_of (Seq.take 4 unifiers)
+  fun pretty (unifier, ffs) =
+    let
+      val (cs, ct) = apply2 (Thm.cterm_of @{context}) (s, t)
+      val pretty_unifier = Slam_Common.pretty_env' @{context} unifier
+      val pretty_ffs = map (apply2 (Thm.cterm_of @{context})) ffs
+      val (ics, ict) = apply2 (Thm.cterm_of @{context} o Envir.norm_term unifier) (s, t)
+    in
+      (cs, ct, pretty_unifier, pretty_ffs, ics, ict)
+    end
+  val p1 = pretty uf1
+  val p2 = pretty uf2
+  val p3 = pretty uf3
+  val p4 = pretty uf4
+\<close>
+
+(* A higher-order Vampire, Example 2 *)
+lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g c)) \<Longrightarrow> False"
+using [[
+    slam_trace
+  , slam_disable_all
+  , slam_rule_simp_outer_claus
+  , slam_rule_sup
+  , slam_rule_e_res
+  , slam_delayed_unification=true
+  , slam_rule_neg_cong_fun
+  ]] by slam
+
+(* A modified NegCongFun can mimic ERes from the paper. (not a proper solution) *)
+lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g c)) \<Longrightarrow> False"
+  using [[slam_delayed_unification=false, slam_neg_cong_fun_reveal_variable_headed]] by slam
+
+lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g c)) \<Longrightarrow> False"
+  using [[slam_delayed_unification=true, slam_neg_cong_fun_reveal_variable_headed]] by slam
+
+lemma "
+      (\<And>z. z (f a) = (z :: 'a \<Rightarrow> 'd) c)
+  \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h ((g :: 'a \<Rightarrow> 'd) (f b)) (g c))
+  \<Longrightarrow> False
+"
+  using [[
+      slam_delayed_unification=true
+    , slam_disable_all
+    , slam_rule_simp_outer_claus
+    , slam_rule_sup
+    , slam_sup_into_fluid
+    , slam_sup_variable_condition="none"
+    , slam_rule_e_res
+    , slam_trace
+    (* , slam_trace_sup *)
+    , slam_max_number_of_steps=100
+    , show_hyps
+  ]] (* by slam (* FIXME: reconstruction failure *) *) sorry
+
+declare [[show_hyps]]
+
+ML_val \<open>
+  val ctxt = @{context}
+  val s_eq_t = @{term_schem "(?x :: 'a \<Rightarrow> 'a) a = (?y :: 'a \<Rightarrow> 'a) b"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val th = Slam_Proof_Util.refl_modulo_flex_flex ctxt (s, t)
+  val th' =
+    Thm.instantiate' [] [SOME (Thm.cterm_of ctxt @{term "\<lambda>x :: 'a. x"})] th
+
+  val th2 = @{lemma "A \<Longrightarrow> A \<Longrightarrow> True" by auto}
+
+  (* None of these leave the flex-flex pair alone*)
+  val th3 = resolve_tac ctxt [th'] 1 th2 |> Seq.hd
+
+  val th4 = compose_tac ctxt (false, th', 0) 1 th2 |> Seq.hd
+
+  val th5 = Drule.comp_no_flatten (th', 0) 1 th2
+
+  val th6 = th' COMP th2
+
+  val th7 =
+    Thm.bicompose
+      (SOME ctxt)
+      { flatten = false, incremented = false, match = false }
+      (false, th', 0)
+      1
+      th2
+    |> Seq.hd
+\<close>
+
+(* It doesn't just break the negative literal but arbitrary subterms. *)
+ML_val \<open>
+  val ctxt = @{context}
+  val s_eq_t = @{term_schem "(?x :: 'a \<Rightarrow> 'a) a = (?y :: 'a \<Rightarrow> 'a) b"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val th = Slam_Proof_Util.refl_modulo_flex_flex ctxt (s, t)
+  val th2 = mk @{term_schem "(?A :: bool) \<Longrightarrow> ?B \<Longrightarrow> ?A \<Longrightarrow> P ((?x :: 'a \<Rightarrow> 'a) a) \<Longrightarrow> True"}
+  val th3 = compose_tac ctxt (false, th, 0) 1 th2 |> Seq.hd
+  val th4 =
+    Thm.instantiate' [] [SOME (Thm.cterm_of ctxt @{term "\<lambda>x :: 'a. x"})] th3
+  val th5 = resolve_tac ctxt [@{lemma "True" by auto}] 1 th4 |> Seq.hd
+\<close>
+
+ML_val \<open>
+  val ctxt = @{context}
+  val s_eq_t = @{term_schem "(?x :: 'a \<Rightarrow> 'a) a = (?y :: 'a \<Rightarrow> 'a) b"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val th = Slam_Proof_Util.refl_modulo_flex_flex ctxt (s, t)
+  val th2 = mk @{term_schem "(?A :: bool) \<Longrightarrow> ?B \<Longrightarrow> ?A \<Longrightarrow> P ((?x :: 'a \<Rightarrow> 'a) a) \<Longrightarrow> True"}
+  val th3 = compose_tac ctxt (false, th, 0) 1 th2 |> Seq.hd
+  val th4 =
+    Thm.instantiate' [] [SOME (Thm.cterm_of ctxt @{term "\<lambda>x :: 'a. x"})] th3
+  val th5 = resolve_tac ctxt [@{lemma "True" by auto}] 1 th4 |> Seq.hd
+\<close>
+
+(* Perhaps we can get rid of only the flex-flex pair in the thm but still keep it in the clause?
+
+g (f a) \<noteq> ?z1 c \<Longrightarrow> ... \<Longrightarrow> False [g (f a) = ?z1 c]
+---------------------------------------------------
+g (f a) \<noteq> ?z1 c \<Longrightarrow> ... \<Longrightarrow> False []
+
+When? Whenever we have that kind of reconstruction failure (maybe do something smarter later).
+
+Currently:
+* flex-flex pair in thm becomes rigid-flex
+* the next resolution inference invokes the unification algorithm with this rigid-flex pair as one 
+  of the disagreement pairs, solving it, and application of the unifier destroys the negative
+  literal in the clause
+* :(
+
+Plan:
+
+*)
+
+
+(* New plan:
+
+Find a way to move thm-attached flex-flex pairs into the prop.
+
+This must somehow involve solving the flex-flex pairs for them to vanish.
+
+C (?x a) (?y b) [?x a = ?y b]
+----------------------------------------------------------------- (rename)
+?x a = ?x' a \<Longrightarrow> ?y b = ?y' b \<Longrightarrow> C (?x' a) (?y' b) [?x a = ?y b]
+----------------------------------------------------------------- (smash)
+?h = ?x' a \<Longrightarrow> ?h = ?y' b \<Longrightarrow> C (?x' a) (?y' b) []
+-------------------------------------------------- (??)
+?x' a = ?y' b \<Longrightarrow> C (?x' a) (?y' b)
+
+Possible solution:
+
+generalize the "abstract_over" operation
+* abstraction over arbitrary subterms
+
+\<forall>x :: 'a. P x
+
+\<lambda>t :: 'a \<Rightarrow> 'a. P (t x)
+
+*)
+
+
+ML\<open>
+  val ctxt = @{context}
+  val th =
+    let
+      val s_eq_t = @{term_schem "(?x :: 'a \<Rightarrow> 'a) a = (?y :: 'a \<Rightarrow> 'a) b"}
+      val (s, t) = HOLogic.dest_eq s_eq_t
+      val th_s_eq_t = Slam_Proof_Util.refl_modulo_flex_flex ctxt (s, t)
+      val th_helper = mk @{term_schem "?A \<Longrightarrow> P ((?x :: 'a \<Rightarrow> 'a) a) ((?y :: 'a \<Rightarrow> 'a) b) \<noteq> Q \<Longrightarrow> False"}
+    in
+      compose_tac ctxt (false, th_s_eq_t, 0) 1 th_helper |> Seq.hd
+      |> HClause.of_lemma
+    end
+(* ?x a \<rightarrow> ?xfresh a *)
+(* ?x := \<lambda> ... ?xfresh ... *)
+(* but instantiation also affect flex-flex pairs ... *)
+(* So this won't work I guess? *)
+
+(*
+  This is rewriting, i.e. hard and bad.
+
+  val th_x_eq_x_fresh =
+    mk @{term_schem "(?x :: 'a \<Rightarrow> 'a) a = (?xfresh :: 'a \<Rightarrow> 'a) a \<Longrightarrow> ?x a \<noteq> ?xfresh a \<Longrightarrow> False"}
+    |> HClause.of_lemma
+  val th_x_renamed =
+    Slam_Proof.reconstruct_sup ctxt
+      { left_premise = th_x_eq_x_fresh
+      , literal = (JLit.Left, 1)
+      , right_premise = th
+      , subterm = ([1], JLit.Left, 0)
+      }
+  val th_y_eq_y_fresh =
+    mk @{term_schem "(?y :: 'a \<Rightarrow> 'a) b = (?yfresh :: 'a \<Rightarrow> 'a) b \<Longrightarrow> ?y b \<noteq> ?yfresh b \<Longrightarrow> False"}
+    |> HClause.of_lemma
+  val th_y_renamed =
+    Slam_Proof.reconstruct_sup ctxt
+      { left_premise = th_y_eq_y_fresh
+      , literal = (JLit.Left, 1)
+      , right_premise = th_x_renamed
+      , subterm = ([2], JLit.Left, 1)
+      }
+*)
+\<close>
+
+find_theorems "?f \<equiv> ?g \<Longrightarrow> ?f ?x \<equiv> ?g ?x"
+
+ML_val \<open>
+  val ctxt = @{context}
+  (* (\<lambda>u. ?x u) = (\<lambda>v. ?y v) \<Longrightarrow> \<lambda>w. P (?x w) = \<lambda>w. P (?y w) *)
+  val lam_eq = mk @{term_schem "(\<lambda>u. ?x u a) \<equiv> (\<lambda>v. ?y v b)"}
+  val ct = Thm.cterm_of ctxt @{term_schem "\<lambda>w. P (?x w a)"}
+  fun beta_both lam_eq arg =
+    let
+      val app_eq_app = Drule.fun_cong_rule lam_eq arg
+      val lhs = Thm.dest_arg1 (Thm.cprop_of app_eq_app)
+      val (_, rhs) = Thm.dest_comb (Thm.cprop_of app_eq_app)
+      val beta_lhs = Thm.symmetric (Thm.beta_conversion false lhs)
+      val rhs_beta = Thm.beta_conversion false rhs
+      val beta_beta = Thm.transitive beta_lhs (Thm.transitive app_eq_app rhs_beta)
+    in
+      beta_beta
+    end
+  val ff_lhs = Thm.dest_arg1 (Thm.cprop_of lam_eq)
+  val (_, ff_rhs) = Thm.dest_comb (Thm.cprop_of lam_eq)
+  val a = Conv.abs_conv (fn (cv, ctxt) => Conv.arg_conv (K (beta_both lam_eq cv))) ctxt ct
+(* Normalization w.r.t. flex-flex pairs: *)
+(* traverse term *)
+(* Abs \<Rightarrow> abs_conv *)
+(* variable-head \<Rightarrow> lookup matching flex-flex pair, rewrite *)
+
+  fun resolve_flex_flex_disagreements ffpairs (s, t) =
+    if s aconv t then Conv.all_conv else
+    case (s, t) of
+      (Var x, _) => error "" (* FIXME: lookup in ffpairs *)
+    | (_ $ _, _) => if JTerm.is_variable_headed s then error "" else error ""
+    | (Abs (x, sT, sb), Abs (y, tT, tb)) => error ""
+
+  (* both as args \<rightarrow> produce a theorem *)
+  (* (one as arg \<rightarrow> produce a theorem) = a conv *)
+  (* Should conv's peak at the result? *)
+\<close>
+
+ML \<open>
+  val s_eq_t = @{term_schem "h (?y b) (?y a) = h (g (f b)) (g c)"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val ctxt = @{context} |> Config.put Unify.search_bound 1 (* has no effect *)
+  val unifiers =
+    Unify.unifiers
+      ( (Context.Proof ctxt)
+      , (Envir.empty 10)
+      , [(s, t)]
+      )
+  val ufs = Seq.list_of (Seq.take 4 unifiers)
+  fun pretty (unifier, ffs) =
+    let
+      val (cs, ct) = apply2 (Thm.cterm_of @{context}) (s, t)
+      val pretty_unifier = Slam_Common.pretty_env' @{context} unifier
+      val pretty_ffs = map (apply2 (Thm.cterm_of @{context})) ffs
+      val (ics, ict) = apply2 (Thm.cterm_of @{context} o Envir.norm_term unifier) (s, t)
+    in
+      (cs, ct, pretty_unifier, pretty_ffs, ics, ict)
+    end
+(*
+  val p1 = pretty uf1
+  val p2 = pretty uf2
+  val p3 = pretty uf3
+  val p4 = pretty uf4
+*)
+\<close>
+
+ML \<open>
+  val s_eq_t = @{term_schem "(?z (f a)) = ?y a"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val ctxt = @{context} |> Config.put Unify.search_bound 1 (* has no effect *)
+  val unifiers =
+    Unify.unifiers
+      ( (Context.Proof ctxt)
+      , (Envir.empty 10)
+      , [(s, t)]
+      )
+  val [uf1] = Seq.list_of (Seq.take 4 unifiers)
+  fun pretty (unifier, ffs) =
+    let
+      val (cs, ct) = apply2 (Thm.cterm_of @{context}) (s, t)
+      val pretty_unifier = Slam_Common.pretty_env' @{context} unifier
+      val pretty_ffs = map (apply2 (Thm.cterm_of @{context})) ffs
+      val (ics, ict) = apply2 (Thm.cterm_of @{context} o Envir.norm_term unifier) (s, t)
+    in
+      (cs, ct, pretty_unifier, pretty_ffs, ics, ict)
+    end
+  val p1 = pretty uf1
+(*
+  val p2 = pretty uf2
+  val p3 = pretty uf3
+  val p4 = pretty uf4
+*)
+\<close>
+
 ML \<open>
 (*
   val D = mkh @{term_schem "(?y :: 'a \<Rightarrow> 'b) a \<noteq> b \<Longrightarrow> False"}
@@ -370,7 +698,6 @@ ML_val\<open>
   val (s, t) = HOLogic.dest_eq s_eq_t
   val () = \<^assert_cant>\<open>Slam_Proof_Util.refl_modulo_flex_flex @{context} (s, t)\<close>
 \<close>
-
 
 ML_val\<open>
   val s_eq_t = @{term_schem "(\<lambda>u. f (?x u)) = (\<lambda>u. f (?y u))"}
