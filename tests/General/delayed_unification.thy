@@ -83,7 +83,40 @@ using [[
   , slam_rule_e_res
   , slam_delayed_unification=true
   , slam_rule_neg_cong_fun
+  , slam_trace_e_res
   ]] by slam
+
+declare [[slam_supress_unify_trace=false]]
+declare [[slam_isabelle_unify_trace]]
+declare [[slam_isabelle_unify_trace_bound=0]]
+declare [[slam_isabelle_unify_trace_simp]]
+declare [[unify_trace_failure]]
+
+(* Our ERes with delayed unification doesn't work because it goes too deep. *)
+ML_val \<open>
+  val s_neq_t = @{term_schem "(h::'c \<Rightarrow> 'c \<Rightarrow> 'd) ((?y::'b \<Rightarrow> 'c) (b::'b)) (?y (a::'b)) \<noteq> h ((g::'a \<Rightarrow> 'c) ((f::'b \<Rightarrow> 'a) b)) (g (c::'a))"}
+  val (s, t) = HOLogic.dest_eq (HOLogic.dest_not s_neq_t)
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val unifiers =
+    Slam_Unify.preunifiers
+      (Context.Proof @{context})
+      [(s, t)]
+      (Envir.empty 10)
+  val u = Seq.pull unifiers
+(*
+  val (unifier, ffs) = Seq.hd unifiers
+  val (cs, ct) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val pretty_unifier = Slam_Common.pretty_env' @{context} unifier
+  val pretty_ffs = map (apply2 (Thm.cterm_of @{context})) ffs
+  val (ics, ict) = apply2 (Thm.cterm_of @{context} o Envir.norm_term unifier) (s, t)
+*)
+\<close>
+
+declare [[slam_supress_unify_trace=true]]
+declare [[slam_isabelle_unify_trace=false]]
+declare [[slam_isabelle_unify_trace_bound=60]]
+declare [[slam_isabelle_unify_trace_simp=false]]
+declare [[unify_trace_failure=false]]
 
 (* A modified NegCongFun can mimic ERes from the paper. (not a proper solution) *)
 lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g c)) \<Longrightarrow> False"
