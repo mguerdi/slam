@@ -210,6 +210,9 @@ sig
   val debug_check_clauses : bool Config.T
   val debug_prefix_clause_id_with_hash : bool Config.T
 
+  val debug_messages: bool Unsynchronized.ref
+  val debug_msg: (unit -> string) -> unit
+
   val cpu_time_milliseconds : ('a -> 'b) -> 'a -> 'b * int
   val time_and_trace : ((unit -> string) -> unit) -> ('a -> 'b) -> 'a -> 'b
 
@@ -643,6 +646,9 @@ fun raw_pp_term  (Const (c, T)) = pp_constr "Const" (pp_pair (pp_qstr c, raw_pp_
 end;
 
 (** common utilities **)
+
+val debug_messages = Unsynchronized.ref false
+fun debug_msg msg = if !debug_messages then writeln (msg ()) else ()
 
 (* from HOL/Tools/Mirabelle/mirabelle.ML *)
 fun cpu_time_milliseconds f x =
