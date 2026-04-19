@@ -9,8 +9,8 @@ sig
   (* proper inferences *)
   | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, preunifier: Slam_Unify.preunifier }
   | FluidSup
-  | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | ERes of { premise: 'a, literal: JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
+  | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
   | ArgCong of { premise: 'a, substitution: Envir.env, literal: JClause_Pos.cpos, vars: term list }
   (* Booleans *)
   | BoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -72,8 +72,8 @@ datatype 'a inference =
   (** general **)
   | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, preunifier: Slam_Unify.preunifier }
   | FluidSup
-  | ERes of { premise: 'a, literal: JClause_Pos.cpos, substitution: Envir.env }
-  | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, substitution: Envir.env }
+  | ERes of { premise: 'a, literal: JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
+  | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
   | ArgCong of { premise: 'a, substitution: Envir.env, literal: JClause_Pos.cpos, vars: term list }
   (** Booleans **)
   | BoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
@@ -357,8 +357,8 @@ fun pretty' ctxt (inference: int inference) =
   | Sup { left_premise, left_premise_shift, right_premise, literal, subterm, preunifier }
      => lst [str "Sup", lbl "left" (@{mk_pty} left_premise), lbl "shift" (@{mk_pty} left_premise_shift), @{mk_pty} literal, lbl "right" (@{mk_pty} right_premise), @{mk_pty} subterm, ppreunif preunifier]
   | FluidSup => str "FluidSup"
-  | ERes { premise, literal, substitution} => lst [str "ERes", @{mk_pty} premise, @{mk_pty} literal, penv substitution]
-  | EFact { premise, left_literal, right_literal, substitution } => lst [str "EFact", @{mk_pty} premise, @{mk_pty} left_literal, @{mk_pty} right_literal, penv substitution]
+  | ERes { premise, literal, preunifier } => lst [str "ERes", @{mk_pty} premise, @{mk_pty} literal, ppreunif preunifier]
+  | EFact { premise, left_literal, right_literal, preunifier } => lst [str "EFact", @{mk_pty} premise, @{mk_pty} left_literal, @{mk_pty} right_literal, ppreunif preunifier]
   | ArgCong { premise, substitution, literal, vars } => lst [str "ArgCong", @{mk_pty} premise, penv substitution, @{mk_pty} literal, Slam_Common.pretty_terms' ctxt vars]
   | BoolHoist { premise, subterm, substitution } => lst [str "BoolHoist", @{mk_pty} premise, @{mk_pty} subterm, penv substitution]
   | FalseElim { premise, literal, substitution } => lst [str "FalseElim", @{mk_pty} premise, @{mk_pty} literal, penv substitution]

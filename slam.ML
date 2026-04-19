@@ -1115,32 +1115,40 @@ fun infer_eres (ctxt : Proof.context) (c, cp, eligibility) =
     fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
     val () = tracer (fn () => "start: " ^ JClause.pretty_lit ctxt c cp)
     val (u, u', is_pos_eq) = JLit.dest (JClause.lit_at cp c)
-    val unifiers =
-      Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
-    val (unifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) unifiers
-    val () = if 0 = length unifiers then fail () (K "no unifiers") else ()
-    fun build_conclusion unifier =
+    val env = Envir.empty (JClause.maxidx c)
+    val preunifiers =
+      if Config.get ctxt Slam_Common.delayed_unification
+        then Slam_Unify.preunifiers (Context.Proof ctxt) [(u, u')] env
+        else Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] env |> Seq.map (rpair [])
+    val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
+    val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
+    fun build_conclusion (substitution, flex_flex_pairs) =
       let
         val () = tracer (K "build_conclusion")
-        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier |> JClause.recompute_selected ctxt
+        val c =
+          c
+          |> JClause.norm_beta_eta_qeta_env ctxt substitution
+          |> JClause.recompute_selected ctxt
       in
         if not (JClause.is_eligible_cpos c (cp, eligibility)) then fail NONE (fn () =>
           JClause.pretty_lit ctxt c cp ^ " not eligible (" ^ @{make_string} eligibility ^ ")")
         else
         c
         |> JClause.delete_lit_at ctxt cp
+        |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) flex_flex_pairs
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt
-          (Slam_Log.ERes { premise = JClause.id c, literal = cp, substitution = unifier })
+          (Slam_Log.ERes
+            { premise = JClause.id c, literal = cp, preunifier = (substitution, flex_flex_pairs) })
         |> trace_concl ctxt tracer
         |> SOME
       end
   in
     if is_pos_eq
       then fail [] (K "not a negative literal")
-      else map_filter build_conclusion unifiers
+      else map_filter build_conclusion preunifiers
   end
 
 (* EFact inference *)
@@ -1153,14 +1161,18 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
     val (u, v, is_pos) = JLit.dest (JLit.orient lp (JClause.lit_at cp c))
     val () = tracer (fn () =>
       Slam_Common.pretty_term ctxt u ^ " ?= " ^ Slam_Common.pretty_term ctxt u')
-    val unifiers =
-      Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] (Envir.empty (JClause.maxidx c))
-    val (unifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) unifiers
+    val env = Envir.empty (JClause.maxidx c)
+    val preunifiers =
+        if Config.get ctxt Slam_Common.delayed_unification
+          then Slam_Unify.preunifiers (Context.Proof ctxt) [(u, u')] env
+          else Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] env |> Seq.map (rpair [])
+    val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
+    val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
     val nothing_selected_in_c = JClause.selected c = []
-    fun build_conclusion unifier =
+    fun build_conclusion (substitution, flex_flex_pairs) =
       let
         val () = tracer (fn () => "build_conclusion")
-        val c = c |> JClause.norm_beta_eta_qeta_env ctxt unifier
+        val c = c |> JClause.norm_beta_eta_qeta_env ctxt substitution
         val (u', v', _) = JLit.dest (JLit.orient lp' (JClause.lit_at cp' c))
         val uv_literal = JClause.lit_at cp c
         val (u, v, _) = JLit.dest (JLit.orient lp uv_literal)
@@ -1175,6 +1187,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         |> JClause.delete_lit_at ctxt (Int.min (cp, cp'))
         |> JClause.add_literal ctxt (JLit.mk (v, v', false))
         |> JClause.add_literal ctxt (JLit.mk (u, v', true))
+        |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) flex_flex_pairs
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
         |> JClause.refresh_id ctxt ()
@@ -1183,14 +1196,14 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
               { premise = JClause.id c
               , left_literal = (lp', cp')
               , right_literal = (lp, cp)
-              , substitution = unifier })
+              , preunifier = (substitution, flex_flex_pairs) })
         |> trace_concl ctxt tracer
         |> SOME
       end
     in
       if not (is_pos andalso is_pos') then fail [] (K "negative literal") else
       if cp' = cp then fail [] (K "equal positions") else
-      map_filter build_conclusion unifiers
+      map_filter build_conclusion preunifiers 
     end
 
 (* ArgCong inference
