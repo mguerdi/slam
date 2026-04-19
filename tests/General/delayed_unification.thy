@@ -112,6 +112,41 @@ ML_val \<open>
 *)
 \<close>
 
+(* Possible new unification variant: SIMPL-only *)
+(* Reconstruction idea:
+SIMPL stops at ?x a = g a
+unification would continue with projection, imitation
+But what if search_bound is 0?
+ *)
+
+ML_val\<open>
+  val s_neq_t = @{term_schem "(h::'c \<Rightarrow> 'c \<Rightarrow> 'd) ((?y::'b \<Rightarrow> 'c) (b::'b)) (?y (a::'b)) \<noteq> h ((g::'a \<Rightarrow> 'c) ((f::'b \<Rightarrow> 'a) b)) (g (c::'a))"}
+  val (s, t) = HOLogic.dest_eq (HOLogic.dest_not s_neq_t)
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val (env, ff, fr) =
+    Slam_Isabelle_Unify.SIMPL
+      (Context.Proof @{context})
+      (Envir.empty 10, [([], s, t)])
+  fun to_ct_pair ([], u, v) = apply2 (Thm.cterm_of @{context}) (u, v)
+  val frct = map to_ct_pair fr
+\<close>
+
+(* This does not help. Can e-unification help? I.e. is it possible to build a SIMPL-only unifier
+there? *)
+declare [[slam_unify_search_bound=0]]
+ML_val\<open>
+  val s_neq_t = @{term_schem "(h::'c \<Rightarrow> 'c \<Rightarrow> 'd) ((?y::'b \<Rightarrow> 'c) (b::'b)) (?y (a::'b)) \<noteq> h ((g::'a \<Rightarrow> 'c) ((f::'b \<Rightarrow> 'a) b)) (g (c::'a))"}
+  val (s, t) = HOLogic.dest_eq (HOLogic.dest_not s_neq_t)
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val unifiers =
+    Slam_Unify.preunifiers
+      (Context.Proof @{context})
+      [(s, t)]
+      (Envir.empty 10)
+  val u = Seq.pull unifiers
+\<close>
+
+
 declare [[slam_supress_unify_trace=true]]
 declare [[slam_isabelle_unify_trace=false]]
 declare [[slam_isabelle_unify_trace_bound=60]]
@@ -878,6 +913,27 @@ ML\<open>
   val (ics, ict) = apply2 (Thm.cterm_of @{context} o Envir.norm_term unifier) (s, t)
 
   val n = Thm.instantiate'
+\<close>
+
+(* There are "flex-flex pairs" of the form
+  ?B = ?f ?B
+which aren't really flex-flex pairs but are still returned as such (presumably because of the cyclic
+dependency). *)
+ML\<open>
+  val s_eq_t = @{term_schem "summ (?h::?'b \<Rightarrow> ?'a) (?B::?'b set) = (?g::?'b \<Rightarrow> ?'a) ((jsk349 ::?'b set \<Rightarrow> (?'b \<Rightarrow> ?'a) \<Rightarrow> (?'b \<Rightarrow> ?'a) \<Rightarrow> ?'b) (?B::?'b set) ?g (?h::?'b \<Rightarrow> ?'a))"}
+  val (s, t) = HOLogic.dest_eq s_eq_t
+  val (pretty_s, pretty_t) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val unifiers =
+    Unify.unifiers
+      ( (Context.Proof @{context})
+      , (Envir.empty 10)
+      , [(s, t)]
+      )
+  val (unifier, ffs) = Seq.hd unifiers
+  val (cs, ct) = apply2 (Thm.cterm_of @{context}) (s, t)
+  val pretty_unifier = Slam_Common.pretty_env' @{context} unifier
+  val pretty_ffs = map (apply2 (Thm.cterm_of @{context})) ffs
+  val (ics, ict) = apply2 (Thm.cterm_of @{context} o Envir.norm_term unifier) (s, t)
 \<close>
 
 end
