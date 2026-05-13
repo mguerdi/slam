@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
 USER isabelle
 WORKDIR /home/isabelle/Isabelle
 
+# Twice, so we can use the cached downloaded components.
+RUN Isabelle/Admin/init -u -L -n
+
 # copy slam git repo to HOL source tree
 COPY --from=slam-repo --chown=isabelle:isabelle . src/HOL/Tools/Slam
 
