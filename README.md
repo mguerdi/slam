@@ -16,33 +16,36 @@ See the file `slam_common.ML` for configuration options.
 
 In the top level folder of the git repository run
 
-`docker build --no-cache --tag="mguerdi/isabelle-afp" --file="evaluation/afp/Dockerfile" .`
+`podman build --format=docker --no-cache --tag="mguerdi/isabelle-afp" --build-context slam-repo=. --file="evaluation/afp/Dockerfile" .`
 
-`docker build --no-cache --tag="mguerdi/isabelle-slam-patched" --file="evaluation/slam_patched/Dockerfile" .`
+`podman build --format=docker --no-cache --tag="mguerdi/isabelle-slam-patched" --build-context slam-repo=. --file="evaluation/slam_patched/Dockerfile" .`
 
 #### Local (rootless docker)
+
+OUTDATED
 
 `docker run -v sledgehammer_cache:/home/isabelle/sledgehammer_cache -v mirabelle-log:/home/isabelle/mirabelle_output mguerdi/isabelle-slam-patched:latest mirabelle -j8 -O "~/mirabelle_output" -A 'sledgehammer[provers=zipperposition, fact_filter=mepo, slices=8, max_proofs=8, minimize=false, exhaustive_preplay=true, cache_dir="/home/isabelle/sledgehammer_cache"]' FFT`
 
 The results are in `~/.local/share/docker/volumes/mirabelle-log/_data/mirabelle.log`.
 
-#### Server (without rootless docker)
+#### Server (podman, rootless)
 
 Create directories to mount as volumes
 
 `mkdir ~/sledgehammer_output`
 `mkdir ~/mirabelle_output`
 
-Make sure the user inside the docker container (e.g. uid=1000) can write into our user's (e.g. uid=1003) directories
+Copy `mirabelle-long-run.log` containing the results of the Sledgehammer invocations to `mirabelle_output/`.
 
-`chmod a+w sledgehammer_output`
-`chmod a+w mirabelle_output`
+Run mirabelle:
 
-Run mirabelle
+`podman run --userns keep-id:uid=1000,gid=1000 -v ~/sledgehammer_cache:/home/isabelle/sledgehammer_cache -v ~/mirabelle_output:/home/isabelle/mirabelle_output mguerdi/isabelle-slam-patched:latest "slam metis"`
 
-`docker run -v ~/sledgehammer_cache:/home/isabelle/sledgehammer_cache -v ~/mirabelle_log:/home/isabelle/mirabelle_output mguerdi/isabelle-slam-patched:latest mirabelle -j30 -O "~/mirabelle_output" -A 'sledgehammer[provers=zipperposition, fact_filter=mepo, slices=8, max_proofs=8, minimize=false, exhaustive_preplay=true, cache_dir="/home/isabelle/sledgehammer_cache"]' FFT`
+The results are in `~/mirabelle_output/mirabelle.log`.
 
-The results are in `~/mirabelle_log/mirabelle.log`.
+Run on a specific theory, e.g. `Picks_Theorem`:
+
+`podman run --userns keep-id:uid=1000,gid=1000 -v ~/sledgehammer_cache:/home/isabelle/sledgehammer_cache -v ~/mirabelle_output:/home/isabelle/mirabelle_output mguerdi/isabelle-slam-patched:latest "slam metis" Picks_Theorem`
 
 ### Analysis
 
