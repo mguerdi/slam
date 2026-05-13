@@ -12,9 +12,6 @@ WORKDIR /home/isabelle/Isabelle
 # copy slam git repo to HOL source tree
 COPY --from=slam-repo --chown=isabelle:isabelle . src/HOL/Tools/Slam
 
-RUN rm -rf src/HOL/Tools/Slam/.git
-RUN rm src/HOL/Tools/Slam/.gitignore
-
 # copy slam.thy etc. to src/HOL/
 RUN rsync -av src/HOL/Tools/Slam/patches/Isabelle/ .
 RUN hg add
