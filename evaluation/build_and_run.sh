@@ -17,5 +17,5 @@ if ! [[ -z $(podman container ls -q) ]]; then
   exit 1
 fi
 podman build --format=docker --tag="mguerdi/isabelle-slam-patched" --build-context slam-repo=. --file="evaluation/slam_patched/Dockerfile"
-./replay_mirabelle_sledgehammer.sh
+./evaluation/replay_mirabelle_sledgehammer.sh
 cp -r "$HOME/mirabelle_output" "$results_dir/mirabelle_output"
