@@ -36,6 +36,7 @@ sig
   val norm_beta_eta_qeta_env : Envir.env -> term -> term
   val norm_beta_eta_qeta : term -> term
   val ensure_lambda_under_q : term -> term
+  val is_normed : term -> bool
   (* skolemization *)
   val make_skolem_constant :
     term ->
@@ -487,6 +488,8 @@ fun norm_beta_eta_qeta_env env = ensure_lambda_under_q o norm_beta_eta_env env
   i.e. \<eta>-expansion under quantifiers.
 *)
 val norm_beta_eta_qeta = norm_beta_eta_qeta_env Envir.init
+
+fun is_normed t = t aconv norm_beta_eta_qeta t
 
 fun fresh_skolem_name () = Name.skolem ("jsk" ^ @{make_string} (JSkolem_Id.new ()))
 
