@@ -47,6 +47,7 @@ fun slam_tac options ctxt goal_term ths i st0 =
   let
     val _ = Slam_Common.validate_config ctxt
     val ctxt = Config.put Unify.search_bound (Config.get ctxt Slam_Common.unify_search_bound) ctxt
+    val ctxt = Config.put eta_contract false ctxt
     (* tracing *)
     val _ = Slam_Common.trace_msg ctxt (fn () => "st0: " ^ @{make_string} st0)
     val _ = Slam_Common.trace_msg ctxt (fn () => "Thm.prop_of st0: " ^ @{make_string} (Thm.prop_of st0))

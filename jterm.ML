@@ -182,8 +182,7 @@ fun is_variable_headed t =
 fun is_variable_headed_comb (t as (_$_)) = is_variable_headed t
   | is_variable_headed_comb _ = false
 
-fun is_flex (Abs (_, _, t)) = is_flex t
-  | is_flex t = is_variable_headed_comb t
+val is_flex = is_variable_headed_comb
 
 val is_rigid = not o is_flex
 
