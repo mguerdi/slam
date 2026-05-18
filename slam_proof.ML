@@ -993,14 +993,17 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
           Slam_Log.FluidSup
       *)
       | Slam_Log.ERes { premise, literal, preunifier } =>
-          error "ERes proof reconstruction unimplemented for delayed unification"
-          (* reconstruct_eres { literal = literal, premise = get_and_instantiate substitution NONE premise } *)
+          (case preunifier of
+            (substitution, []) => reconstruct_eres { literal = literal, premise = get_and_instantiate substitution NONE premise }
+          | _ => error "ERes proof reconstruction unimplemented for delayed unification")
       | Slam_Log.EFact { premise, left_literal, right_literal, preunifier } =>
-          error "ERes proof reconstruction unimplemented for delayed unification"
-          (* reconstruct_efact
-            { left_literal = left_literal
-            , right_literal = right_literal
-            , premise = get_and_instantiate substitution NONE premise } *)
+          (case preunifier of
+            (substitution, []) =>
+              reconstruct_efact
+                { left_literal = left_literal
+                , right_literal = right_literal
+                , premise = get_and_instantiate substitution NONE premise }
+          | _ => error "ERes proof reconstruction unimplemented for delayed unification")
       | Slam_Log.ArgCong { premise, substitution, literal, vars } =>
          reconstruct_arg_cong ctxt { premise = get_and_instantiate substitution NONE premise, literal = literal, vars = vars }
       | Slam_Log.BoolHoist { premise, subterm, substitution } =>
