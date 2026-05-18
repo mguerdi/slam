@@ -6,6 +6,8 @@ sig
   (* list of flex-flex pairs to which the substitution has been applied *)
   type preunifier = Envir.env * (term * term) list
   val preunifiers : Context.generic -> (term * term) list -> Envir.env -> preunifier Seq.seq
+  val simpl_only_preunifiers : Context.generic -> (term * term) list -> Envir.env -> preunifier Seq.seq
+  val imitate_project : Context.generic -> { flex: term, rigid: term } -> Envir.env -> preunifier Seq.seq
   val shallow_first_smash_unifiers : Context.generic -> (term * term) list -> Envir.env -> Envir.env Seq.seq
   (* from more_unify.ML *)
   val matchers: Context.generic -> int -> (term * term) list -> Envir.env Seq.seq
@@ -94,15 +96,16 @@ fun to_preunifier ctxt (substitution, flex_flex_pairs) =
       | is_flex_flex (s, t) =
           is_variable_headed_application s andalso is_variable_headed_application t
     fun check_pair (i, (s, t)) =
-      if is_flex_flex (s, t)
-        then ()
-        else warning (
+      if (not (is_flex_flex (s, t)) andalso
+            not (Config.get ctxt Slam_Common.delayed_unification_simpl_only))
+        then warning (
           "to_preunifier: not a flex-flex pair: "
           ^ Slam_Common.pretty_term ctxt s ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt t
           ^ " (previously " ^ let val (s', t') = nth flex_flex_pairs i in
             Slam_Common.pretty_term ctxt s' ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt t'
           end ^ ")"
         )
+        else ()
     val () = List.app check_pair (map_index I normed_flex_flex_pairs)
   in
     (substitution, normed_flex_flex_pairs)
@@ -126,7 +129,68 @@ fun impl_preunifiers ctxt tus env =
     |> Seq.map (to_preunifier (Context.the_proof ctxt))
   end
 
-fun preunifiers ctxt = with_timeout ctxt oo impl_preunifiers ctxt
+fun simpl_only_preunifiers ctxt tus env =
+  let
+    (* val () =
+      Slam_Common.trace_msg
+        (Context.the_proof ctxt)
+        (fn () => Slam_Common.pretty_preunifier (Context.the_proof ctxt) (Envir.init, tus)) *)
+    val ctxt = silence_context ctxt
+
+    val maxidx =
+      fold
+        (fn tu => fn maxidx => Int.max (maxidx, Int.max (apply2 maxidx_of_term tu)))
+        tus
+        ~1
+    val env = Envir.merge (Envir.empty maxidx, env)
+    val tus = map (apply2 give_to_undefined) tus
+
+    fun make_preunifier (env, flex_rigid, flex_flex) =
+      let
+        val unsolved_constraints = flex_rigid @ flex_flex
+        fun close (rbinder, t, u) = (Logic.rlist_abs (rbinder, t), Logic.rlist_abs (rbinder, u))
+        val unsolved_term_pairs = map close unsolved_constraints
+      in
+        to_preunifier (Context.the_proof ctxt) (env, unsolved_term_pairs)
+      end
+  in
+    Slam_Isabelle_Unify.SIMPL ctxt (env, map (fn (t, u) => ([], t, u)) tus)
+    |> make_preunifier
+    |> Seq.single
+      handle Slam_Isabelle_Unify.CANTUNIFY => Seq.empty
+  end
+
+fun preunifiers ctxt =
+  if Config.get_generic ctxt Slam_Common.delayed_unification_simpl_only then
+    simpl_only_preunifiers ctxt
+  else
+    with_timeout ctxt oo impl_preunifiers ctxt
+
+fun imitate_project ctxt { flex, rigid } env =
+  let
+    val ctxt = silence_context ctxt
+
+    val maxidx =
+      fold
+        (fn tu => fn maxidx => Int.max (maxidx, Int.max (apply2 maxidx_of_term tu)))
+        [(flex, rigid)]
+        ~1
+    val env = Envir.merge (Envir.empty maxidx, env)
+    (* FIXME: do flex and rigid have to have the same type? *)
+
+    fun make_preunifier (env, dpairs) =
+      let
+        val unsolved_constraints = dpairs
+        fun close (rbinder, t, u) = (Logic.rlist_abs (rbinder, t), Logic.rlist_abs (rbinder, u))
+        val unsolved_term_pairs = map close unsolved_constraints
+      in
+        to_preunifier (Context.the_proof ctxt) (env, unsolved_term_pairs)
+      end
+  in
+    (* FIXME: magic number *)
+    Slam_Isabelle_Unify.MATCH (Slam_Fuel.new 100000) ctxt (env, ([], flex, rigid), [])
+    |> Seq.map make_preunifier
+  end
 
 fun upto_exp first last =
   if first < 0 orelse last < first then error ("first (" ^ @{make_string} first ^ ") or last (" ^ @{make_string} last ^ ") too small") else

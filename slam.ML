@@ -320,6 +320,43 @@ fun simp_flex_flex ctxt c =
     |> SOME
   end
 
+(* FIXME: Can this ever be used as a simplification? (i.e. if all imitations / projections are
+enumerated) *)
+(* FIXME: selection, ordering constraints *)
+fun infer_imitate_project ctxt (c, cp) =
+  let
+    val tracer =
+      mk_tracer ctxt Slam_Common.trace_msg_imitate_project "(ImitateProject)"
+    fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    val () = tracer (fn () => "start: " ^ JClause.pretty_lit ctxt c cp)
+    fun is_negative_flex_rigid lit =
+      JLit.is_negative lit andalso JLit.is_flex_rigid lit
+    val l = JClause.lit_at cp c
+  in
+    if not (is_negative_flex_rigid l) then fail [] (K "not negative and flexrigid") else
+  let
+    val (flex, rigid, false) = JLit.dest_known_flex_rigid l
+    val preunifiers =
+      Slam_Unify.imitate_project (Context.Proof ctxt) { flex = flex, rigid = rigid } Envir.init
+    val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
+    val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
+    fun build_conclusion (substitution, dpairs) =
+      c
+      |> JClause.norm_beta_eta_qeta_env ctxt substitution
+      |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) dpairs
+      |> JClause.norm_negative_predicate_literals ctxt
+      |> JClause.recompute_selected ctxt
+      |> JClause.refresh_id ctxt ()
+      |> JClause.set_origin ctxt
+        (Slam_Log.ImitateProject
+          { premise = JClause.id c, literal = cp, preunifier = (substitution, dpairs) })
+      |> trace_concl ctxt tracer
+      |> SOME
+  in
+    map_filter build_conclusion preunifiers
+  end
+  end
+
 (* Rewriting of positive (RP) or negative literals (RN) simplification (Schulz) *)
 (* FIXME: Implement side conditions following
   https://github.com/leanprover-community/duper/blob/aab52219c72cb52951832c8e985e1dc3e9497af9/Duper/Rules/Demodulation.lean#L51
@@ -2387,6 +2424,8 @@ fun infer_clauses ctxt active given_clause green_index =
       Slam_Common.cartesian_product eqs_active targets_given
     (* for ERes, EFact, NegExt, NegCongFun *)
     val given_clause_cposs = JClause.cposs_of given_clause
+    val given_clause_lits : (JClause.T * JClause.cpos) list =
+      map (pair given_clause) given_clause_cposs
     val given_clause_potentially_eligible_lits : (JClause.T * JClause.cpos * JClause.eligibility) list =
       JClause.potentially_eligible_cposs_of given_clause
       |> map (fn (cp, eligibility) => (given_clause, cp, eligibility))
@@ -2423,6 +2462,10 @@ fun infer_clauses ctxt active given_clause green_index =
     , ( Slam_Common.rule_e_res
       , Slam_Common.trace_e_res
       , (fn _ => (maps (infer_eres ctxt) given_clause_potentially_eligible_lits))
+      )
+    , ( Slam_Common.rule_imitate_project
+      , Slam_Common.trace_imitate_project
+      , (fn _ => (maps (infer_imitate_project ctxt) given_clause_lits))
       )
     , ( Slam_Common.rule_e_fact
       , Slam_Common.trace_e_fact

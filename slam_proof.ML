@@ -996,6 +996,8 @@ fun replay_inference ctxt clause_db origin (reconstructed_clause_db : HClause.ht
           (case preunifier of
             (substitution, []) => reconstruct_eres { literal = literal, premise = get_and_instantiate substitution NONE premise }
           | _ => error "ERes proof reconstruction unimplemented for delayed unification")
+      | Slam_Log.ImitateProject { premise, literal, preunifier } =>
+          error "ImitateProject proof reconstruction unimplemented"
       | Slam_Log.EFact { premise, left_literal, right_literal, preunifier } =>
           (case preunifier of
             (substitution, []) =>
