@@ -1,6 +1,6 @@
 signature SIDE =
 sig
-  type T = { term: term, normed: bool, ground: bool }
+  type T = { term: term, normed: bool Lazy.lazy, ground: bool Lazy.lazy }
   val init: term -> T
   val term: T -> term
   val is_normed: T -> bool
@@ -14,20 +14,20 @@ structure Side : SIDE =
 struct
 
 (* FIXME: include maxidx? *)
-type T = { term: term, normed: bool, ground: bool }
-fun init t = { term = t, normed = JTerm.is_normed t, ground = JTerm.is_ground t }
+type T = { term: term, normed: bool Lazy.lazy, ground: bool Lazy.lazy }
+fun init t = { term = t, normed = Lazy.lazy (fn () => JTerm.is_normed t), ground = Lazy.lazy (fn () => JTerm.is_ground t) }
 val term = #term
-val is_normed = #normed
-val is_ground = #ground
+val is_normed = Lazy.force o #normed
+val is_ground = Lazy.force o #ground
 fun map f { term, ... } = init (f term)
 
 fun norm_beta_eta_qeta_env env side =
   (* FIXME: add special case for normed + type-only subst (?) *)
-  if is_ground side orelse Envir.is_empty env then (* no need to apply substitution *)
+  if Envir.is_empty env orelse is_ground side then (* no need to apply substitution *)
     if is_normed side then
       raise Same.SAME
     else
-      { term = JTerm.norm_beta_eta_qeta (term side), normed = true, ground = is_ground side }
+      { term = JTerm.norm_beta_eta_qeta (term side), normed = Lazy.value true, ground = Lazy.lazy (fn () => is_ground side) }
   else
     init (JTerm.norm_beta_eta_qeta_env env (term side))
 
