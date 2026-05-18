@@ -25,6 +25,14 @@ sig
       Envir.env * ((string * typ) list * term * term) list ->
         Envir.env * ((string * typ) list * term * term) list *
         ((string * typ) list * term * term) list
+  type binderlist = (string * typ) list;
+  type dpair = binderlist * term * term;
+  val MATCH : Slam_Fuel.fuel ->
+      Context.generic ->
+        Envir.env * ((string * typ) list * term * term) *
+        ((string * typ) list * term * term) list
+          -> (Envir.env * dpair list) Seq.seq
+  exception CANTUNIFY
 end
 
 structure Slam_Isabelle_Unify : SLAM_ISABELLE_UNIFY =
@@ -463,6 +471,7 @@ fun MATCH fuel context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list)
 
 (*At end of unification, do flex-flex assignments like ?a -> ?f(?b)
   Attempts to update t with u, raising ASSIGN if impossible*)
+(* FIXME: this is where the bad assignments happen! *)
 fun ff_assign context (env, rbinder, t, u) : Envir.env =
   let val vT as (v, T) = get_eta_var (rbinder, 0, t) in
     if occurs_terms (Unsynchronized.ref [], env, v, [u]) then raise ASSIGN

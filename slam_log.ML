@@ -10,6 +10,7 @@ sig
   | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, preunifier: Slam_Unify.preunifier }
   | FluidSup
   | ERes of { premise: 'a, literal: JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
+  | ImitateProject of { premise: 'a, literal: JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
   | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
   | ArgCong of { premise: 'a, substitution: Envir.env, literal: JClause_Pos.cpos, vars: term list }
   (* Booleans *)
@@ -73,6 +74,7 @@ datatype 'a inference =
   | Sup of { left_premise: 'a, left_premise_shift: int, right_premise: 'a, literal: JLit.lpos * JClause_Pos.cpos, subterm: JClause_Pos.full_pos, preunifier: Slam_Unify.preunifier }
   | FluidSup
   | ERes of { premise: 'a, literal: JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
+  | ImitateProject of { premise: 'a, literal: JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
   | EFact of { premise: 'a, left_literal: JLit.lpos * JClause_Pos.cpos, right_literal: JLit.lpos * JClause_Pos.cpos, preunifier: Slam_Unify.preunifier }
   | ArgCong of { premise: 'a, substitution: Envir.env, literal: JClause_Pos.cpos, vars: term list }
   (** Booleans **)
@@ -116,6 +118,7 @@ fun is_simplification (Axiom _) = false
   | is_simplification (Sup _) = false
   | is_simplification FluidSup = false
   | is_simplification (ERes _) = false
+  | is_simplification (ImitateProject _) = false
   | is_simplification (EFact _) = false
   | is_simplification (ArgCong _) = false
   | is_simplification (BoolHoist _) = false
@@ -151,6 +154,7 @@ fun premises (Axiom _) = []
   | premises (Sup { left_premise, right_premise, ... }) = [left_premise, right_premise]
   | premises FluidSup = error "FluidSup undefined"
   | premises (ERes { premise, ... }) = [premise]
+  | premises (ImitateProject { premise, ... }) = [premise]
   | premises (EFact { premise, ... }) = [premise]
   | premises (ArgCong { premise, ... }) = [premise]
   | premises (BoolHoist { premise, ... }) = [premise]
@@ -290,6 +294,7 @@ fun name_of (Axiom _) = "Axiom"
   | name_of (Sup _) = "Sup" 
   | name_of FluidSup = "FluidSup"
   | name_of (ERes _) = "ERes" 
+  | name_of (ImitateProject _) = "ImitateProject"
   | name_of (EFact _) = "EFact" 
   | name_of (ArgCong _) = "ArgCong" 
   | name_of (BoolHoist _) = "BoolHoist" 
@@ -358,6 +363,7 @@ fun pretty' ctxt (inference: int inference) =
      => lst [str "Sup", lbl "left" (@{mk_pty} left_premise), lbl "shift" (@{mk_pty} left_premise_shift), @{mk_pty} literal, lbl "right" (@{mk_pty} right_premise), @{mk_pty} subterm, ppreunif preunifier]
   | FluidSup => str "FluidSup"
   | ERes { premise, literal, preunifier } => lst [str "ERes", @{mk_pty} premise, @{mk_pty} literal, ppreunif preunifier]
+  | ImitateProject { premise, literal, preunifier } => lst [str "ImitateProject", @{mk_pty} premise, @{mk_pty} literal, ppreunif preunifier]
   | EFact { premise, left_literal, right_literal, preunifier } => lst [str "EFact", @{mk_pty} premise, @{mk_pty} left_literal, @{mk_pty} right_literal, ppreunif preunifier]
   | ArgCong { premise, substitution, literal, vars } => lst [str "ArgCong", @{mk_pty} premise, penv substitution, @{mk_pty} literal, Slam_Common.pretty_terms' ctxt vars]
   | BoolHoist { premise, subterm, substitution } => lst [str "BoolHoist", @{mk_pty} premise, @{mk_pty} subterm, penv substitution]

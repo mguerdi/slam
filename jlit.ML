@@ -52,7 +52,10 @@ sig
   val is_negative : T -> bool
   val is_negative_or_negativoid_cfg : Proof.context -> T -> bool
   val is_flex_sided : T -> bool
+  val is_rigid_sided : T -> bool
+  val is_flex_rigid : T -> bool
   val is_flex_flex : T -> bool
+  val dest_known_flex_rigid : T -> term * term * bool
   val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
@@ -155,11 +158,26 @@ fun is_negative_or_negativoid_cfg ctxt =
     then is_negativoid
     else is_negative
 
-val is_flex_sided = any_side JTerm.is_variable_headed_comb
+val is_flex_sided = any_side JTerm.is_flex
+
+val is_rigid_sided = any_side JTerm.is_rigid
+
+(* FIXME: slow *)
+fun is_flex_rigid l = is_flex_sided l andalso is_rigid_sided l
 
 (* Note: not the same terminology as "A higher-order Vampire", where only negative literals can be
 "flex-flex" *)
-val is_flex_flex = both_sides JTerm.is_variable_headed_comb
+val is_flex_flex = both_sides JTerm.is_flex
+
+fun dest_known_flex_rigid l =
+  let
+    val (lhs, rhs, b) = dest l
+  in
+    if JTerm.is_flex lhs then
+      (lhs, rhs, b)
+    else
+      (rhs, lhs, b)
+  end
 
 (* forgets orientation *)
 fun map f (Lit { lhs, rhs, pol, ... }) = mk_from_sides (Side.map f lhs, Side.map f rhs, pol)

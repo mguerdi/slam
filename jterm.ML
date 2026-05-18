@@ -16,6 +16,8 @@ sig
   val strip_comb_fun_types_args1 : typ list * term -> term * typ list * term list
   val is_variable_headed : term -> bool
   val is_variable_headed_comb : term -> bool
+  val is_flex : term -> bool
+  val is_rigid : term -> bool
   val is_ground : term -> bool
   val can_have_green_args : term -> bool
   val is_position_of_fully_applied_logical_symbol : tpos -> term -> bool
@@ -179,6 +181,11 @@ fun is_variable_headed t =
 
 fun is_variable_headed_comb (t as (_$_)) = is_variable_headed t
   | is_variable_headed_comb _ = false
+
+fun is_flex (Abs (_, _, t)) = is_flex t
+  | is_flex t = is_variable_headed_comb t
+
+val is_rigid = not o is_flex
 
 (* FIXME: is this list complete? See Sign.logical_types *)
 fun is_logical_symbol (Const (@{const_name "HOL.True"}, _)) = true

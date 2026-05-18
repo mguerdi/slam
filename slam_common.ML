@@ -21,6 +21,7 @@ sig
   (* trace rules (more fine grained control) *)
   val trace_sup : bool Config.T
   val trace_e_res : bool Config.T
+  val trace_imitate_project : bool Config.T
   val trace_e_fact : bool Config.T
   val trace_arg_cong : bool Config.T
   val trace_bool_hoist : bool Config.T
@@ -69,6 +70,7 @@ sig
   val trace_msg_sup : Proof.context -> (unit -> string) -> unit
   val trace_msg_e_fact : Proof.context -> (unit -> string) -> unit
   val trace_msg_e_res : Proof.context -> (unit -> string) -> unit
+  val trace_msg_imitate_project : Proof.context -> (unit -> string) -> unit
   val trace_msg_arg_cong : Proof.context -> (unit -> string) -> unit
   val trace_msg_bool_hoist : Proof.context -> (unit -> string) -> unit
   val trace_msg_false_elim : Proof.context -> (unit -> string) -> unit
@@ -135,6 +137,7 @@ sig
   val rule_sup : bool Config.T
   val rule_fluid_sup : bool Config.T
   val rule_e_res : bool Config.T
+  val rule_imitate_project : bool Config.T
   val rule_e_fact : bool Config.T
   val rule_arg_cong : bool Config.T
   val rule_bool_hoist : bool Config.T
@@ -147,7 +150,7 @@ sig
   val rule_forall_rw : bool Config.T
   val rule_exists_rw : bool Config.T
   val rule_fluid_bool_hoist : bool Config.T
-  val rule_fluid_loob_ho : bool Config.T
+  val rule_fluid_loob_hoist : bool Config.T
   val rule_ext : bool Config.T
   val rule_neg_ext : bool Config.T
   val rule_neg_cong_fun : bool Config.T
@@ -168,6 +171,7 @@ sig
   val rule_equality_subsumption : bool Config.T
 
   val delayed_unification : bool Config.T
+  val delayed_unification_simpl_only : bool Config.T
 
   val unifier_cutoff : int Config.T
   val get_unifier_cutoff : Proof.context -> int
@@ -248,6 +252,7 @@ val trace_inferred = Attrib.setup_config_bool \<^binding>\<open>slam_trace_infer
 (* individual rules *)
 val trace_sup = Attrib.setup_config_bool \<^binding>\<open>slam_trace_sup\<close> (K false)
 val trace_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_trace_e_res\<close> (K false)
+val trace_imitate_project = Attrib.setup_config_bool \<^binding>\<open>slam_trace_imitate_project\<close> (K false)
 val trace_e_fact = Attrib.setup_config_bool \<^binding>\<open>slam_trace_e_fact\<close> (K false)
 val trace_arg_cong = Attrib.setup_config_bool \<^binding>\<open>slam_trace_arg_cong\<close> (K false)
 val trace_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_trace_bool_hoist\<close> (K false)
@@ -305,6 +310,7 @@ fun trace_msg_inferred ctxt msg = if Config.get ctxt trace_inferred then trace_m
 (* individual rules *)
 fun trace_msg_sup ctxt msg = if Config.get ctxt trace_sup then trace_msg ctxt msg else ();
 fun trace_msg_e_res ctxt msg = if Config.get ctxt trace_e_res then trace_msg ctxt msg else ();
+fun trace_msg_imitate_project ctxt msg = if Config.get ctxt trace_imitate_project then trace_msg ctxt msg else ();
 fun trace_msg_e_fact ctxt msg = if Config.get ctxt trace_e_fact then trace_msg ctxt msg else ();
 fun trace_msg_arg_cong ctxt msg = if Config.get ctxt trace_arg_cong then trace_msg ctxt msg else ();
 fun trace_msg_bool_hoist ctxt msg = if Config.get ctxt trace_bool_hoist then trace_msg ctxt msg else ();
@@ -371,6 +377,7 @@ val rule_default = false
 val rule_sup = Attrib.setup_config_bool \<^binding>\<open>slam_rule_sup\<close> (K rule_default)
 val rule_fluid_sup = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_sup\<close> (K rule_default)
 val rule_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_rule_e_res\<close> (K rule_default)
+val rule_imitate_project = Attrib.setup_config_bool \<^binding>\<open>slam_rule_imitate_project\<close> (K rule_default)
 val rule_e_fact = Attrib.setup_config_bool \<^binding>\<open>slam_rule_e_fact\<close> (K rule_default)
 val rule_arg_cong = Attrib.setup_config_bool \<^binding>\<open>slam_rule_arg_cong\<close> (K rule_default)
 val rule_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_hoist\<close> (K rule_default)
@@ -383,7 +390,7 @@ val rule_bool_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_rw\
 val rule_forall_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_forall_rw\<close> (K rule_default)
 val rule_exists_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_exists_rw\<close> (K rule_default)
 val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_bool_hoist\<close> (K rule_default)
-val rule_fluid_loob_ho = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_loob_hoist\<close> (K rule_default)
+val rule_fluid_loob_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_loob_hoist\<close> (K rule_default)
 val rule_ext = Attrib.setup_config_bool \<^binding>\<open>slam_rule_ext\<close> (K rule_default)
 val rule_neg_ext = Attrib.setup_config_bool \<^binding>\<open>slam_rule_neg_ext\<close> (K rule_default)
 val rule_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>slam_rule_neg_cong_fun\<close> (K rule_default)
@@ -406,6 +413,7 @@ val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_
 fun rule_enabled ctxt rule_cfg = not (Config.get ctxt disable_all) orelse Config.get ctxt rule_cfg
 
 val delayed_unification = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification\<close> (K true)
+val delayed_unification_simpl_only = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification_simpl_only\<close> (K true)
 
 val unifier_cutoff = Attrib.setup_config_int \<^binding>\<open>slam_unifier_cutoff\<close> (K 2)
 fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
@@ -474,11 +482,19 @@ fun validate_max_number_of_steps ctxt =
       error ("Invalid slam_max_number_of_steps: must be \<ge> -1.")
   end
 
+fun validate_delayed_unification ctxt =
+  if (Config.get ctxt delayed_unification_simpl_only andalso
+        not (Config.get ctxt delayed_unification)) then
+    warning "slam_delayed_unification_simpl_only has no effect without slam_delayed_unification"
+  else
+    ()
+
 fun validate_config ctxt =
   let
     val _: proof_reconstruction_mode = get_proof_reconstruction_mode ctxt
     val _: sup_variable_condition = get_sup_variable_condition ctxt
     val _: unit = validate_max_number_of_steps ctxt
+    val _: unit = validate_delayed_unification ctxt
   in
     ()
   end
