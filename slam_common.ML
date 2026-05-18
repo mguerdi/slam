@@ -150,7 +150,7 @@ sig
   val rule_forall_rw : bool Config.T
   val rule_exists_rw : bool Config.T
   val rule_fluid_bool_hoist : bool Config.T
-  val rule_fluid_loob_ho : bool Config.T
+  val rule_fluid_loob_hoist : bool Config.T
   val rule_ext : bool Config.T
   val rule_neg_ext : bool Config.T
   val rule_neg_cong_fun : bool Config.T
@@ -390,7 +390,7 @@ val rule_bool_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_rw\
 val rule_forall_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_forall_rw\<close> (K rule_default)
 val rule_exists_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_exists_rw\<close> (K rule_default)
 val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_bool_hoist\<close> (K rule_default)
-val rule_fluid_loob_ho = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_loob_hoist\<close> (K rule_default)
+val rule_fluid_loob_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_loob_hoist\<close> (K rule_default)
 val rule_ext = Attrib.setup_config_bool \<^binding>\<open>slam_rule_ext\<close> (K rule_default)
 val rule_neg_ext = Attrib.setup_config_bool \<^binding>\<open>slam_rule_neg_ext\<close> (K rule_default)
 val rule_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>slam_rule_neg_cong_fun\<close> (K rule_default)
