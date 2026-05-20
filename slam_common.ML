@@ -217,6 +217,7 @@ sig
 
   val debug_check_clauses : bool Config.T
   val debug_prefix_clause_id_with_hash : bool Config.T
+  val debug_trace_all_clauses : bool Config.T
 
   val debug_messages: bool Unsynchronized.ref
   val debug_msg: (unit -> string) -> unit
@@ -542,6 +543,7 @@ val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>slam_supres
 
 val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>slam_debug_check_clauses\<close> (K false)
 val debug_prefix_clause_id_with_hash = Attrib.setup_config_bool \<^binding>\<open>slam_debug_prefix_clause_id_with_hash\<close> (K false)
+val debug_trace_all_clauses = Attrib.setup_config_bool \<^binding>\<open>slam_debug_trace_all_clauses\<close> (K false)
 
 (** term parsing antiquotations **)
 

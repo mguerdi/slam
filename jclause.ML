@@ -238,52 +238,6 @@ fun check_clause ctxt clause =
     check_type clause
   )
 
-fun set_origin
-  ctxt
-  new_inference
-  { literals
-  , id
-  , maxidx
-  , origin =
-    { inference
-    , dist_to_initial
-    , tainted_by_neg_conj
-    }
-  , selected
-  , ...
-  }
-=
-  let
-    val new_dist_to_initial =
-      case inference of
-        Slam_Log.Axiom _ => 0
-      | Slam_Log.NegatedConjecture _ => 0
-      | _ =>
-          if Slam_Log.is_simplification new_inference
-            then dist_to_initial
-            else dist_to_initial + 1
-    val new_tainted_by_neg_conj =
-      case inference of
-        Slam_Log.Axiom _ => SOME false
-      | Slam_Log.NegatedConjecture _ => SOME true
-      | _ => tainted_by_neg_conj
-    val clause =
-      { literals = literals
-      , id = id
-      , maxidx = maxidx
-      , origin =
-        { inference = new_inference
-        , dist_to_initial = new_dist_to_initial
-        , tainted_by_neg_conj = new_tainted_by_neg_conj
-        }
-      , selected = selected
-      }
-      |> refresh_id ctxt ()
-  in
-    check_clause ctxt clause;
-    clause
-  end
-
 fun origin { origin = { inference , ... } , ... } = inference
 
 (* FIXME: use this for testing *)
@@ -508,6 +462,58 @@ fun pretty_oriented' ctxt c (lp, cp) =
   end
 
 val pretty_oriented = Pretty.string_of ooo pretty_oriented'
+
+fun trace_clause ctxt clause =
+  if not (Config.get ctxt Slam_Common.debug_trace_all_clauses) then () else (
+    writeln ("CLAUSE TRACE " ^ pretty_clause ctxt clause)
+  )
+
+fun set_origin
+  ctxt
+  new_inference
+  { literals
+  , id
+  , maxidx
+  , origin =
+    { inference
+    , dist_to_initial
+    , tainted_by_neg_conj
+    }
+  , selected
+  , ...
+  }
+=
+  let
+    val new_dist_to_initial =
+      case inference of
+        Slam_Log.Axiom _ => 0
+      | Slam_Log.NegatedConjecture _ => 0
+      | _ =>
+          if Slam_Log.is_simplification new_inference
+            then dist_to_initial
+            else dist_to_initial + 1
+    val new_tainted_by_neg_conj =
+      case inference of
+        Slam_Log.Axiom _ => SOME false
+      | Slam_Log.NegatedConjecture _ => SOME true
+      | _ => tainted_by_neg_conj
+    val clause =
+      { literals = literals
+      , id = id
+      , maxidx = maxidx
+      , origin =
+        { inference = new_inference
+        , dist_to_initial = new_dist_to_initial
+        , tainted_by_neg_conj = new_tainted_by_neg_conj
+        }
+      , selected = selected
+      }
+      |> refresh_id ctxt ()
+  in
+    check_clause ctxt clause;
+    trace_clause ctxt clause;
+    clause
+  end
 
 fun cposs_of c = 0 upto (length c - 1)
 
