@@ -2764,7 +2764,7 @@ fun try_saturate context goal_term prems =
           true
           { context = context
           , countdown = Config.get context Slam_Common.max_number_of_steps
-          , passive = Slam_Passive_Set.init goal_symbols clauses
+          , passive = Slam_Passive_Set.init context goal_symbols clauses
           , active = Slam_Clause_Set.empty
           , green_index = Term_Index.empty
           , unit_index = Term_Index.empty
