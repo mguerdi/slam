@@ -37,6 +37,7 @@ sig
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_flex_flex : Proof.context -> JClause.T -> JClause.T option
+  val infer_imitate_project : Proof.context -> JClause.T * JClause.cpos * JClause.eligibility -> JClause.T list
   (* val simp_bool_rw : Proof.context -> clause_term -> JClause.T list *)
   val infer_eq_neq_outer_claus : Proof.context -> clause_lit -> JClause.T list
   val infer_sup : Proof.context -> clause_lit_side -> clause_term -> JClause.T list
@@ -320,7 +321,7 @@ fun simp_flex_flex ctxt c =
 (* FIXME: Can this ever be used as a simplification? (i.e. if all imitations / projections are
 enumerated) *)
 (* FIXME: selection, ordering constraints *)
-fun infer_imitate_project ctxt (c, cp) =
+fun infer_imitate_project ctxt (c, cp, eligibility) =
   let
     val tracer =
       mk_tracer ctxt Slam_Common.trace_msg_imitate_project "(ImitateProject)"
@@ -338,17 +339,21 @@ fun infer_imitate_project ctxt (c, cp) =
     val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
     val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
     fun build_conclusion (substitution, dpairs) =
-      c
-      |> JClause.norm_beta_eta_qeta_env ctxt substitution
-      |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) dpairs
-      |> JClause.norm_negative_predicate_literals ctxt
-      |> JClause.recompute_selected ctxt
-      |> JClause.refresh_id ctxt ()
-      |> JClause.set_origin ctxt
-        (Slam_Log.ImitateProject
-          { premise = JClause.id c, literal = cp, preunifier = (substitution, dpairs) })
-      |> trace_concl ctxt tracer
-      |> SOME
+      let
+        val instance = JClause.norm_beta_eta_qeta_env ctxt substitution c
+      in
+        if not (JClause.is_eligible_cpos instance (cp, eligibility)) then fail NONE (K "literal not eligible") else
+        c
+        |> JClause.norm_beta_eta_qeta_env ctxt substitution
+        |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) dpairs
+        |> JClause.norm_negative_predicate_literals ctxt
+        |> JClause.recompute_selected ctxt
+        |> JClause.set_origin ctxt
+          (Slam_Log.ImitateProject
+            { premise = JClause.id c, literal = cp, preunifier = (substitution, dpairs) })
+        |> trace_concl ctxt tracer
+        |> SOME
+      end
   in
     map_filter build_conclusion preunifiers
   end
@@ -2439,7 +2444,7 @@ fun infer_clauses ctxt active given_clause green_index =
       )
     , ( Slam_Common.rule_imitate_project
       , Slam_Common.trace_imitate_project
-      , (fn _ => (maps (infer_imitate_project ctxt) given_clause_lits))
+      , (fn _ => (maps (infer_imitate_project ctxt) given_clause_potentially_eligible_lits))
       )
     , ( Slam_Common.rule_e_fact
       , Slam_Common.trace_e_fact
