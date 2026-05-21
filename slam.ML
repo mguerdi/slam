@@ -36,6 +36,7 @@ sig
   val simp_rewrite_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
+  val simp_destructive_e_res : Proof.context -> JClause.T * JClause.cpos -> JClause.T option
   val simp_flex_flex : Proof.context -> JClause.T -> JClause.T option
   val infer_imitate_project : Proof.context -> JClause.T * JClause.cpos * JClause.eligibility -> JClause.T list
   (* val simp_bool_rw : Proof.context -> clause_term -> JClause.T list *)
@@ -1176,6 +1177,41 @@ fun infer_eres (ctxt : Proof.context) (c, cp, eligibility) =
       else map_filter build_conclusion preunifiers
   end
 
+fun simp_destructive_e_res (ctxt : Proof.context) (c, cp) =
+  let
+    val tracer = mk_tracer ctxt Slam_Common.trace_msg_destructive_e_res "DestERes"
+    fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    (* restricted = only simplify x\<noteq>y literals *)
+    val restricted = Config.get ctxt Slam_Common.restricted_destructive_e_res
+    val l = JClause.lit_at cp c
+  in
+    if not (JLit.is_negative l) then fail NONE (K "not a negative literal") else
+    if not (JLit.is_variable_sided l) then fail NONE (K "neither side is a variable") else
+    let
+      val (x, t, false) = JLit.dest_known_variable_sided l
+    in
+      if restricted andalso not (is_Var t) then fail NONE (K "restricted and not both variable") else
+      (* note: x=t will be handled by (DR) *)
+      if exists_subterm (fn s => s aconv x) t then fail NONE (K "x occurs in t") else
+      (* *)
+      let
+        val substitution = Envir.update (dest_Var x, t) (Envir.empty (JClause.maxidx c))
+      in
+        c
+        |> JClause.norm_beta_eta_qeta_env ctxt substitution
+        |> JClause.delete_lit_at ctxt cp
+        |> JClause.norm_negative_predicate_literals ctxt
+        |> JClause.recompute_selected ctxt
+        |> JClause.set_origin ctxt
+          (Slam_Log.ERes
+            { premise = JClause.id c, literal = cp, preunifier = (substitution, []) })
+        |> trace_concl ctxt tracer
+        |> SOME
+      end
+    end
+  end
+
+
 (* EFact inference *)
 fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
   let
@@ -2186,6 +2222,13 @@ fun forward_simplify
               (if_cfg
                 Slam_Common.rule_delete_resolved_lits
                 (Seq.single (simp_delete_resolved_lits ctxt))))
+        val destructive_e_res_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          if_cfg
+            Slam_Common.rule_destructive_e_res
+            ( Seq.of_list (JClause.cposs_of c)
+              |> Seq.map (fn cp => (c, cp))
+              |> Seq.map_filter (simp_destructive_e_res ctxt)
+            )
         val flex_flex_simp_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           if_cfg
             Slam_Common.rule_flex_flex_simp
@@ -2223,6 +2266,7 @@ fun forward_simplify
           ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
           @ [dd_dr_rewrites]
+          @ [destructive_e_res_rewrites]
           @ [flex_flex_simp_rewrites]
           @ [neg_ext_rewrites]
           @ [arg_cong_rewrites] )
