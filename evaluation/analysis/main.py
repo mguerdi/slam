@@ -709,7 +709,9 @@ def summarize_diff(runs_to_diff):
     print(f"CHANGED GOALS from {left_name} to {right_name}")
     messages = []
     for left_call, right_call in changed_calls:
-        messages.append(f"{left_call["result"]} -> {right_call["result"]}: {left_call["goal"]}: ")
+        left_result = str(left_call["result"]).rjust(8)
+        right_result = str(right_call["result"]).rjust(8)
+        messages.append(f'{left_result} -> {right_result}: {left_call["goal"]}')
     for message in messages:
         print(message)
 
