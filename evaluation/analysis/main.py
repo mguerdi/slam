@@ -117,6 +117,14 @@ class Result:
                 return self.time_ms < other.time_ms
             return self.kind < other.kind
 
+    def __str__(self):
+        if self.kind == ResultKind.SUCCESS:
+            return f"{self.time_ms} ms"
+        if self.kind == ResultKind.FAILED:
+            return "failed"
+        if self.kind == ResultKind.TIMEOUT:
+            return "timeout"
+
 
 def parse_file(mirabelle_log, timeout_ms, only_theory, only_session):
     lines = [
@@ -662,6 +670,50 @@ def plot_success_calls(metis_calls, slam_calls, label, invocation, scale_metis=F
     )
 
 
+def summarize_diff(runs_to_diff):
+    if len(runs_to_diff) != 2:
+        raise ValueError("Can only diff exactly two runs.")
+    (left_name, left_calls), (right_name, right_calls) = runs_to_diff
+
+    left_calls = [call for call in left_calls if call["method"] == "slam"]
+    right_calls = [call for call in right_calls if call["method"] == "slam"]
+
+    left_goals = sorted(call["goal"] for call in left_calls)
+    right_goals = sorted(call["goal"] for call in right_calls)
+
+    if left_goals != right_goals:
+        left_goals_set = set(left_goals)
+        right_goals_set = set(right_goals)
+        difference = left_goals_set.symmetric_difference(right_goals_set)
+        print("GOALS DIFFERENCE:")
+        print(difference)
+        print("CONTINUING WITH INTERSECTION")
+        common_goals = left_goals_set.intersection(right_goals_set)
+
+    left_by_goal = {call["goal"]: call for call in left_calls}
+    right_by_goal = {call["goal"]: call for call in right_calls}
+
+    changed_calls = [
+        (left_by_goal[goal], right_by_goal[goal])
+        for goal in common_goals
+        if left_by_goal[goal]["result"].kind != right_by_goal[goal]["result"].kind
+    ]
+
+    def sort_key(call_pair):
+        # print(type(call_pair[0]["result"]))
+        # print(repr((call_pair[0]["result"], call_pair[1]["result"])))
+        return (call_pair[0]["result"], call_pair[1]["result"])
+
+    changed_calls.sort(key=sort_key)
+
+    print(f"CHANGED GOALS from {left_name} to {right_name}")
+    messages = []
+    for left_call, right_call in changed_calls:
+        messages.append(f"{left_call["result"]} -> {right_call["result"]}: {left_call["goal"]}: ")
+    for message in messages:
+        print(message)
+
+
 # https://stackoverflow.com/questions/38834378/path-to-a-directory-as-argparse-argument
 def dir_path(string):
     if os.path.isdir(string):
@@ -710,6 +762,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-se", "--session", type=str, help="Only include goals from the given session."
     )
+    parser.add_argument("--diff", action="store_true", help="summarize differences between runs")
     args = parser.parse_args()
 
     if args.theory and args.session:
@@ -768,6 +821,10 @@ if __name__ == "__main__":
         )
         runs_dirs = ["runs/" + dirname for dirname in runs_dirs_relative]
 
+    if args.diff and len(runs_dirs) != 2:
+        raise RuntimeError("Can only diff exactly 2 runs.")
+    runs_to_diff = []
+
     for i, dirname in enumerate(runs_dirs):
         try:
             with open(dirname + "/commit") as c:
@@ -795,6 +852,12 @@ if __name__ == "__main__":
 
         calls = parse_file(mirabelle_log, args.timeout_ms, args.theory, args.session)
 
+        if args.diff:
+            for other_dirname, _ in runs_to_diff:
+                if dirname == other_dirname:
+                    raise RuntimeError(f"Directory '{dirname}' encountered twice.")
+            runs_to_diff.append((dirname, calls))
+
         label = dirname + " " + commit
         summarize(
             calls,
@@ -807,6 +870,9 @@ if __name__ == "__main__":
             args.exclude_differing_facts,
         )
         print()
+
+    if args.diff:
+        summarize_diff(runs_to_diff)
 
     if args.theory:
         title_prefix = f"Theory {args.theory}: "
