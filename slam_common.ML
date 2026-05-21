@@ -462,7 +462,7 @@ val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>slam_select_n
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>slam_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>slam_literal_selection_function\<close> (K "select_first_neg_lit")
 
-val restricted_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_restricted_destructive_e_res\<close> (K true)
+val restricted_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_restricted_destructive_e_res\<close> (K false)
 
 val sup_variable_condition = Attrib.setup_config_string \<^binding>\<open>slam_sup_variable_condition\<close> (K "first_order")
 
