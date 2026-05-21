@@ -56,6 +56,8 @@ sig
   val is_flex_rigid : T -> bool
   val is_flex_flex : T -> bool
   val dest_known_flex_rigid : T -> term * term * bool
+  val is_variable_sided : T -> bool
+  val dest_known_variable_sided : T -> term * term * bool
   val of_term_signed : bool -> term -> T
   val of_term : term -> T
   val lposs_of : T -> lpos list
@@ -174,6 +176,18 @@ fun dest_known_flex_rigid l =
     val (lhs, rhs, b) = dest l
   in
     if JTerm.is_flex lhs then
+      (lhs, rhs, b)
+    else
+      (rhs, lhs, b)
+  end
+
+val is_variable_sided = any_side is_Var
+
+fun dest_known_variable_sided l =
+  let
+    val (lhs, rhs, b) = dest l
+  in
+    if is_Var lhs then
       (lhs, rhs, b)
     else
       (rhs, lhs, b)

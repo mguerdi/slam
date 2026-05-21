@@ -14,6 +14,7 @@ sig
   val favor_goal_symbols: Slam_Symbol_Table.set -> weight_fun
 
   val default_fun: Slam_Symbol_Table.set -> weight_fun
+  val delayed_simp_only_unif_fun : Slam_Symbol_Table.set -> weight_fun
 end
 
 (* see zipperposition's clauseQueue.ml *)
@@ -136,10 +137,21 @@ struct
 
   (* similar to `default_fun` in Zipperpositions clauseQueue.ml *)
   fun default_fun goal_symbols = combine
-    (* FIXME: make coefficients configurable, hyperparameter search *)
     [ (size_of_clause, 3)
     , (favor_all_ground_and_neg, 1)
     , (favor_small_num_vars, 1)
+    , (favor_positive_unit, 1)
+    , (favor_goal_symbols goal_symbols, 1)
+    , (favor_initial, 2)
+    , (favor_small_dist_to_neg_conj, 1)
+    , (favor_small_dist_to_initial, 2)
+    , (favor_containing_free, 1)
+    ]
+
+  (* FIXME: Tune for delayed simp-only unification + Imitate and Project rules. *)
+  fun delayed_simp_only_unif_fun goal_symbols = combine
+    [ (size_of_clause, 3)
+    , (favor_all_ground_and_neg, 1)
     , (favor_positive_unit, 1)
     , (favor_goal_symbols goal_symbols, 1)
     , (favor_initial, 2)
@@ -152,7 +164,7 @@ end
 signature SLAM_PASSIVE_SET =
 sig
   type T 
-  val init : Slam_Symbol_Table.set -> JClause.T list -> T
+  val init : Proof.context -> Slam_Symbol_Table.set -> JClause.T list -> T
   val seq_of : T -> JClause.T Seq.seq
   val add_new_clause : JClause.T -> T -> T 
   val add_new_clauses : T -> JClause.T list -> T 
@@ -199,10 +211,14 @@ fun pretty ctxt n passive =
     ^ pretty_clauses_with_weight ctxt passive first_n
   end
 
-(* initial clauses all have weight 0 so they are added to active set first *)
-fun init goal_symbols clauses =
+fun get_weight_fun ctxt =
+  case Slam_Common.get_clause_selection_heuristic ctxt of
+    Slam_Common.Default => Weight_Functions.default_fun
+  | Slam_Common.DelayedSimpOnlyUnification => Weight_Functions.delayed_simp_only_unif_fun
+
+fun init ctxt goal_symbols clauses =
   let
-    val weight = Weight_Functions.default_fun goal_symbols
+    val weight = get_weight_fun ctxt goal_symbols
   in
     { heap = fold Passive_Set.insert (map (op` weight) clauses) Passive_Set.empty
     , weight = weight

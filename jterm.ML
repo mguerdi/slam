@@ -41,6 +41,7 @@ sig
   val is_normed : term -> bool
   (* skolemization *)
   val make_skolem_constant :
+    Proof.context ->
     term ->
     { 
       (* sk *)
@@ -497,7 +498,7 @@ val norm_beta_eta_qeta = norm_beta_eta_qeta_env Envir.init
 
 fun is_normed t = t aconv norm_beta_eta_qeta t
 
-fun fresh_skolem_name () = Name.skolem ("jsk" ^ @{make_string} (JSkolem_Id.new ()))
+fun fresh_skolem_name ctxt () = Name.skolem ("jsk" ^ @{make_string} (JSkolem_Id.new ctxt ()))
 
 (* like HOLogic.mk_tupleT but turns [T] into T instead of (unit * T) *)
 fun mk_tupleT [] = HOLogic.unitT
@@ -552,6 +553,7 @@ In Isabelle we realize this as
 
 and repeated product types, whenever we need more than one type arg. *)
 fun make_skolem_constant
+  ctxt
   (choice_witness as Const (\<^const_name>\<open>Hilbert_Choice.Eps\<close>, _) $ predicate)
 =
     let
@@ -594,7 +596,7 @@ fun make_skolem_constant
       (* Build the skolem constant. *)
       val witnessT = domain_type (fastype_of predicate)
       val skT = map fastype_of sk_args ---> witnessT
-      val sk_name = fresh_skolem_name ()
+      val sk_name = fresh_skolem_name ctxt ()
       val skolem_constant = Free (sk_name, skT)
     in
       {
@@ -607,7 +609,7 @@ fun make_skolem_constant
         skolem_constant_definition = sk_def
       }
     end
-| make_skolem_constant t =
+| make_skolem_constant t ctxt =
     error
       ("make_skolem_constant: can only make skolem constants for (\<eta>-expanded) choice witnesses,"
         ^ " got " ^ @{make_string} t)

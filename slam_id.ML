@@ -1,10 +1,29 @@
 
 signature ID_GENERATOR =
 sig
-  val new : unit -> int
+  val init : Proof.context -> unit
+  val new : Proof.context -> unit -> int
 end;
 
-functor Id_Generator(val name: string) : ID_GENERATOR =
+functor Proof_Context_Id_Generator(val name: string) : ID_GENERATOR =
+struct
+
+structure Counter = Proof_Data(type T = int Unsynchronized.ref val init = K (Unsynchronized.ref 0))
+
+fun init ctxt = (Counter.get ctxt) := 0
+
+fun new ctxt () =
+  let
+    val counter = Counter.get ctxt
+    val old = !counter
+    val () = counter := old + 1
+  in
+    old
+  end
+
+end
+
+functor Mutex_Id_Generator(val name: string) : ID_GENERATOR =
 struct
 
 (* FIXME: why do we need this? Doesn't the prover run in a single thread? If not, how can we get one
@@ -15,8 +34,10 @@ in
   fun critical e () = Multithreading.synchronized name lock e
 end;
 
+val init = K ()
+
 (* basically newId from metis.ML *)
-val new  =
+fun new ctxt =
   let
     (* the next id that will be given out *)
     val counter = Unsynchronized.ref 0
@@ -33,6 +54,6 @@ val new  =
 
 end;
 
-structure JClause_Id : ID_GENERATOR = Id_Generator(val name = "slam_clause_id")
+structure JClause_Id : ID_GENERATOR = Proof_Context_Id_Generator(val name = "slam_clause_id")
 
-structure JSkolem_Id : ID_GENERATOR = Id_Generator(val name = "slam_skolem_id")
+structure JSkolem_Id : ID_GENERATOR = Proof_Context_Id_Generator(val name = "slam_skolem_id")

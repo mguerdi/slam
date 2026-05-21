@@ -30,7 +30,6 @@ sig
   val as_tpos : int -> cpos -> JTerm.tpos
   val dummy : JLit.T list -> T
   val empty : T
-  val refresh_id : Proof.context -> unit -> T -> T
   val add_literal : Proof.context -> JLit.T -> T -> T
   val combine : Proof.context -> T -> T -> T
   val delete_lit_at : Proof.context -> cpos -> T -> T
@@ -184,10 +183,16 @@ fun lits_hash c =
   |> map (fn c => Char.ord c mod 10)
   |> (fn ds => fold (fn d => fn acc => d + acc * 10) ds 0)
 
-fun refresh_id ctxt () c =
-  if Config.get ctxt Slam_Common.debug_prefix_clause_id_with_hash
-    then map_id (K (lits_hash c * 1000000 + JClause_Id.new ())) c
-    else map_id (K (JClause_Id.new ())) c
+fun make_id ctxt c =
+  let
+    val new_id = JClause_Id.new ctxt ()
+  in
+    if Config.get ctxt Slam_Common.debug_prefix_clause_id_with_hash
+      then (lits_hash c * 1000000 + new_id)
+      else new_id
+  end
+
+fun refresh_id ctxt () c = map_id (K (make_id ctxt c)) c
 
 fun maxidx_of_literal_list ls =
   fold (fn l => fn maxidx => Int.max (JLit.maxidx_of l, maxidx)) ls ~1
@@ -232,51 +237,6 @@ fun check_clause ctxt clause =
     check_maxidx clause;
     check_type clause
   )
-
-fun set_origin
-  ctxt
-  new_inference
-  { literals
-  , id
-  , maxidx
-  , origin =
-    { inference
-    , dist_to_initial
-    , tainted_by_neg_conj
-    }
-  , selected
-  , ...
-  }
-=
-  let
-    val new_dist_to_initial =
-      case inference of
-        Slam_Log.Axiom _ => 0
-      | Slam_Log.NegatedConjecture _ => 0
-      | _ =>
-          if Slam_Log.is_simplification new_inference
-            then dist_to_initial
-            else dist_to_initial + 1
-    val new_tainted_by_neg_conj =
-      case inference of
-        Slam_Log.Axiom _ => SOME false
-      | Slam_Log.NegatedConjecture _ => SOME true
-      | _ => tainted_by_neg_conj
-    val clause =
-      { literals = literals
-      , id = id
-      , maxidx = maxidx
-      , origin =
-        { inference = new_inference
-        , dist_to_initial = new_dist_to_initial
-        , tainted_by_neg_conj = new_tainted_by_neg_conj
-        }
-      , selected = selected
-      }
-  in
-    check_clause ctxt clause;
-    clause
-  end
 
 fun origin { origin = { inference , ... } , ... } = inference
 
@@ -369,18 +329,15 @@ fun recompute_selected ctxt clause =
 fun add_literal ctxt l clause =
   clause
   |> map_literals (fn lits => lits @ [l])
-  |> refresh_id ctxt ()
   |> set_maxidx (Int.max (maxidx clause, JLit.maxidx_of l))
 
 fun combine ctxt c d =
   map_literals (curry (op @) (literals c)) d
-  |> refresh_id ctxt ()
   |> set_maxidx (maxidx_of2 (c, d))
 
 fun delete_lit_at ctxt cp clause =
   clause
   |> map_literals (nth_drop cp)
-  |> refresh_id ctxt ()
   |> set_maxidx (maxidx clause)
 
 fun delete_lits_at ctxt cps clause =
@@ -505,6 +462,58 @@ fun pretty_oriented' ctxt c (lp, cp) =
   end
 
 val pretty_oriented = Pretty.string_of ooo pretty_oriented'
+
+fun trace_clause ctxt clause =
+  if not (Config.get ctxt Slam_Common.debug_trace_all_clauses) then () else (
+    writeln ("CLAUSE TRACE " ^ pretty_clause ctxt clause)
+  )
+
+fun set_origin
+  ctxt
+  new_inference
+  { literals
+  , id
+  , maxidx
+  , origin =
+    { inference
+    , dist_to_initial
+    , tainted_by_neg_conj
+    }
+  , selected
+  , ...
+  }
+=
+  let
+    val new_dist_to_initial =
+      case inference of
+        Slam_Log.Axiom _ => 0
+      | Slam_Log.NegatedConjecture _ => 0
+      | _ =>
+          if Slam_Log.is_simplification new_inference
+            then dist_to_initial
+            else dist_to_initial + 1
+    val new_tainted_by_neg_conj =
+      case inference of
+        Slam_Log.Axiom _ => SOME false
+      | Slam_Log.NegatedConjecture _ => SOME true
+      | _ => tainted_by_neg_conj
+    val clause =
+      { literals = literals
+      , id = id
+      , maxidx = maxidx
+      , origin =
+        { inference = new_inference
+        , dist_to_initial = new_dist_to_initial
+        , tainted_by_neg_conj = new_tainted_by_neg_conj
+        }
+      , selected = selected
+      }
+      |> refresh_id ctxt ()
+  in
+    check_clause ctxt clause;
+    trace_clause ctxt clause;
+    clause
+  end
 
 fun cposs_of c = 0 upto (length c - 1)
 

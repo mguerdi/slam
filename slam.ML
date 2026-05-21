@@ -36,7 +36,9 @@ sig
   val simp_rewrite_lits : Proof.context -> unit_clause -> clause_term -> JClause.T option
   val simp_delete_resolved_lits : Proof.context -> JClause.T -> JClause.T option
   val simp_delete_duplicated_lits : Proof.context -> JClause.T -> JClause.T option
+  val simp_destructive_e_res : Proof.context -> JClause.T * JClause.cpos -> JClause.T option
   val simp_flex_flex : Proof.context -> JClause.T -> JClause.T option
+  val infer_imitate_project : Proof.context -> JClause.T * JClause.cpos * JClause.eligibility -> JClause.T list
   (* val simp_bool_rw : Proof.context -> clause_term -> JClause.T list *)
   val infer_eq_neq_outer_claus : Proof.context -> clause_lit -> JClause.T list
   val infer_sup : Proof.context -> clause_lit_side -> clause_term -> JClause.T list
@@ -169,7 +171,7 @@ fun outer_clausify ctxt maxidx b (Const (@{const_name HOL.All}, T) $ P) c =
           val choice_witness =
             JTerm.make_choice_witness abstract_over (P $ abstract_over)
           val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
-            JTerm.make_skolem_constant choice_witness
+            JTerm.make_skolem_constant ctxt choice_witness
           val skolem = (skolem_constant, skolem_constant_with_args, skolem_constant_definition)
           val lit =
             JLit.of_term_signed true (JTerm.norm_beta_eta_qeta (P $ skolem_constant_with_args))
@@ -258,7 +260,6 @@ fun simp_delete_duplicated_lits ctxt c =
         SOME (
           c'
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
             (Slam_Log.DeleteDuplicatedLits
               { premise = JClause.id c, duplicate_cposs = cposs_of_dups })
@@ -294,7 +295,6 @@ fun simp_delete_resolved_lits ctxt c =
         SOME (
           c'
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
             (Slam_Log.DeleteResolvedLits { premise = JClause.id c, cposs = cposs })
           |> trace_concl ctxt tracer
@@ -315,7 +315,6 @@ fun simp_flex_flex ctxt c =
     if JClause.is_false c then fail NONE (K "already a contradiction") else
     if not (forall is_smashable (JClause.literals c)) then fail NONE (K "not all flex-flex") else
     JClause.empty
-    |> JClause.refresh_id ctxt ()
     |> JClause.set_origin ctxt (Slam_Log.FlexFlexSimp { premise = JClause.id c })
     |> SOME
   end
@@ -323,7 +322,7 @@ fun simp_flex_flex ctxt c =
 (* FIXME: Can this ever be used as a simplification? (i.e. if all imitations / projections are
 enumerated) *)
 (* FIXME: selection, ordering constraints *)
-fun infer_imitate_project ctxt (c, cp) =
+fun infer_imitate_project ctxt (c, cp, eligibility) =
   let
     val tracer =
       mk_tracer ctxt Slam_Common.trace_msg_imitate_project "(ImitateProject)"
@@ -341,17 +340,21 @@ fun infer_imitate_project ctxt (c, cp) =
     val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
     val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
     fun build_conclusion (substitution, dpairs) =
-      c
-      |> JClause.norm_beta_eta_qeta_env ctxt substitution
-      |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) dpairs
-      |> JClause.norm_negative_predicate_literals ctxt
-      |> JClause.recompute_selected ctxt
-      |> JClause.refresh_id ctxt ()
-      |> JClause.set_origin ctxt
-        (Slam_Log.ImitateProject
-          { premise = JClause.id c, literal = cp, preunifier = (substitution, dpairs) })
-      |> trace_concl ctxt tracer
-      |> SOME
+      let
+        val instance = JClause.norm_beta_eta_qeta_env ctxt substitution c
+      in
+        if not (JClause.is_eligible_cpos instance (cp, eligibility)) then fail NONE (K "literal not eligible") else
+        c
+        |> JClause.norm_beta_eta_qeta_env ctxt substitution
+        |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) dpairs
+        |> JClause.norm_negative_predicate_literals ctxt
+        |> JClause.recompute_selected ctxt
+        |> JClause.set_origin ctxt
+          (Slam_Log.ImitateProject
+            { premise = JClause.id c, literal = cp, preunifier = (substitution, dpairs) })
+        |> trace_concl ctxt tracer
+        |> SOME
+      end
   in
     map_filter build_conclusion preunifiers
   end
@@ -421,7 +424,6 @@ fun impl_simp_rewrite_lits ctxt (unit_clause, lp, JClause.Unknown) (target_claus
         (JClause.norm_beta_eta_qeta ctxt rewritten_clause)
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (
             (if positive then Slam_Log.RewritePositiveLits else Slam_Log.RewriteNegativeLits)
               { unit = JClause.id unit_clause
@@ -600,7 +602,6 @@ fun simp_negative_simplify_reflect ctxt (unit_clause, unit_lp) (target_clause, t
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (Slam_Log.NegativeSimplifyReflect
             { literal = target_cp
             , right_premise = JClause.id target_clause
@@ -715,7 +716,6 @@ fun simp_positive_simplify_reflect ctxt unit_clause (target_clause, target_cp) =
         target_clause
         |> JClause.delete_lit_at ctxt target_cp
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (
             Slam_Log.PositiveSimplifyReflect
             { unit = JClause.id unit_clause
@@ -905,15 +905,6 @@ fun simp_bool_outer_claus ctxt (c, i, JClause.Unknown) =
         )
         |> trace_concl ctxt tracer
       )
-    (* FIXME: map might be sufficient, i.e. no need for a fold *)
-    |> (fn clauses =>
-        fold
-          (fn clause => fn (unit_value, acc) =>
-            (unit_value, JClause.refresh_id ctxt unit_value clause :: acc))
-          clauses
-          ((), [])
-       )
-    |> #2
   end
   end
 
@@ -1036,7 +1027,6 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
           JClause.combine ctxt (d' ()) (ct' ())
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
               (Slam_Log.Sup
                 { left_premise = JClause.id d
@@ -1175,7 +1165,6 @@ fun infer_eres (ctxt : Proof.context) (c, cp, eligibility) =
         |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) flex_flex_pairs
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt
           (Slam_Log.ERes
             { premise = JClause.id c, literal = cp, preunifier = (substitution, flex_flex_pairs) })
@@ -1187,6 +1176,41 @@ fun infer_eres (ctxt : Proof.context) (c, cp, eligibility) =
       then fail [] (K "not a negative literal")
       else map_filter build_conclusion preunifiers
   end
+
+fun simp_destructive_e_res (ctxt : Proof.context) (c, cp) =
+  let
+    val tracer = mk_tracer ctxt Slam_Common.trace_msg_destructive_e_res "DestERes"
+    fun fail failure_value msg = (tracer (fn () => "fail: " ^ msg ()); failure_value)
+    (* restricted = only simplify x\<noteq>y literals *)
+    val restricted = Config.get ctxt Slam_Common.restricted_destructive_e_res
+    val l = JClause.lit_at cp c
+  in
+    if not (JLit.is_negative l) then fail NONE (K "not a negative literal") else
+    if not (JLit.is_variable_sided l) then fail NONE (K "neither side is a variable") else
+    let
+      val (x, t, false) = JLit.dest_known_variable_sided l
+    in
+      if restricted andalso not (is_Var t) then fail NONE (K "restricted and not both variable") else
+      (* note: x=t will be handled by (DR) *)
+      if exists_subterm (fn s => s aconv x) t then fail NONE (K "x occurs in t") else
+      (* *)
+      let
+        val substitution = Envir.update (dest_Var x, t) (Envir.empty (JClause.maxidx c))
+      in
+        c
+        |> JClause.norm_beta_eta_qeta_env ctxt substitution
+        |> JClause.delete_lit_at ctxt cp
+        |> JClause.norm_negative_predicate_literals ctxt
+        |> JClause.recompute_selected ctxt
+        |> JClause.set_origin ctxt
+          (Slam_Log.ERes
+            { premise = JClause.id c, literal = cp, preunifier = (substitution, []) })
+        |> trace_concl ctxt tracer
+        |> SOME
+      end
+    end
+  end
+
 
 (* EFact inference *)
 fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
@@ -1227,7 +1251,6 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
         |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) flex_flex_pairs
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt
             (Slam_Log.EFact
               { premise = JClause.id c
@@ -1304,7 +1327,6 @@ fun infer_arg_cong ctxt (c, cpos, eligibility) =
           |> JClause.norm_beta_eta_qeta_env ctxt unifier (* sets maxidx *)
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
-          |> JClause.refresh_id ctxt ()
           |> JClause.set_origin ctxt
               (Slam_Log.ArgCong
                 { premise = JClause.id c
@@ -1360,7 +1382,6 @@ fun infer_bool_hoist ctxt (c, (u_pos as (_, _, cpos)), eligibility) =
         |> JClause.norm_beta_eta_qeta_env ctxt unifier
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt
           (Slam_Log.BoolHoist { premise = JClause.id c, subterm = u_pos, substitution = unifier })
         |> trace_concl ctxt tracer
@@ -1413,7 +1434,6 @@ fun impl_simp_infer_false_elim as_simplification ctxt (c, (lp, cp), eligibility)
         |> JClause.delete_lit_at ctxt cp
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt origin
         |> trace_concl ctxt tracer
         |> SOME
@@ -1553,7 +1573,6 @@ fun impl_infer_bool_rw_eq_neq_fa_ex_hoist
         |> the_default I (Slam_Common.map_some (JClause.add_literal ctxt) new_literal)
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> pair unifier
         |> SOME
       end
@@ -1679,7 +1698,6 @@ fun impl_simp_bool_rw
         |> JClause.set_maxidx maxidx
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> pair matcher
         |> pair (pattern, rhs)
         |> SOME
@@ -1969,7 +1987,7 @@ fun impl_fa_ex_rw
           |> JTerm.norm_beta_eta_qeta_env unifier
         (* Note: FV(?y\<sigma>) = FV((SOME z. ?y z)\<sigma>), where FV gives the set of *schematic* variables *)
         val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
-          JTerm.make_skolem_constant choice_witness
+          JTerm.make_skolem_constant ctxt choice_witness
 
         (* Note: ?y\<sigma> (sk TYPE(\<dots>) x\<^sub>1 \<dots>) is not equal to (?y (sk TYPE(\<dots>) x\<^sub>1 \<dots>)) \<sigma>, because \<sigma> can
         assign the x\<^sub>i, since \<sigma> \<in> CSU(Q. ?y, u) *)
@@ -1987,7 +2005,6 @@ fun impl_fa_ex_rw
         |> JClause.set_maxidx maxidx
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
-        |> JClause.refresh_id ctxt ()
         |> JClause.set_origin ctxt (
           (if is_forall then Slam_Log.ForallRw else Slam_Log.ExistsRw)
             { premise = JClause.id c
@@ -2042,7 +2059,7 @@ fun infer_neg_ext ctxt (c, cpos, eligibility) =
     (* Note: FV(s\<noteq>s') = FV(SOME z. s z \<noteq> s' z), where FV gives the set of *schematic* variables. *)
     val choice_witness = JTerm.make_choice_witness x choice_body
     val { skolem_constant, skolem_constant_with_args, skolem_constant_definition } =
-      JTerm.make_skolem_constant choice_witness
+      JTerm.make_skolem_constant ctxt choice_witness
 
     val new_literal = JLit.mk (s $ skolem_constant_with_args, s' $ skolem_constant_with_args, false)
 
@@ -2053,7 +2070,6 @@ fun infer_neg_ext ctxt (c, cpos, eligibility) =
       |> JClause.norm_negative_predicate_literals ctxt
       |> JClause.recompute_selected ctxt
       |> JClause.set_maxidx (JClause.maxidx c)
-      |> JClause.refresh_id ctxt ()
       |> JClause.set_origin ctxt
           (Slam_Log.NegExt
             { premise = JClause.id c
@@ -2108,7 +2124,6 @@ fun infer_neg_cong_fun ctxt (c, cpos, eligibility) =
     |> JClause.norm_negative_predicate_literals ctxt
     |> JClause.recompute_selected ctxt
     |> JClause.set_maxidx (JClause.maxidx c)
-    |> JClause.refresh_id ctxt ()
     |> JClause.set_origin ctxt
         (Slam_Log.NegCongFun
           { premise = JClause.id c
@@ -2207,6 +2222,13 @@ fun forward_simplify
               (if_cfg
                 Slam_Common.rule_delete_resolved_lits
                 (Seq.single (simp_delete_resolved_lits ctxt))))
+        val destructive_e_res_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
+          if_cfg
+            Slam_Common.rule_destructive_e_res
+            ( Seq.of_list (JClause.cposs_of c)
+              |> Seq.map (fn cp => (c, cp))
+              |> Seq.map_filter (simp_destructive_e_res ctxt)
+            )
         val flex_flex_simp_rewrites : JClause.T -> JClause.T Seq.seq = fn c =>
           if_cfg
             Slam_Common.rule_flex_flex_simp
@@ -2244,6 +2266,7 @@ fun forward_simplify
           ( (if not cheap then [ps_rewrites] else [])
           @ (if not cheap then [ns_rewrites] else [])
           @ [dd_dr_rewrites]
+          @ [destructive_e_res_rewrites]
           @ [flex_flex_simp_rewrites]
           @ [neg_ext_rewrites]
           @ [arg_cong_rewrites] )
@@ -2465,7 +2488,7 @@ fun infer_clauses ctxt active given_clause green_index =
       )
     , ( Slam_Common.rule_imitate_project
       , Slam_Common.trace_imitate_project
-      , (fn _ => (maps (infer_imitate_project ctxt) given_clause_lits))
+      , (fn _ => (maps (infer_imitate_project ctxt) given_clause_potentially_eligible_lits))
       )
     , ( Slam_Common.rule_e_fact
       , Slam_Common.trace_e_fact
@@ -2728,7 +2751,7 @@ fun try_saturate context goal_term prems =
       prem
       |> Thm.prop_of
       |> HOLogic.dest_Trueprop
-      |> (fn t => JClause.of_term context (t, JClause_Id.new ()))
+      |> (fn t => JClause.of_term context (t, JClause_Id.new context ()))
       |> JClause.set_origin context
         (if is_negated_conjecture andalso is_none goal_term
           then Slam_Log.NegatedConjecture { thm = prem }
@@ -2764,7 +2787,7 @@ fun try_saturate context goal_term prems =
           true
           { context = context
           , countdown = Config.get context Slam_Common.max_number_of_steps
-          , passive = Slam_Passive_Set.init goal_symbols clauses
+          , passive = Slam_Passive_Set.init context goal_symbols clauses
           , active = Slam_Clause_Set.empty
           , green_index = Term_Index.empty
           , unit_index = Term_Index.empty

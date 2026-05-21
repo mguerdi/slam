@@ -37,6 +37,7 @@ sig
   val trace_neg_cong_fun : bool Config.T
   val trace_delete_duplicated_lits : bool Config.T
   val trace_delete_resolved_lits : bool Config.T
+  val trace_destructive_e_res : bool Config.T
   val trace_rewrite_lits : bool Config.T
   val trace_positive_simplify_reflect : bool Config.T
   val trace_negative_simplify_reflect : bool Config.T
@@ -85,6 +86,7 @@ sig
   val trace_msg_neg_cong_fun : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_duplicated_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_delete_resolved_lits : Proof.context -> (unit -> string) -> unit
+  val trace_msg_destructive_e_res : Proof.context -> (unit -> string) -> unit
   val trace_msg_flex_flex_simp : Proof.context -> (unit -> string) -> unit
   val trace_msg_rewrite_lits : Proof.context -> (unit -> string) -> unit
   val trace_msg_positive_simplify_reflect : Proof.context -> (unit -> string) -> unit
@@ -158,6 +160,7 @@ sig
   (* simplifications *)
   val rule_delete_duplicated_lits : bool Config.T
   val rule_delete_resolved_lits : bool Config.T
+  val rule_destructive_e_res : bool Config.T
   val rule_flex_flex_simp : bool Config.T
   val rule_rewrite_lits : bool Config.T
   val rule_positive_simplify_reflect : bool Config.T
@@ -182,6 +185,12 @@ sig
   val select_negativoid : bool Config.T
   val select_flex_sided : bool Config.T
   val literal_selection_function : string Config.T
+
+  val restricted_destructive_e_res : bool Config.T
+
+  val clause_selection_heuristic : string Config.T
+  datatype clause_selection_heuristic = Default | DelayedSimpOnlyUnification
+  val get_clause_selection_heuristic : Proof.context -> clause_selection_heuristic
 
   val sup_variable_condition : string Config.T
   datatype sup_variable_condition = None | FirstOrder | Approximate
@@ -213,6 +222,7 @@ sig
 
   val debug_check_clauses : bool Config.T
   val debug_prefix_clause_id_with_hash : bool Config.T
+  val debug_trace_all_clauses : bool Config.T
 
   val debug_messages: bool Unsynchronized.ref
   val debug_msg: (unit -> string) -> unit
@@ -268,6 +278,7 @@ val trace_neg_ext = Attrib.setup_config_bool \<^binding>\<open>slam_trace_neg_ex
 val trace_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>slam_trace_neg_cong_fun\<close> (K false)
 val trace_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_delete_duplicated_lits\<close> (K false)
 val trace_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_delete_resolved_lits\<close> (K false)
+val trace_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_trace_destructive_e_res\<close> (K false)
 val trace_flex_flex_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_flex_flex_simp\<close> (K false)
 val trace_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_trace_rewrite_lits\<close> (K false)
 val trace_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_trace_positive_simplify_reflect\<close> (K false)
@@ -326,6 +337,7 @@ fun trace_msg_neg_ext ctxt msg = if Config.get ctxt trace_neg_ext then trace_msg
 fun trace_msg_neg_cong_fun ctxt msg = if Config.get ctxt trace_neg_cong_fun then trace_msg ctxt msg else ();
 fun trace_msg_delete_duplicated_lits ctxt msg = if Config.get ctxt trace_delete_duplicated_lits then trace_msg ctxt msg else ();
 fun trace_msg_delete_resolved_lits ctxt msg = if Config.get ctxt trace_delete_resolved_lits then trace_msg ctxt msg else ();
+fun trace_msg_destructive_e_res ctxt msg = if Config.get ctxt trace_destructive_e_res then trace_msg ctxt msg else ();
 fun trace_msg_flex_flex_simp ctxt msg = if Config.get ctxt trace_flex_flex_simp then trace_msg ctxt msg else ();
 fun trace_msg_rewrite_lits ctxt msg = if Config.get ctxt trace_rewrite_lits then trace_msg ctxt msg else ();
 fun trace_msg_positive_simplify_reflect ctxt msg = if Config.get ctxt trace_positive_simplify_reflect then trace_msg ctxt msg else ();
@@ -398,6 +410,7 @@ val rule_choice = Attrib.setup_config_bool \<^binding>\<open>slam_rule_choice\<c
 (* simplifications *)
 val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_duplicated_lits\<close> (K rule_default)
 val rule_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_resolved_lits\<close> (K rule_default)
+val rule_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_rule_destructive_e_res\<close> (K rule_default)
 val rule_flex_flex_simp = Attrib.setup_config_bool \<^binding>\<open>slam_rule_flex_flex_simp\<close> (K rule_default)
 val rule_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_rewrite_lits\<close> (K rule_default)
 val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_positive_simplify_reflect\<close> (K rule_default)
@@ -418,6 +431,29 @@ val delayed_unification_simpl_only = Attrib.setup_config_bool \<^binding>\<open>
 val unifier_cutoff = Attrib.setup_config_int \<^binding>\<open>slam_unifier_cutoff\<close> (K 2)
 fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
 
+val clause_selection_heuristic = Attrib.setup_config_string \<^binding>\<open>slam_clause_selection_heuristic\<close> (K "default")
+
+datatype clause_selection_heuristic = Default | DelayedSimpOnlyUnification
+
+val clause_selection_heuristics = [Default, DelayedSimpOnlyUnification]
+
+fun string_of_clause_selection_heuristic Default = "default"
+  | string_of_clause_selection_heuristic DelayedSimpOnlyUnification = "delayed_simp_only_unification"
+
+val clause_selection_heuristic_choices =
+  map (quote o string_of_clause_selection_heuristic) clause_selection_heuristics
+  |> space_implode ", "
+
+fun parse_clause_selection_heuristic "default" = Default
+  | parse_clause_selection_heuristic "delayed_simp_only_unification" = DelayedSimpOnlyUnification
+  | parse_clause_selection_heuristic s = error
+      ( "Not a valid clause selection heuristic: "
+      ^ s
+      ^ " (must be either of " ^ clause_selection_heuristic_choices ^ ")")
+
+fun get_clause_selection_heuristic ctxt =
+  parse_clause_selection_heuristic (Config.get ctxt clause_selection_heuristic)
+
 (* number of extra conclusions generated by ArgCong if the return type of s is a type variable *)
 val arg_cong_extra_conclusions = Attrib.setup_config_int \<^binding>\<open>slam_arg_cong_extra_conclusions\<close> (K 0)
 fun get_arg_cong_extra_conclusions ctxt = Config.get ctxt arg_cong_extra_conclusions
@@ -426,24 +462,34 @@ val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>slam_select_n
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>slam_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>slam_literal_selection_function\<close> (K "select_first_neg_lit")
 
+val restricted_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_restricted_destructive_e_res\<close> (K true)
+
 val sup_variable_condition = Attrib.setup_config_string \<^binding>\<open>slam_sup_variable_condition\<close> (K "first_order")
 
 datatype sup_variable_condition = None | FirstOrder | Approximate
+
+val sup_variable_conditions = [None, FirstOrder, Approximate]
 
 fun string_of_sup_variable_condition None = "none"
   | string_of_sup_variable_condition FirstOrder = "first_order"
   | string_of_sup_variable_condition Approximate = "approximate"
 
+val sup_variable_condition_choices =
+  map (quote o string_of_sup_variable_condition) sup_variable_conditions
+  |> space_implode ", "
+
 fun parse_sup_variable_condition "none" = None
   | parse_sup_variable_condition "first_order" = FirstOrder
   | parse_sup_variable_condition "approximate" = Approximate
   | parse_sup_variable_condition s = error
-      ( "Not a valid slam superposition vairable condition"
+      ( "Not a valid slam superposition vairable condition: "
       ^ s
-      ^ " (must be either of \"none\", \"first_order\" or \"approximate\")")
+      ^ " (must be either of " ^ sup_variable_condition_choices ^ ")")
 
-fun get_sup_variable_condition ctxt = parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
+fun get_sup_variable_condition ctxt =
+  parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
 
+(* FIXME: unnecessary now that we have SIMPL-only delayed unification? *)
 val neg_cong_fun_reveal_variable_headed = Attrib.setup_config_bool \<^binding>\<open>slam_neg_cong_fun_reveal_variable_headed\<close> (K true)
 
 (* FIXME: split into sup_into_var_headed, ... *)
@@ -495,6 +541,7 @@ fun validate_config ctxt =
     val _: sup_variable_condition = get_sup_variable_condition ctxt
     val _: unit = validate_max_number_of_steps ctxt
     val _: unit = validate_delayed_unification ctxt
+    val _: clause_selection_heuristic = get_clause_selection_heuristic ctxt
   in
     ()
   end
@@ -506,6 +553,7 @@ val supress_unify_trace = Attrib.setup_config_bool \<^binding>\<open>slam_supres
 
 val debug_check_clauses = Attrib.setup_config_bool \<^binding>\<open>slam_debug_check_clauses\<close> (K false)
 val debug_prefix_clause_id_with_hash = Attrib.setup_config_bool \<^binding>\<open>slam_debug_prefix_clause_id_with_hash\<close> (K false)
+val debug_trace_all_clauses = Attrib.setup_config_bool \<^binding>\<open>slam_debug_trace_all_clauses\<close> (K false)
 
 (** term parsing antiquotations **)
 
