@@ -389,7 +389,7 @@ val rule_default = false
 val rule_sup = Attrib.setup_config_bool \<^binding>\<open>slam_rule_sup\<close> (K rule_default)
 val rule_fluid_sup = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_sup\<close> (K rule_default)
 val rule_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_rule_e_res\<close> (K rule_default)
-val rule_imitate_project = Attrib.setup_config_bool \<^binding>\<open>slam_rule_imitate_project\<close> (K rule_default)
+val rule_imitate_project = Attrib.setup_config_bool \<^binding>\<open>slam_rule_imitate_project\<close> (K false)
 val rule_e_fact = Attrib.setup_config_bool \<^binding>\<open>slam_rule_e_fact\<close> (K rule_default)
 val rule_arg_cong = Attrib.setup_config_bool \<^binding>\<open>slam_rule_arg_cong\<close> (K rule_default)
 val rule_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_hoist\<close> (K rule_default)
@@ -425,8 +425,8 @@ val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_
 
 fun rule_enabled ctxt rule_cfg = not (Config.get ctxt disable_all) orelse Config.get ctxt rule_cfg
 
-val delayed_unification = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification\<close> (K true)
-val delayed_unification_simpl_only = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification_simpl_only\<close> (K true)
+val delayed_unification = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification\<close> (K false)
+val delayed_unification_simpl_only = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification_simpl_only\<close> (K false)
 
 val unifier_cutoff = Attrib.setup_config_int \<^binding>\<open>slam_unifier_cutoff\<close> (K 2)
 fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
@@ -462,7 +462,7 @@ val select_negativoid = Attrib.setup_config_bool \<^binding>\<open>slam_select_n
 val select_flex_sided = Attrib.setup_config_bool \<^binding>\<open>slam_select_flex_sided\<close> (K false)
 val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>slam_literal_selection_function\<close> (K "select_first_neg_lit")
 
-val restricted_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_restricted_destructive_e_res\<close> (K true)
+val restricted_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_restricted_destructive_e_res\<close> (K false)
 
 val sup_variable_condition = Attrib.setup_config_string \<^binding>\<open>slam_sup_variable_condition\<close> (K "first_order")
 
