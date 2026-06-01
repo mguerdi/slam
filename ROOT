@@ -1,6 +1,6 @@
 chapter SLAM
 
-session "SLAM" = HOL +
+session "SLAM" = "HOL-TPTP" +
   description "
     an implementation of lambda-superposition with booleans
   "
@@ -18,3 +18,10 @@ session "SLAM_MIRABELLE" in Mirabelle = SLAM +
   "
   theories
     Mirabelle_Slam
+
+session "SLAM_TPTP" in slam_tptp = SLAM +
+  description "
+    slam for tptp problems
+  "
+  theories
+    slam_tptp

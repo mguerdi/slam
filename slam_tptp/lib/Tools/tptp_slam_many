@@ -1,0 +1,20 @@
+#!/bin/bash
+
+if [[ $# -ne 1 ]]
+then
+  echo "This script exactly one argument. Exiting"
+  exit 1
+fi
+
+if [[ ! -n $TPTP ]]
+then
+  echo "TPTP environment variable is not set."
+  exit 1
+fi
+
+logical_cores=$(nproc --all)
+max_procs=$((logical_cores / 2 - 2))
+
+echo Reading problems from "$1"
+
+xargs --arg-file="$1" --max-procs=$max_procs --max-args=1 isabelle tptp_slam_single
