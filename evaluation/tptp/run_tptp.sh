@@ -1,4 +1,8 @@
 #!/bin/bash
+if [[ "$PWD" != "$(git rev-parse --show-toplevel)" ]]; then
+  echo Run from top level of slam git repository. Exiting.
+  exit 1
+fi
 logical_cores=$(nproc --all)
 max_procs=$((logical_cores / 2 - 2))
-xargs --arg-file="$HOME/slam/evaluation/tptp/rating_zero_problems" --max-procs=$max_procs podman run --pids-limit=-1 --userns keep-id:uid=1000,gid=1000 -v ~/TPTP-v9.0.0:/home/isabelle/TPTP-v9.0.0:ro mguerdi/isabelle-slam-tptp tptp_slam_some
+xargs --arg-file=./evaluation/tptp/rating_zero_problems --max-procs=$max_procs podman run --pids-limit=-1 --userns keep-id:uid=1000,gid=1000 -v ~/TPTP-v9.0.0:/home/isabelle/TPTP-v9.0.0:ro mguerdi/isabelle-slam-tptp tptp_slam_some
