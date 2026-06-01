@@ -28,7 +28,7 @@ RUN mkdir mirabelle_output
 RUN mkdir sledgehammer_cache
 
 # copy in script for running mirabelle
-COPY --from=slam-repo --chown=isabelle:isabelle ./evaluation/slam_patched/replay_mirabelle_sledgehammer_session.sh ./
+COPY --from=slam-repo --chown=isabelle:isabelle ./evaluation/slam_patched/files/replay_mirabelle_sledgehammer_session.sh ./
 RUN chmod u+x ./replay_mirabelle_sledgehammer_session.sh
 
 RUN Isabelle/Admin/init -u -L -n
