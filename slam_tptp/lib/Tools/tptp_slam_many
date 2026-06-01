@@ -12,7 +12,9 @@ then
   exit 1
 fi
 
-# export TPTP=/home/massin/research/tptp/TPTP-v9.0.0
+logical_cores=$(nproc --all)
+max_procs=$((logical_cores / 2 - 2))
 
 echo Reading problems from "$1"
-xargs --arg-file="$1" --max-procs=0 --max-args=1 ./run_on_problem.sh
+
+xargs --arg-file="$1" --max-procs=$max_procs --max-args=1 isabelle tptp_slam_single

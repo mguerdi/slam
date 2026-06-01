@@ -17,7 +17,7 @@ file_basename=$(basename "$file_path")
 output_file_path="results/$file_basename"
 
 epoch_before=$(date '+%s')
-timeout 120 ./tptp_slam 10 "$file_path" > "$output_file_path"
+timeout 120 isabelle tptp_slam 10 "$file_path" > "$output_file_path"
 if [[ $? -eq 124 ]]
 then
   epoch_after=$(date '+%s')
