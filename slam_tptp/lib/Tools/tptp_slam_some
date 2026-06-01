@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if [[ ! -n $TPTP ]]
+then
+  echo "TPTP environment variable is not set."
+  exit 1
+fi
+
+echo Running sequentially: "$@"
+
+for FILE in "$@"
+do
+  isabelle tptp_slam_single "$FILE"
+done
