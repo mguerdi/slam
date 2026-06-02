@@ -5,4 +5,4 @@ if [[ "$PWD" != "$(git rev-parse --show-toplevel)" ]]; then
   exit 1
 fi
 ./evaluation/tptp/build.sh
-./evaluation/tptp/run_tptp.sh
+./evaluation/tptp/run_parallel_tptp.sh
