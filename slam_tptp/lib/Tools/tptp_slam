@@ -32,7 +32,7 @@ do
 ML \<open> Slam_ATP_Problem_Import.slam_tptp_file @{theory} (${TIMEOUT}) \"${FILE}\" \<close> end" \
     > "${SCRATCH_FILE}"
 
-  isabelle process_theories -O -U -d "$HOME/git/slam" -l SLAM_TPTP -f "${SCRATCH_FILE}" "${SCRATCH}" \
+  isabelle process_theories -o "threads=1" -O -U -d "$HOME/git/slam" -l SLAM_TPTP -f "${SCRATCH_FILE}" "${SCRATCH}" \
       | grep --line-buffered -vE \
           -e '^Running Draft ...$' \
           -e '^[[:space:]]*$' \
