@@ -4,7 +4,7 @@ if [[ "$PWD" != "$(git rev-parse --show-toplevel)" ]]; then
   exit 1
 fi
 problems_file=./evaluation/tptp/rating_zero_problems
-problems_count=$(wc -l $problems_file)
+problems_count=$(wc -l $problems_file | cut -d' ' -f1)
 logical_cores=$(nproc --all)
 max_procs=$((logical_cores / 2 - 2))
 max_args=$((problems_count / max_procs))
