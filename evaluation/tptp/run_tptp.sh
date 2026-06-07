@@ -40,19 +40,27 @@ do
     fi
   else
     podman_exit_code=$?
-    echo "Bad exit code $podman_exit_code from podman run."
     if [[ $podman_exit_code -eq 125 ]]; then
       # "error is with podman itself"
-      : # no-op
+      # happens when
+      # Error: allocating lock for new container: allocation failed; exceeded num_locks (2048)
+      # Fix: change num_locks in podman config and run podman `system renumber`.
+      echo "Bad exit code $podman_exit_code from podman run. Exiting with 127."
+      exit 127
     elif [[ $podman_exit_code -eq 126 ]]; then
       # "contained command cannot be invoked"
-      exit 1
+      # happens when
+      # Error: OCI runtime error: crun: create keyring `...`: Disk quota exceeded
+      echo "Bad exit code $podman_exit_code from podman run."
+      : # no-op
     elif [[ $podman_exit_code -eq 127 ]]; then
       # "contained command cannot be found"
-      exit 1
+      echo "Bad exit code $podman_exit_code from podman run. Exiting with 127."
+      exit 127
     else
       # "contained command exit code"
-      exit $podman_exit_code
+      echo "Bad exit code $podman_exit_code from contained command. Exiting with 1."
+      exit 1
     fi
     echo "Re-trying in 30 seconds. ($remaining_tries tries left)"
     remaining_tries=$((remaining_tries - 1))
