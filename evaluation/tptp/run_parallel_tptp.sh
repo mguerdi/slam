@@ -14,14 +14,8 @@ else
 fi
 
 commit=$(git rev-parse HEAD)
-results_dir="./evaluation/analysis/tptp_runs/run$commit"
+results_dir="./evaluation/analysis/tptp/runs/run$commit"
 mkdir -p "$results_dir"
-container_ids_file="$results_dir/container_ids"
-if [[ -e "$container_ids_file" ]] && [[ ! -f "$container_ids_file" ]] || [[ -n $(cat "$container_ids_file") ]]
-then
-  echo "File $container_ids_file exists but is not regular or non-empty. Unfinished previous run? Exiting."
-  exit 1
-fi
 
 problems_count=$(wc -l "$problems_file" | cut -d' ' -f1)
 logical_cores=$(nproc --all)
