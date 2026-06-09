@@ -4,18 +4,19 @@ if [[ "$PWD" != "$(git rev-parse --show-toplevel)" ]]; then
   exit 1
 fi
 
-if [[ $# -lt 1 ]]
+if [[ $# -lt 2 ]]
 then
-  echo "This script takes at least one argument, the results directory. Exiting."
+  echo "This script takes at least two arguments, the prover and the results directory. Exiting."
   exit 1
 fi
-if [[ ! -d "$1" ]]
+prover=$1
+if [[ ! -d "$2" ]]
 then
-  echo "First argument must be a directory. Exiting."
+  echo "Second argument must be a directory. Exiting."
   exit 1
 fi
-results_dir="$1"
-shift # discard first argument from $@
+results_dir="$2"
+shift 2 # discard first two arguments from $@
 
 if [[ ! -d $TPTP ]]
 then
@@ -29,7 +30,7 @@ done="false"
 remaining_tries=5
 until [[ $done = "true" ]] || [[ $remaining_tries -le 0 ]]
 do
-  if podman run --cidfile="$cidfile" --userns keep-id:uid=1000,gid=1000 -v "$TPTP":/home/isabelle/TPTP-v9.0.0:ro mguerdi/isabelle-slam-tptp tptp_slam_some "$@"
+  if podman run --cidfile="$cidfile" --userns keep-id:uid=1000,gid=1000 -v "$TPTP":/home/isabelle/TPTP-v9.0.0:ro mguerdi/isabelle-slam-tptp "tptp_${prover}_some" "$@"
   then
     done="true"
     container_id=$(cat "$cidfile")

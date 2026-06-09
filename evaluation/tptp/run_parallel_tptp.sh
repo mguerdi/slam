@@ -31,4 +31,8 @@ logical_cores=$(nproc --all)
 max_procs=$((logical_cores / 2 - 2))
 max_args=$((problems_count / max_procs))
 
-xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir"
+echo RUNNING SLAM
+xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh slam "$results_dir"
+
+echo RUNNING METIS
+xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh metis_lifting "$results_dir"
