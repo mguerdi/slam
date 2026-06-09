@@ -19,9 +19,16 @@ mkdir -p "$results_dir"
 
 problems_count=$(wc -l "$problems_file" | cut -d' ' -f1)
 logical_cores=$(nproc --all)
+
+# For ~380 parallel containers, requires
+#   kernel.keys.maxkeys=20000
+#   kernel.keys.maxbytes=200000
+# kernel parameters and
+#   num_locks=2097152
+# in containers.conf
+
 # assume hyperthreading, leave two physical cores alone
-# max_procs=$((logical_cores / 2 - 2))
-max_procs=250 # FIXME: undo once maxbytes is set
+max_procs=$((logical_cores / 2 - 2))
 max_args=$((problems_count / max_procs))
 
 xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir"
