@@ -20,7 +20,8 @@ mkdir -p "$results_dir"
 problems_count=$(wc -l "$problems_file" | cut -d' ' -f1)
 logical_cores=$(nproc --all)
 # assume hyperthreading, leave two physical cores alone
-max_procs=$((logical_cores / 2 - 2))
+# max_procs=$((logical_cores / 2 - 2))
+max_procs=250 # FIXME: undo once maxbytes is set
 max_args=$((problems_count / max_procs))
 
 xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir"
