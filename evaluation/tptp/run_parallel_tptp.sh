@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 if [[ "$PWD" != "$(git rev-parse --show-toplevel)" ]]; then
   echo Run from top level of slam git repository. Exiting.
   exit 1
@@ -33,9 +33,15 @@ max_args=$((problems_count / max_procs))
 
 echo RUNNING SLAM
 xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" slam
+# FIXME: get rid of this once num_locks is set correctly
+echo REMOVING ALL STOPPED CONTAINERS
+podman container rm --all
 
 for index in $(seq 0 25)
 do
   echo RUNNING METIS VARIANT metis"$index"
   xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" metis "metis$index"
+  # FIXME: get rid of this once num_locks is set correctly
+  echo REMOVING ALL STOPPED CONTAINERS
+  podman container rm --all
 done
