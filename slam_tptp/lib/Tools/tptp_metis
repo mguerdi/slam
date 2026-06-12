@@ -4,16 +4,17 @@
 # Author: Martin Desharnais-Schäfer
 # Author: Massin Guerdi
 #
-# DESCRIPTION: Metis tactic with lambda-lifting for TPTP competitive division
+# DESCRIPTION: Metis tactic for TPTP competitive division
 
 PRG="$(basename "$0")"
 
 function usage() {
   echo
-  echo "Usage: isabelle $PRG TIMEOUT FILES"
+  echo "Usage: isabelle $PRG TIMEOUT METIS_VARIANT FILES"
   echo
-  echo "  Runs a combination of Isabelle tactics on TPTP problems."
+  echo "  Runs a variant of Isabelle's metis tactic on TPTP problems."
   echo "  Each problem is allocated at most TIMEOUT seconds."
+  echo "  For a list of METIS_VARIANTs, see slam/slam_tptp/slam_tptp.thy."
   echo
   exit 1
 }
@@ -24,12 +25,13 @@ SCRATCH="Scratch_${PRG}_$$_${RANDOM}"
 SCRATCH_FILE=/tmp/${SCRATCH}.thy
 
 TIMEOUT=$1
-shift
+METIS_VARIANT=$2
+shift 2
 
 for FILE in "$@"
 do
   echo "theory ${SCRATCH} imports \"SLAM_TPTP.slam_tptp\" begin \
-ML \<open> Slam_ATP_Problem_Import.metis_lifting_tptp_file @{theory} (${TIMEOUT}) \"${FILE}\" \<close> end" \
+ML \<open> Slam_ATP_Problem_Import.metis_tptp_file \"${METIS_VARIANT}\" @{theory} (${TIMEOUT}) \"${FILE}\" \<close> end" \
     > "${SCRATCH_FILE}"
 
   isabelle process_theories -o "threads=1" -O -U -d "$HOME/git/slam" -l SLAM_TPTP -f "${SCRATCH_FILE}" "${SCRATCH}" \

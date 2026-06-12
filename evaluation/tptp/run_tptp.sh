@@ -6,16 +6,16 @@ fi
 
 if [[ $# -lt 2 ]]
 then
-  echo "This script takes at least two arguments, the prover and the results directory. Exiting."
+  echo "This script takes at least two arguments, the results directory and the prover. Exiting."
   exit 1
 fi
-prover=$1
-if [[ ! -d "$2" ]]
+if [[ ! -d "$1" ]]
 then
-  echo "Second argument must be a directory. Exiting."
+  echo "First argument must be a directory. Exiting."
   exit 1
 fi
-results_dir="$2"
+results_dir="$1"
+prover=$2
 shift 2 # discard first two arguments from $@
 
 if [[ ! -d $TPTP ]]
