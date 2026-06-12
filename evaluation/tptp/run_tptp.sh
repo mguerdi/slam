@@ -26,6 +26,8 @@ fi
 
 cidfile=$(mktemp)
 
+xarg_killing_exit_code=255
+
 done="false"
 remaining_tries=5
 until [[ $done = "true" ]] || [[ $remaining_tries -le 0 ]]
@@ -46,18 +48,18 @@ do
       # happens when
       # Error: allocating lock for new container: allocation failed; exceeded num_locks (2048)
       # Fix: change num_locks in podman config and run podman `system renumber`.
-      echo "Bad exit code $podman_exit_code from podman run. Exiting with 127."
-      exit 127
+      echo "Bad exit code $podman_exit_code from podman run. Exiting with $xarg_killing_exit_code."
+      exit $xarg_killing_exit_code
     elif [[ $podman_exit_code -eq 126 ]]; then
       # "contained command cannot be invoked"
       # happens when
       # Error: OCI runtime error: crun: create keyring `...`: Disk quota exceeded
       echo "Bad exit code $podman_exit_code from podman run."
       : # no-op
-    elif [[ $podman_exit_code -eq 127 ]]; then
+    elif [[ $podman_exit_code -eq 255 ]]; then
       # "contained command cannot be found"
-      echo "Bad exit code $podman_exit_code from podman run. Exiting with 127."
-      exit 127
+      echo "Bad exit code $podman_exit_code from podman run. Exiting with $xarg_killing_exit_code."
+      exit $xarg_killing_exit_code
     else
       # "contained command exit code"
       echo "Bad exit code $podman_exit_code from contained command. Exiting with 1."
