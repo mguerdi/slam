@@ -6,9 +6,12 @@ then
   exit 1
 fi
 
+metis_variant=$1
+shift
+
 echo Running sequentially: "$@"
 
 for FILE in "$@"
 do
-  isabelle tptp_metis_lifting_single "$FILE"
+  isabelle tptp_single 10 "$FILE" "metis" "$metis_variant"
 done

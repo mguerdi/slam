@@ -32,7 +32,10 @@ max_procs=$((logical_cores / 2 - 2))
 max_args=$((problems_count / max_procs))
 
 echo RUNNING SLAM
-xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh slam "$results_dir"
+xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" slam
 
-echo RUNNING METIS
-xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh metis_lifting "$results_dir"
+for index in $(seq 0 25)
+do
+  echo RUNNING METIS VARIANT metis"$index"
+  xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" metis "metis$index"
+done

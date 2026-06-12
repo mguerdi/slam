@@ -1,0 +1,34 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ $# -lt 3 ]]
+then
+  echo "This script takes at least 3 arguments: timeout, relative problem path, tptp_COMMAND and further arguments to tptp_COMMAND. Exiting"
+  exit 1
+fi
+
+timeout=$1
+shift
+os_timeout=$((timeout * 10))
+relative_problem_path=$1
+shift
+tptp_command=$1
+shift
+
+mkdir -p results
+
+file_path="$TPTP/$relative_problem_path"
+file_basename=$(basename "$file_path")
+
+echo "Running \`tptp_$tptp_command" "$@" "\` on problem $file_basename with timeout ${timeout}s."
+
+output_file_path="results/$file_basename.log"
+
+epoch_before=$(date '+%s')
+timeout $os_timeout isabelle "tptp_$tptp_command" "$timeout" "$@" "$file_path" > "$output_file_path"
+if [[ $? -eq 124 ]]
+then
+  epoch_after=$(date '+%s')
+  echo "OS TIMEOUT after " $((epoch_after - epoch_before)) " seconds" >> "$output_file_path"
+  echo "% SZS status GaveUp"
+fi

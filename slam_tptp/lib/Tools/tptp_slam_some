@@ -10,5 +10,5 @@ echo Running sequentially: "$@"
 
 for FILE in "$@"
 do
-  isabelle tptp_slam_single "$FILE"
+  isabelle tptp_single 10 "$FILE" "slam"
 done
