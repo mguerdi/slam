@@ -37,11 +37,11 @@ xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./
 echo REMOVING ALL STOPPED CONTAINERS
 podman container rm --all
 
-for index in $(seq 0 25)
-do
-  echo RUNNING METIS VARIANT metis"$index"
-  xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" metis "metis$index"
-  # FIXME: get rid of this once num_locks is set correctly
-  echo REMOVING ALL STOPPED CONTAINERS
-  podman container rm --all
-done
+# for index in $(seq 0 25)
+# do
+#   echo RUNNING METIS VARIANT metis"$index"
+#   xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" metis "metis$index"
+#   # FIXME: get rid of this once num_locks is set correctly
+#   echo REMOVING ALL STOPPED CONTAINERS
+#   podman container rm --all
+# done
