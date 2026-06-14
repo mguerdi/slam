@@ -145,8 +145,37 @@ fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
     end
   | tposs_of _ = [[]]
 
+(* `tpos list` with prefix sharing *)
+datatype disagreements = Node of (int * disagreements) list
+
 (* NONE means no disagreement, the terms are the same *)
-fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Slam_Common.map_some (cons 0) (disagreement_tpos_of2 (t, u))
+(* FIXME: test *)
+fun disagreement_tposs_of2 (Abs(_,T,t), Abs(_,U,u)) : disagreements option =
+    (* if T <> U then error "types unequal" else *)
+      Option.map (fn d => Node [(0, d)]) (disagreement_tposs_of2 (t, u))
+  | disagreement_tposs_of2 (t as (_$_), u as (_$_)) =
+    let
+      val (head_args_t, head_args_u) = (apply2 (uncurry cons o strip_comb)) (t, u)
+    in
+      if length head_args_t <> length head_args_u then SOME (Node []) else
+        let
+          val disagreements =
+            map_index
+              (fn (i, tu) => Option.map (pair i) (disagreement_tposs_of2 tu))
+              (head_args_t ~~ head_args_u)
+            |> map_filter I
+        in
+          case disagreements of
+            [] => NONE
+          | d => SOME (Node d)
+        end
+    end
+  | disagreement_tposs_of2 (t, u) = if t aconv u then NONE else SOME (Node [])
+
+(* NONE means no disagreement, the terms are the same *)
+fun disagreement_tpos_of2 (Abs(_,T,t), Abs(_,U,u)) =
+    (* if T <> U then error "disagreement_tpos_of2: types not equal" else *)
+      Slam_Common.map_some (cons 0) (disagreement_tpos_of2 (t, u))
   | disagreement_tpos_of2 (t as (_$_), u as (_$_)) =
     let
       val (head_args_t, head_args_u) = (apply2 (uncurry cons o strip_comb)) (t, u)
