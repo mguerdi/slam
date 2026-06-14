@@ -135,6 +135,7 @@ sig
   val max_number_of_steps : int Config.T
   (* Config options to turn rules on and off. *)
   val disable_all : bool Config.T
+  val rule_enabled : Proof.context -> bool Config.T -> bool
   (* inferences *)
   val rule_sup : bool Config.T
   val rule_fluid_sup : bool Config.T

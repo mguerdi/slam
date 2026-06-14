@@ -4,7 +4,7 @@ general procedure:
 
 1. Q\<^sub>\<approx> normalize
 2. \<beta>\<eta>Q\<^sub>\<eta>-normalize
-3. 
+3.
 
 *)
 
@@ -458,8 +458,7 @@ val simp_rewrite_lits = impl_simp_rewrite_lits
 (* active units rewrite given clause *)
 fun forward_rewrite ctxt active unit_index given_clause =
   let
-    val all_disabled = Config.get ctxt Slam_Common.disable_all
-    fun cfg_rule rule = if not all_disabled orelse Config.get ctxt rule then true else false
+    fun cfg_rule rule = if Slam_Common.rule_enabled ctxt rule then true else false
     val cfg_rewrite_lits = cfg_rule Slam_Common.rule_rewrite_lits
     val green_subterms_in_given_clause =
       JClause.green_full_poss_of given_clause
@@ -537,8 +536,7 @@ fun backward_rewrite ctxt active green_index given_clause
 =
   if not (JClause.is_unit given_clause) then { simplifications = [], archive = [] } else
   let
-    val all_disabled = Config.get ctxt Slam_Common.disable_all
-    fun cfg_rule rule = if not all_disabled orelse Config.get ctxt rule then true else false
+    fun cfg_rule rule = if Slam_Common.rule_enabled ctxt rule then true else false
     val cfg_rewrite_lits = cfg_rule Slam_Common.rule_rewrite_lits
     fun backward_rewrite_oriented lp acc =
       let
@@ -787,8 +785,7 @@ fun is_forward_subsumed ctxt clause active subsumption_index : bool =
           then tracer (fn () => "subsumed by " ^ JClause.pretty_clause ctxt subsuming_clause)
           else fail () (fn () => "not subsumed by " ^ JClause.pretty_clause ctxt subsuming_clause);
       subsumed)
-    val all_disabled = Config.get ctxt Slam_Common.disable_all
-    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
+    fun if_cfg rule f = if Slam_Common.rule_enabled ctxt rule then f () else false
 
     fun clause_subsumed_by active_clause_id =
       (case Slam_Clause_Set.lookup active active_clause_id of
@@ -821,8 +818,7 @@ fun get_backward_subsumed ctxt given_clause active subsumption_index =
           else fail () (fn () => "not subsumed by " ^ JClause.pretty_clause ctxt subsuming_clause);
       subsumed)
 
-    val all_disabled = Config.get ctxt Slam_Common.disable_all
-    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
+    fun if_cfg rule f = if Slam_Common.rule_enabled ctxt rule then f () else false
 
     fun fetch_if_subsumed_by_given_clause active_clause_id =
       (case Slam_Clause_Set.lookup active active_clause_id of
@@ -846,9 +842,7 @@ fun get_backward_subsumed ctxt given_clause active subsumption_index =
 (* FIXME: implement forwards and backwards variants using indexing *)
 fun is_equality_subsumed ctxt active c =
   let
-    val all_disabled = Config.get ctxt Slam_Common.disable_all
-    (* val _ = if all_disabled then writeln "REDUNDANCY CHECKS DISABLED" else () *)
-    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else false
+    fun if_cfg rule f = if Slam_Common.rule_enabled ctxt rule then f () else false
     fun equality_subsumed_by active_clause =
       if_cfg
         Slam_Common.rule_equality_subsumption
@@ -2163,9 +2157,7 @@ fun forward_simplify
       fn cs => Slam_Common.seq_cartesian_product cs (Seq.of_list [JLit.Left, JLit.Right])
 
     (* rule configuration *)
-    val all_disabled = Config.get ctxt Slam_Common.disable_all
-    (* val _ = if all_disabled then writeln "ALL SIMPLIFICATIONS DISABLED!!!" else () *)
-    fun if_cfg rule = if not all_disabled orelse Config.get ctxt rule then I else K Seq.empty
+    fun if_cfg rule = if Slam_Common.rule_enabled ctxt rule then I else K Seq.empty
 
     fun simp_fun_of_seq clause_seq c =
       case Seq.pull (clause_seq c) of
@@ -2274,7 +2266,7 @@ fun forward_simplify
 
     (* FIXME: bool_simp and forward_rewrite should be part of the simplify fixed-point loop *)
     val { clause = given_clause, archive = bool_simp_archive } =
-      if not all_disabled orelse Config.get ctxt Slam_Common.rule_bool_simp
+      if Slam_Common.rule_enabled ctxt Slam_Common.rule_bool_simp
         then bool_simp ctxt given_clause
         else { clause = given_clause, archive = [] }
 
@@ -2468,10 +2460,8 @@ fun infer_clauses ctxt active given_clause green_index =
     val given_clause_potentially_eligible_terms =
       map (pair given_clause) (JClause.potentially_eligible_green_full_poss_of given_clause)
       |> map (fn (c, (fp, eligibility)) => (c, fp, eligibility))
-    val all_disabled = Config.get ctxt Slam_Common.disable_all
-    (* val _ = if all_disabled then writeln "ALL DISABLED!!!!" else () *)
     (* a bit contrived to make it lazy *)
-    fun if_cfg rule f = if not all_disabled orelse Config.get ctxt rule then f () else []
+    fun if_cfg rule f = if Slam_Common.rule_enabled ctxt rule then f () else []
     val rules =
     [ ( Slam_Common.rule_sup
       , Slam_Common.trace_sup
