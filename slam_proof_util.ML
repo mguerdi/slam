@@ -1,7 +1,7 @@
 signature SLAM_PROOF_UTIL =
 sig
   val comp_no_flatten_no_incr: thm * int -> int -> thm -> thm
-  val norm_negative_predicate_literals: Proof.context -> thm -> thm 
+  val norm_negative_predicate_literals: Proof.context -> thm -> thm
   val envir_norm_thm : Proof.context -> Envir.env -> thm -> thm
   val envir_subst_thm : Proof.context -> Type.tyenv * Envir.tenv -> thm -> thm
   val with_fixed_vars : cterm list -> ctyp list -> Proof.context -> tactic -> tactic
@@ -99,7 +99,7 @@ fun envir_norm_thm ctxt env th =
   (* see metis_reconstruct.ML, flexflex_first_order *)
   let
     val tyenv = Envir.type_env env
-    val tenv = Envir.term_env env 
+    val tenv = Envir.term_env env
     (*
     val _ = Slam_Common.trace_msg ctxt (fn () =>
       "envir_norm_thm: \n\t" ^
@@ -127,7 +127,7 @@ fun envir_norm_thm ctxt env th =
 fun with_fixed_vars vars tvars ctxt tac th =
   let
     (* refls: ?A = ?A, ?B = ?B, ... *)
-    val refls_of_old_vars = map Thm.reflexive vars 
+    val refls_of_old_vars = map Thm.reflexive vars
     val refls_of_old_tvars_themselves =
       map (fn tvar => Thm.reflexive \<^instantiate>\<open>'a=tvar in cterm \<open>TYPE('a)\<close>\<close>) tvars
     val refls_old = refls_of_old_vars @ refls_of_old_tvars_themselves
@@ -206,7 +206,7 @@ fun with_fixed_vars vars tvars ctxt tac th =
             (Pattern.first_order_match (Proof_Context.theory_of ctxt))
             (ListPair.zip (apply2 (map Thm.prop_of) (refls_new, refls_old)))
             (Vartab.empty, Vartab.empty)
-        
+
         val proved_th_repaired = envir_subst_thm ctxt new_to_old_matcher proved_th
       in
         proved_th_repaired
@@ -232,11 +232,11 @@ fun thm_to_not_imp_false th =
     val result = th COMP_INCR @{thm cnf.clause2raw_notE}
     (* Extract P from \<not>P \<Longrightarrow> False *)
     val t =
-      result 
+      result
       |> Thm.prems_of
       |> the_single
-      |> HOLogic.dest_Trueprop 
-      |> HOLogic.dest_not 
+      |> HOLogic.dest_Trueprop
+      |> HOLogic.dest_not
     val t' =
       th
       |> Thm.prop_of
@@ -257,7 +257,7 @@ fun refl_modulo_flex_flex ctxt (s, t) =
     val s_eq_t_after = HOLogic.dest_Trueprop (Thm.prop_of th)
     val changed = not (s_eq_t aconv s_eq_t_after)
   in
-    if changed then error ("eq_up_to_flex_flex: s=t changed from\n" 
+    if changed then error ("eq_up_to_flex_flex: s=t changed from\n"
       ^ Slam_Common.pretty_term ctxt s_eq_t ^ "\nto\n" ^ Slam_Common.pretty_term ctxt s_eq_t_after)
     else
       th

@@ -39,7 +39,7 @@ fun map_consume (use: int) (fuel: fuel) (f: 'a -> 'b) (sequence: 'a Seq.seq) : '
 fun fuelled (sequence : 'a Seq.seq (*exception FUEL*)) =
   Seq.make (fn () =>
     case (Seq.pull sequence handle FUEL => NONE) of
-      SOME (head, tail) => 
+      SOME (head, tail) =>
           SOME (head, fuelled tail)
     | NONE => NONE
   )

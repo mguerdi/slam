@@ -55,7 +55,7 @@ fun slam_tac options ctxt goal_term ths i st0 =
     val _ = Slam_Common.trace_msg ctxt (fn () => "Thm.prop_of st0: " ^ @{make_string} (Thm.prop_of st0))
     val _ = Slam_Common.trace_msg ctxt (fn () =>
       "slam called with theorems:\n" ^ cat_lines (map (@{make_string}) ths))
-    fun handle_exception (e, state) = 
+    fun handle_exception (e, state) =
       if exists (curry (op =) "dump") options
         then
           (let val _ = dump := state :: (!dump) in

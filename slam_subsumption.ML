@@ -36,7 +36,7 @@ fun literal_subsumers ctxt maxidx ll' =
 (* FIXME: lazify with make / pull if it isn't yet. *)
 (* FIXME: tail recursive version? *)
 fun subsumed_alternatives ctxt maxidx (l, []) = Seq.empty
-  | subsumed_alternatives ctxt maxidx (l, l' :: d') = 
+  | subsumed_alternatives ctxt maxidx (l, l' :: d') =
       let
         (* recursive call without l', keep l' around for later *)
         fun skip_l' maxidx' =
@@ -74,7 +74,7 @@ and try_alternatives_with_backtracking ctxt alternatives ls =
       let val subsumed =
         let
           (* apply the substitution (only to the subsuming clause) *)
-          (* 
+          (*
           val () = writeln "pulled"
           val () = writeln ("norming " ^ JClause.pretty_clause (Context.the_proof ctxt) (JClause.dummy ls) ^ "with: \n\t"
             ^ Slam_Common.pretty_tyenv (Context.the_proof ctxt) (Envir.type_env env) ^ "\n\t"
@@ -117,7 +117,7 @@ fun subsumption_sort lits =
     val lits_sorted = map (nth lits) idxs_sorted
     (* val () = writeln "done sorting" *)
   in
-    lits_sorted 
+    lits_sorted
   end
 
 (* from Zipperposition SolidSubsumption.ml *)

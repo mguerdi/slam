@@ -14,7 +14,7 @@ sig
   (* Applies simp_funs in order until no more apply or a countdown has been reached.
   returns
      [] -> redundant
-     SOME [c] -> simplified or original clause (if no simplification possible) 
+     SOME [c] -> simplified or original clause (if no simplification possible)
      SOME (c::cs) -> one or more simplified clauses *)
   val simplify : bool -> Proof.context -> simp_fun list -> JClause.T
         -> JClause.T list * JClause.T list
@@ -27,7 +27,7 @@ struct
 
 type simp_fun = JClause.T -> JClause.T list
 
-(* If there is more than one simplification we only keep simplifying the first one. *) 
+(* If there is more than one simplification we only keep simplifying the first one. *)
 
 (* FIXME: First clause turns out to be redundant, need to restart simplification with the second
 one, repeat until one can't be simplified further or all are redundant.
@@ -65,9 +65,9 @@ fun full_simplify_all _ _ 0 (partially_simplified, fully_simplified, archive) =
   | full_simplify_all _ _ _ ([], fully_simplified, archive) =
       (fully_simplified, archive) (* all clauses fully simplified *)
   | full_simplify_all ctxt simp_funs countdown (partially_simplified, fully_simplified, archive) =
-      (* Fresh accumulator for results of one-step simplification of partially_simplified. *) 
+      (* Fresh accumulator for results of one-step simplification of partially_simplified. *)
       ([], fully_simplified, archive)
-      |> fold (once_simplify ctxt simp_funs) partially_simplified 
+      |> fold (once_simplify ctxt simp_funs) partially_simplified
       |> full_simplify_all ctxt simp_funs (countdown - 1)
 
 fun simplify_all ctxt simp_funs countdown clause =
@@ -94,7 +94,7 @@ fun simplify_first _ _ [] _ _ = error "simplify_first: no clause to simplify!"
           in
             (clause::other_simplifications, archive) (* clause can't be simplified further *)
           end
-      | simplifications => 
+      | simplifications =>
           simplify_first
             ctxt
             simp_funs
@@ -148,7 +148,7 @@ fun simplify_once ctxt simp_funs clause =
       let val _ = Slam_Common.trace_msg ctxt (fn () =>
         "done rewriting " ^ JClause.pretty_clause ctxt clause ^ ".")
       in
-        NONE 
+        NONE
       end
   | simplifications =>
       SOME { simplifications = simplifications, archive = [clause] }

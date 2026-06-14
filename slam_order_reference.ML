@@ -77,7 +77,7 @@ fun term_weight _ (Var _) = var_weight
         else case t of
           Abs (_, T, t) => fo_lambda_weight +++ type_weight T +++ term_weight true t
         | (_ $ _) =>
-            let val (f, Ts, us) = JTerm.strip_comb_fun_types_args t in 
+            let val (f, Ts, us) = JTerm.strip_comb_fun_types_args t in
               (* weight of f, FIXME: pass (f, length (?)) to symbol weight function *)
               const_weight
               (* type args of FO fun. symbol *)
@@ -210,7 +210,7 @@ ALL t. vars_below_lambda t = fold_aterm' read_off [] t
 The challenge is adapting this to a a simultaneous traversal of two terms and making sure we don't
 carry too much useless information around in the generic fold, just to be able to write the test.
 Although we could always "compile" that extra information out by hand once we're happy that it
-works. *) 
+works. *)
 
 
 

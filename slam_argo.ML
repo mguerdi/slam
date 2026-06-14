@@ -7,7 +7,7 @@ end
 
 structure Slam_Argo: SLAM_ARGO =
 struct
-  
+
 (* normalizing goals *)
 
 fun instantiate v ct = Thm.instantiate (TVars.empty, Vars.make1 (v, ct))
@@ -71,7 +71,7 @@ fun argo_repair_undeclared_hyps ctxt prems thm =
     val () = tracing ("REPAIR: thm_implied_by_undeclared_hyps = " ^ @{make_string} thm_implied_by_undeclared_hyps)
     (* Hyp  [Hyp] \<mapsto> $(normalize ctxt Hyp)  [Hyp] *)
     (* Hyps is the declared hyp, normalize ... is the undeclared version of that Hyp *)
-    
+
     (* FIXME: normalize isn't all that's  happening. In the example
       lemma and_elim:
         shows "A \<and> B \<Longrightarrow> (A \<Longrightarrow> B \<Longrightarrow> C) \<Longrightarrow> C"

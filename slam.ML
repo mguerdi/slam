@@ -445,7 +445,7 @@ fun impl_simp_rewrite_lits ctxt (unit_clause, lp, JClause.Unknown) (target_claus
   in
     matchers
     |> report_no_matchers
-    |> Seq.take (Slam_Common.get_unifier_cutoff ctxt) 
+    |> Seq.take (Slam_Common.get_unifier_cutoff ctxt)
     |> Seq.map_filter build_conclusion
     |> Seq.pull
     |> Slam_Common.map_some #1
@@ -1257,7 +1257,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
     in
       if not (is_pos andalso is_pos') then fail [] (K "negative literal") else
       if cp' = cp then fail [] (K "equal positions") else
-      map_filter build_conclusion preunifiers 
+      map_filter build_conclusion preunifiers
     end
 
 (* ArgCong inference
@@ -1681,7 +1681,7 @@ fun impl_simp_bool_rw
         val () = tracer (fn () => "build_conclusion")
         val c =
           c
-          |> JClause.norm_beta_eta_qeta_env ctxt matcher 
+          |> JClause.norm_beta_eta_qeta_env ctxt matcher
           |> JClause.recompute_selected ctxt
         val insert_for_u = JTerm.norm_beta_eta_qeta_env matcher rhs
 
@@ -1740,7 +1740,7 @@ fun bool_simp_kind_enabled ctxt kind =
   | BoolSimpQuantifier => Config.get ctxt Slam_Common.bool_simp_quantifiers
   | BoolSimpIfThenElse => Config.get ctxt Slam_Common.bool_simp_if_then_else
 
-fun bool_simp 
+fun bool_simp
   ctxt
   clause
   : { clause : JClause.T, archive : JClause.T list }

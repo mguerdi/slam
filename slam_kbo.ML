@@ -36,11 +36,11 @@ sig
   val weight_of_tfree_or_type_constructor : typ -> weight
   val weight_of_fo_head : fo_head -> weight
   val quantifier_weight : bool -> weight
-  
+
   (* debugging *)
   val prec_key_fun : term -> bool (* below_lam *) -> int
   val prec_key : fo_head -> int
-  
+
   val fo_head_precedence_ord : fo_head ord
 end;
 
@@ -76,7 +76,7 @@ fun prec_key_fun (Bound _) _ = 10
 fun prec_key Lam = 11
   | prec_key (Fun (f, _, below_lam)) = prec_key_fun f below_lam
 
-fun prec_same_class_ord (Fun (Bound i, _, _), Fun (Bound j, _, _)) = int_ord (i, j) 
+fun prec_same_class_ord (Fun (Bound i, _, _), Fun (Bound j, _, _)) = int_ord (i, j)
   | prec_same_class_ord (Fun (Const (s, _), _, _), Fun (Const (t, _), _, _)) = string_ord (s, t)
   | prec_same_class_ord (Fun (Free (s, _), _, _), Fun (Free (t, _), _, _)) = string_ord (s, t)
   | prec_same_class_ord (Lam, Lam) = EQUAL
@@ -84,7 +84,7 @@ fun prec_same_class_ord (Fun (Bound i, _, _), Fun (Bound j, _, _)) = int_ord (i,
       error ("prec_same_class_ord: can't be heads: " ^
         @{make_string} s ^ " and " ^ @{make_string} t)
 
-fun arity_ord (Fun (_, f_ar, _), Fun (_, g_ar, _)) = int_ord (f_ar, g_ar) 
+fun arity_ord (Fun (_, f_ar, _), Fun (_, g_ar, _)) = int_ord (f_ar, g_ar)
   | arity_ord (Lam, Lam) = EQUAL
   | arity_ord _ = error "arity_ord: attempt to compare arity of Fun and Lam"
 
@@ -97,7 +97,7 @@ sig
   type T
   val empty : T
   val weight_of : T -> Slam_Order.weight
-  val add_weight : bool -> Slam_Order.weight -> T -> T 
+  val add_weight : bool -> Slam_Order.weight -> T -> T
   val swap : T -> T
 end;
 
@@ -106,7 +106,7 @@ struct
 
 open Slam_Weight
 
-type T = { weight: weight, swapped: bool } 
+type T = { weight: weight, swapped: bool }
 
 val empty = { weight = Slam_Order.zero_weight, swapped = false }
 
@@ -215,7 +215,7 @@ end;
 structure KBOTermKey : KEY =
 struct
 
-type key = KBO_Term.kbo_term 
+type key = KBO_Term.kbo_term
 
 fun ord
   ( { boundTs = x_boundTs, below_lam = x_below_lam, term = x_term }
@@ -236,7 +236,7 @@ fun ord
               (* FIXME: cache the results of this comparison for each loose bound var *)
               EQUAL =>
                 if i < smallestFree (* bound *)
-                  then EQUAL 
+                  then EQUAL
                   else
                     Term_Ord.typ_ord
                       (nth x_boundTs (i - smallestFree), nth y_boundTs (j - smallestFree))
@@ -260,11 +260,11 @@ signature SLAM_KBO =
 sig
 
   (* terms *)
-  
+
   include KBO_TERM
- 
+
   datatype kbo_view
-    = FluidOrVar of kbo_term 
+    = FluidOrVar of kbo_term
     | App of fo_head * typ list * kbo_term list
 
   val view_of : kbo_term -> kbo_view
@@ -350,7 +350,7 @@ fun arity Lam = error "arity not defined for Lam"
   | arity (Fun (_, ar, _)) = ar
 
 datatype kbo_view
-  = FluidOrVar of kbo_term 
+  = FluidOrVar of kbo_term
   | App of fo_head * typ list * kbo_term list
 
 (* incremental translation to first order term *)
@@ -392,7 +392,7 @@ fun view_of { below_lam = below_lam, term = t as Var _, ... } =
 type kbo_data =
   { var : Term_Balance.T
   , tvar : Typ_Balance.T
-  , weight : Weight_Balance.T 
+  , weight : Weight_Balance.T
   }
 
 val weight = Weight_Balance.weight_of o #weight
@@ -414,7 +414,7 @@ fun map_var f { var = var, tvar = tvar, weight = weight } =
 
 fun map_tvar f { var = var, tvar = tvar, weight = weight } =
   { var = var, tvar = f tvar, weight = weight }
-  
+
 fun map_weight f { var = var, tvar = tvar, weight = weight } =
   { var = var, tvar = tvar, weight = f weight }
 
@@ -525,13 +525,13 @@ fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
             | SOME LESS => LESS_or_NONE
             | NONE => NONE)))
       in
-        (kbo_data, res) 
+        (kbo_data, res)
       end
 
   | T_tckbo kbo_data (TFree (a_name, a_sort)) (Type (f, ts)) =
-      let 
+      let
         val kbo_data =
-          T_mfyVWB_tl kbo_data ts false (* result of tckbo' with f \<noteq> g *) 
+          T_mfyVWB_tl kbo_data ts false (* result of tckbo' with f \<noteq> g *)
           |> add_weight true (KBO_Config.weight_of_tfree a_name)
           |> add_weight false (KBO_Config.weight_of_type_constructor f)
         val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
@@ -541,7 +541,7 @@ fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
-                (* Type > TFree, thus g > f *) 
+                (* Type > TFree, thus g > f *)
                 LESS_or_NONE)
       in
         (kbo_data, res)
@@ -550,7 +550,7 @@ fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
   | T_tckbo kbo_data (s as Type (f, ss)) (t as Type (g, ts)) =
       let
         val (kbo_data, lex) =
-          T_tckbo' kbo_data s t 
+          T_tckbo' kbo_data s t
           |>> add_weight true (KBO_Config.weight_of_type_constructor f)
           |>> add_weight false (KBO_Config.weight_of_type_constructor g)
         val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
@@ -571,10 +571,10 @@ fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
             | SOME LESS => LESS_or_NONE
             | NONE => NONE)))
       in
-        (kbo_data, res) 
+        (kbo_data, res)
       end
 
-  (* TFree - TVar, Type - TVar, Type - TFree *) 
+  (* TFree - TVar, Type - TVar, Type - TFree *)
   | T_tckbo kbo_data s t =
       let
         val (kbo_data, res) = T_tckbo (swap kbo_data) t s
@@ -595,7 +595,7 @@ and T_tckbo' kbo_data (Type (f, ss)) (Type (g, ts)) =
 and T_tckbolex kbo_data [] [] = (kbo_data, SOME EQUAL)
   | T_tckbolex kbo_data (s :: ss) (t :: ts) =
       let
-        val (kbo_data, res) = T_tckbo kbo_data s t 
+        val (kbo_data, res) = T_tckbo kbo_data s t
       in
         if res = SOME EQUAL
           then T_tckbolex kbo_data ss ts
@@ -611,7 +611,7 @@ fun tckbo kbo_data (x as FluidOrVar x_data) (y as FluidOrVar y_data) =
   ( kbo_data
     |> map_var (Term_Balance.add_var true x_data)
     |> map_var (Term_Balance.add_var false y_data)
-  , if eq_fluid_or_var x_data y_data then SOME EQUAL else NONE 
+  , if eq_fluid_or_var x_data y_data then SOME EQUAL else NONE
   )
 
   | tckbo kbo_data (FluidOrVar x) (t as App (f, _, _)) =
@@ -645,9 +645,9 @@ fun tckbo kbo_data (x as FluidOrVar x_data) (y as FluidOrVar y_data) =
             | SOME LESS => LESS_or_NONE
             | NONE => NONE)))
       in
-        (kbo_data, res) 
+        (kbo_data, res)
       end
-  
+
   (* App - FluidOrVar *)
   | tckbo kbo_data s t =
       let
@@ -689,7 +689,7 @@ and tckbolex kbo_data [] [] = (kbo_data, SOME EQUAL)
             ( kbo_data
               |> (fn d => mfyVWB_tl d ss true)
               |> (fn d => mfyVWB_tl d ts false)
-            , res 
+            , res
             )
       end
 
