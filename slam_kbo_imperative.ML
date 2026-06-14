@@ -101,7 +101,7 @@ sig
   val swap : T -> T
 end;
 
-structure Weight_Balance : WEIGHT_BALANCE =
+structure Weight_Balance_Pure : WEIGHT_BALANCE =
 struct
 
 open Slam_Weight
@@ -124,6 +124,26 @@ fun add_weight increment added_weight { weight = weight, swapped = swapped } =
 fun swap { weight = weight, swapped = swapped } = { weight = weight, swapped = not swapped }
 
 end;
+
+(* FIXME: BROKEN *)
+structure Weight_Balance_Ref : WEIGHT_BALANCE =
+struct
+
+open Slam_Weight
+
+type T = Weight_Balance_Pure.T Unsynchronized.ref
+
+val empty = Unsynchronized.ref Weight_Balance_Pure.empty
+
+fun weight_of r = Weight_Balance_Pure.weight_of (!r)
+
+fun add_weight x y r = let val () = Unsynchronized.change r (Weight_Balance_Pure.add_weight x y) in r end
+
+fun swap r = let val () = Unsynchronized.change r Weight_Balance_Pure.swap in r end
+
+end
+
+structure Weight_Balance: WEIGHT_BALANCE = Weight_Balance_Pure
 
 signature VAR_BALANCE =
 sig
@@ -271,51 +291,47 @@ sig
 
   (* Löchner - 2007 - Things to Know when Implementing KBO *)
 
-  type kbo_data =
-    { var : Term_Balance.T
-    , tvar : Typ_Balance.T
-    , weight : Weight_Balance.T
-    }
+  type kbo_data_ref = kbo_data Unsynchronized.ref
 
   val weight : kbo_data -> Slam_Weight.weight
 
   val empty : kbo_data
 
-  val swap : kbo_data -> kbo_data
+  val swap_ref : kbo_data_ref -> unit
+  
+  val map_var_ref : kbo_data_ref -> (Term_Balance.T -> Term_Balance.T) -> unit
+  val map_tvar_ref : kbo_data_ref -> (Typ_Balance.T -> Typ_Balance.T) -> unit
+  val map_weight_ref : kbo_data_ref -> (Weight_Balance.T -> Weight_Balance.T) -> unit
 
-  val map_var : (Term_Balance.T -> Term_Balance.T) -> kbo_data -> kbo_data
-  val map_tvar : (Typ_Balance.T -> Typ_Balance.T) -> kbo_data -> kbo_data
-  val map_weight : (Weight_Balance.T -> Weight_Balance.T) -> kbo_data -> kbo_data
+  val add_var_ref : kbo_data_ref -> bool -> KBOTermTab.key -> unit
 
-  val add_var : bool -> KBOTermTab.key -> kbo_data -> kbo_data
+  val add_weight_ref : kbo_data_ref -> bool -> Slam_Order.weight -> unit
 
-  val add_weight : bool -> Slam_Order.weight -> kbo_data -> kbo_data
+  val T_mfyVWBc_ref :
+    kbo_data_ref -> typ -> (* TVar *) (indexname * sort) option -> bool -> bool option
+  val T_mfyVWBc_tl_ref :
+    kbo_data_ref -> typ list -> (* TVar *) (indexname * sort) option -> bool -> bool option
 
-  val T_mfyVWBc :
-    kbo_data -> typ -> (* TVar *) (indexname * sort) option -> bool -> kbo_data * bool option
-  val T_mfyVWBc_tl :
-    kbo_data -> typ list -> (* TVar *) (indexname * sort) option -> bool -> kbo_data * bool option
+  val mfyVWBc_ref :
+    kbo_data_ref -> kbo_view -> (* variable *) kbo_term option -> bool -> bool option
+  val mfyVWBc_tl_ref :
+    kbo_data_ref -> kbo_view list -> (* variable *) kbo_term option -> bool -> bool option
 
-  val mfyVWBc :
-    kbo_data -> kbo_view -> (* variable *) kbo_term option -> bool -> kbo_data * bool option
-  val mfyVWBc_tl :
-    kbo_data -> kbo_view list -> (* variable *) kbo_term option -> bool -> kbo_data * bool option
-
-  val T_tckbo : kbo_data -> typ -> typ -> kbo_data * Slam_Order.partial_order
-  val T_tckbo' :
-    kbo_data
+  val T_tckbo_ref : kbo_data_ref -> typ -> typ -> Slam_Order.partial_order
+  val T_tckbo'_ref :
+    kbo_data_ref
     -> typ (* Type *)
     -> typ (* Type *)
-    -> kbo_data * Slam_Order.partial_order
-  val T_tckbolex : kbo_data -> typ list -> typ list -> kbo_data * Slam_Order.partial_order
+    -> Slam_Order.partial_order
+  val T_tckbolex_ref : kbo_data_ref -> typ list -> typ list -> Slam_Order.partial_order
 
-  val tckbo : kbo_data -> kbo_view -> kbo_view -> kbo_data * Slam_Order.partial_order
-  val tckbo' :
-    kbo_data
+  val tckbo_ref : kbo_data_ref -> kbo_view -> kbo_view -> Slam_Order.partial_order
+  val tckbo'_ref :
+    kbo_data_ref
     -> kbo_view (* App *)
     -> kbo_view (* App *)
-    -> kbo_data * Slam_Order.partial_order
-  val tckbolex : kbo_data -> kbo_view list -> kbo_view list -> kbo_data * Slam_Order.partial_order
+    -> Slam_Order.partial_order
+  val tckbolex_ref : kbo_data_ref -> kbo_view list -> kbo_view list -> Slam_Order.partial_order
 
   (* ''a is either indexname or string *)
   val eq_tvar_tfree : (''a * sort) -> (''a * sort) -> bool
@@ -395,6 +411,8 @@ type kbo_data =
   , weight : Weight_Balance.T 
   }
 
+type kbo_data_ref = kbo_data Unsynchronized.ref
+
 val weight = Weight_Balance.weight_of o #weight
 
 val empty =
@@ -409,93 +427,116 @@ fun swap { var = var, tvar = tvar, weight = weight } =
   , weight = Weight_Balance.swap weight
   }
 
+fun swap_ref r = Unsynchronized.change r swap
+
 fun map_var f { var = var, tvar = tvar, weight = weight } =
   { var = f var, tvar = tvar, weight = weight }
 
+fun map_var_ref r = Unsynchronized.change r o map_var
+
 fun map_tvar f { var = var, tvar = tvar, weight = weight } =
   { var = var, tvar = f tvar, weight = weight }
+
+fun map_tvar_ref r = Unsynchronized.change r o map_tvar
   
 fun map_weight f { var = var, tvar = tvar, weight = weight } =
   { var = var, tvar = tvar, weight = f weight }
 
+fun map_weight_ref r = Unsynchronized.change r o map_weight
+
 fun add_var increment x = map_var (Term_Balance.add_var increment x)
+
+fun add_var_ref r = Unsynchronized.change r oo add_var
 
 fun add_weight increment weight =
   map_weight (Weight_Balance.add_weight increment weight)
 
-fun T_mfyVWBc kbo_data (x as TVar (x_name, x_sort)) y increment =
-      ( kbo_data
-        |> map_tvar (Typ_Balance.add_var increment x)
-        |> add_weight increment KBO_Config.var_weight
-      , Option.map (eq_tvar_tfree (x_name, x_sort)) y
-      )
-  | T_mfyVWBc kbo_data (TFree (name, sort)) y increment =
-      ( kbo_data
-        |> add_weight increment (KBO_Config.weight_of_type_constructor name)
-      , Option.map (K false) y
-      )
-  | T_mfyVWBc kbo_data (Type (name, args)) y increment =
-      kbo_data
-      |> (fn d => T_mfyVWBc_tl d args y increment)
-      |>> add_weight increment (KBO_Config.weight_of_type_constructor name)
+fun add_weight_ref r = Unsynchronized.change r oo add_weight
 
-and T_mfyVWBc_tl kbo_data [] y _ = (kbo_data, Option.map (K false) y)
-  | T_mfyVWBc_tl kbo_data (s :: ss) y increment =
+fun T_mfyVWBc_ref kbo_data (x as TVar (x_name, x_sort)) y increment =
       let
-        val (kbo_data, y_in_s) = T_mfyVWBc kbo_data s y increment
+        val () = map_tvar_ref kbo_data (Typ_Balance.add_var increment x)
+        val () = add_weight_ref kbo_data increment KBO_Config.var_weight
+      in
+        Option.map (eq_tvar_tfree (x_name, x_sort)) y
+      end
+  | T_mfyVWBc_ref kbo_data (TFree (name, sort)) y increment =
+      let
+        val () = add_weight_ref kbo_data increment (KBO_Config.weight_of_type_constructor name)
+      in
+        Option.map (K false) y
+      end
+  | T_mfyVWBc_ref kbo_data (Type (name, args)) y increment =
+      let
+        val res = T_mfyVWBc_tl_ref kbo_data args y increment
+        val () = add_weight_ref kbo_data increment (KBO_Config.weight_of_type_constructor name)
+      in res end
+
+and T_mfyVWBc_tl_ref kbo_data [] y _ = Option.map (K false) y
+  | T_mfyVWBc_tl_ref kbo_data (s :: ss) y increment =
+      let
+        val y_in_s = T_mfyVWBc_ref kbo_data s y increment
         val () = \<^assert> (is_some y_in_s = is_some y)
       in
         case y_in_s of
-          NONE => (T_mfyVWB_tl kbo_data ss increment, NONE) (* shortcut, don't care *)
-        | SOME true => (T_mfyVWB_tl kbo_data ss increment, y_in_s) (* shortcut, already know *)
-        | SOME false => T_mfyVWBc_tl kbo_data ss y increment (* keep checking *)
+          NONE => let val () = T_mfyVWB_tl_ref kbo_data ss increment in NONE end (* shortcut, don't care *)
+        | SOME true => let val () = T_mfyVWB_tl_ref kbo_data ss increment in y_in_s end (* shortcut, already know *)
+        | SOME false => T_mfyVWBc_tl_ref kbo_data ss y increment (* keep checking *)
       end
 
-and T_mfyVWB_tl kbo_data ss increment = T_mfyVWBc_tl kbo_data ss NONE increment |> drop_snd_none
+and T_mfyVWB_tl_ref kbo_data ss increment =
+  case T_mfyVWBc_tl_ref kbo_data ss NONE increment of NONE => () | SOME _ => error "got SOME"
+  
 
 (* val mfyVWBc : kbo_data -> kbo_term -> kbo_term (* variable *) -> bool -> kbo_data * bool *)
-fun mfyVWBc kbo_data (FluidOrVar x) y increment =
-      ( kbo_data
-        |> add_var increment x
-        |> add_weight increment KBO_Config.var_weight
-      , Option.map (eq_fluid_or_var x) y
-      )
-  | mfyVWBc kbo_data (App (f, ssT, ss)) y increment =
-      kbo_data
-      |> (fn d => T_mfyVWB_tl d ssT increment)
-      |> (fn d => mfyVWBc_tl d (map view_of ss) y increment)
-      |>> add_weight increment (KBO_Config.weight_of_fo_head f)
-
-and mfyVWBc_tl kbo_data [] y _ = (kbo_data, Option.map (K false) y)
-  | mfyVWBc_tl kbo_data (s :: ss) y increment =
+fun mfyVWBc_ref kbo_data (FluidOrVar x) y increment =
       let
-        val (kbo_data, y_in_s) = mfyVWBc kbo_data s y increment
+        val () = add_var_ref kbo_data increment x
+        val () = add_weight_ref kbo_data increment KBO_Config.var_weight
+      in
+        Option.map (eq_fluid_or_var x) y
+      end
+  | mfyVWBc_ref kbo_data (App (f, ssT, ss)) y increment =
+      let
+        val () = T_mfyVWB_tl_ref kbo_data ssT increment
+        val res = mfyVWBc_tl_ref kbo_data (map view_of ss) y increment
+        val () = add_weight_ref kbo_data increment (KBO_Config.weight_of_fo_head f)
+      in res end
+
+and mfyVWBc_tl_ref kbo_data [] y _ = Option.map (K false) y
+  | mfyVWBc_tl_ref kbo_data (s :: ss) y increment =
+      let
+        val y_in_s = mfyVWBc_ref kbo_data s y increment
         val () = \<^assert> (is_some y_in_s = is_some y)
       in
         case y_in_s of
-          NONE => (mfyVWB_tl kbo_data ss increment, NONE) (* shortcut, don't care *)
-        | SOME true => (mfyVWB_tl kbo_data ss increment, y_in_s) (* shortcut, already know *)
-        | SOME false => mfyVWBc_tl kbo_data ss y increment (* keep checking *)
+          NONE => let val () = mfyVWB_tl_ref kbo_data ss increment in NONE end (* shortcut, don't care *)
+        | SOME true => let val () = mfyVWB_tl_ref kbo_data ss increment in y_in_s end (* shortcut, already know *)
+        | SOME false => mfyVWBc_tl_ref kbo_data ss y increment (* keep checking *)
       end
 
-and mfyVWB_tl kbo_data ss increment = mfyVWBc_tl kbo_data ss NONE increment |> drop_snd_none
+and mfyVWB_tl_ref kbo_data ss increment =
+  case mfyVWBc_tl_ref kbo_data ss NONE increment of NONE => () | SOME _ => error "got SOME"
 
-fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
-      ( kbo_data
-        |> map_tvar (Typ_Balance.add_var true x)
-        |> map_tvar (Typ_Balance.add_var false y)
-      , if eq_tvar_tfree x_data y_data then SOME EQUAL else NONE
-      )
+fun T_tckbo_ref kbo_data (x as TVar x_data) (y as TVar y_data) =
+      let
+        val () = map_tvar_ref kbo_data (Typ_Balance.add_var true x)
+        val () = map_tvar_ref kbo_data (Typ_Balance.add_var false y)
+      in
+        if eq_tvar_tfree x_data y_data then SOME EQUAL else NONE
+      end
 
   (* TFree, Type (the difference matters only to T_mfyVWBc) *)
-  | T_tckbo kbo_data (TVar x) t =
-      kbo_data
-      |> (fn d => T_mfyVWBc d t (SOME x) false)
-      |>> map_tvar (Typ_Balance.add_var true (TVar x))
-      |>> add_weight true (KBO_Config.weight_of_tfree_or_type_constructor t)
-      ||> (fn SOME x_in_t => if x_in_t then SOME LESS else NONE)
+  | T_tckbo_ref kbo_data (TVar x) t =
+      let
+        val SOME x_in_t = T_mfyVWBc_ref kbo_data t (SOME x) false
+        val () = map_tvar_ref kbo_data (Typ_Balance.add_var true (TVar x))
+        val () = add_weight_ref kbo_data true (KBO_Config.weight_of_tfree_or_type_constructor t)
+      in
+        if x_in_t then SOME LESS else NONE
+      end
 
-  | T_tckbo kbo_data (TFree (a_name, a_sort)) (TFree (b_name, b_sort)) =
+  | T_tckbo_ref kbo_data (TFree (a_name, a_sort)) (TFree (b_name, b_sort)) =
       (* T_tckbo kbo_data (Type (a_name, [])) (Type (b_name, [])) *)
       let
         val lex =
@@ -503,14 +544,12 @@ fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
           if eq_tvar_tfree (a_name, a_sort) (b_name, b_sort)
             then SOME EQUAL
             else NONE
-        val kbo_data =
-          kbo_data
-          |> add_weight true (KBO_Config.weight_of_tfree a_name)
-          |> add_weight false (KBO_Config.weight_of_tfree b_name)
-        val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
-        val LESS_or_NONE = if Typ_Balance.no_pos (#tvar kbo_data) then SOME LESS else NONE
+        val () = add_weight_ref kbo_data true (KBO_Config.weight_of_tfree a_name)
+        val () = add_weight_ref kbo_data false (KBO_Config.weight_of_tfree b_name)
+        val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar (!kbo_data)) then SOME GREATER else NONE
+        val LESS_or_NONE = if Typ_Balance.no_pos (#tvar (!kbo_data)) then SOME LESS else NONE
         val res =
-          (case Slam_Order.weight_ord (weight kbo_data, Slam_Order.zero_weight) of
+          (case Slam_Order.weight_ord (weight (!kbo_data), Slam_Order.zero_weight) of
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
@@ -525,38 +564,36 @@ fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
             | SOME LESS => LESS_or_NONE
             | NONE => NONE)))
       in
-        (kbo_data, res) 
+        res
       end
 
-  | T_tckbo kbo_data (TFree (a_name, a_sort)) (Type (f, ts)) =
+  | T_tckbo_ref kbo_data (TFree (a_name, a_sort)) (Type (f, ts)) =
       let 
-        val kbo_data =
-          T_mfyVWB_tl kbo_data ts false (* result of tckbo' with f \<noteq> g *) 
-          |> add_weight true (KBO_Config.weight_of_tfree a_name)
-          |> add_weight false (KBO_Config.weight_of_type_constructor f)
-        val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
-        val LESS_or_NONE = if Typ_Balance.no_pos (#tvar kbo_data) then SOME LESS else NONE
+        val () = T_mfyVWB_tl_ref kbo_data ts false (* result of tckbo' with f \<noteq> g *) 
+        val () = add_weight_ref kbo_data true (KBO_Config.weight_of_tfree a_name)
+        val () = add_weight_ref kbo_data false (KBO_Config.weight_of_type_constructor f)
+        val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar (!kbo_data)) then SOME GREATER else NONE
+        val LESS_or_NONE = if Typ_Balance.no_pos (#tvar (!kbo_data)) then SOME LESS else NONE
         val res =
-          (case Slam_Order.weight_ord (weight kbo_data, Slam_Order.zero_weight) of
+          (case Slam_Order.weight_ord (weight (!kbo_data), Slam_Order.zero_weight) of
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
                 (* Type > TFree, thus g > f *) 
                 LESS_or_NONE)
       in
-        (kbo_data, res)
+        res
       end
 
-  | T_tckbo kbo_data (s as Type (f, ss)) (t as Type (g, ts)) =
+  | T_tckbo_ref kbo_data (s as Type (f, ss)) (t as Type (g, ts)) =
       let
-        val (kbo_data, lex) =
-          T_tckbo' kbo_data s t 
-          |>> add_weight true (KBO_Config.weight_of_type_constructor f)
-          |>> add_weight false (KBO_Config.weight_of_type_constructor g)
-        val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar kbo_data) then SOME GREATER else NONE
-        val LESS_or_NONE = if Typ_Balance.no_pos (#tvar kbo_data) then SOME LESS else NONE
+        val lex = T_tckbo'_ref kbo_data s t 
+        val () = add_weight_ref kbo_data true (KBO_Config.weight_of_type_constructor f)
+        val () = add_weight_ref kbo_data false (KBO_Config.weight_of_type_constructor g)
+        val GREATER_or_NONE = if Typ_Balance.no_neg (#tvar (!kbo_data)) then SOME GREATER else NONE
+        val LESS_or_NONE = if Typ_Balance.no_pos (#tvar (!kbo_data)) then SOME LESS else NONE
         val res =
-          (case Slam_Order.weight_ord (weight kbo_data, Slam_Order.zero_weight) of
+          (case Slam_Order.weight_ord (weight (!kbo_data), Slam_Order.zero_weight) of
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
@@ -571,66 +608,72 @@ fun T_tckbo kbo_data (x as TVar x_data) (y as TVar y_data) =
             | SOME LESS => LESS_or_NONE
             | NONE => NONE)))
       in
-        (kbo_data, res) 
+        res
       end
 
   (* TFree - TVar, Type - TVar, Type - TFree *) 
-  | T_tckbo kbo_data s t =
+  | T_tckbo_ref kbo_data s t =
       let
-        val (kbo_data, res) = T_tckbo (swap kbo_data) t s
+        val () = swap_ref kbo_data
+        val res = T_tckbo_ref kbo_data t s
+        val () = swap_ref kbo_data
       in
-        (swap kbo_data, Slam_Common.map_some rev_order res)
+        Slam_Common.map_some rev_order res
       end
 
-and T_tckbo' kbo_data (Type (f, ss)) (Type (g, ts)) =
+and T_tckbo'_ref kbo_data (Type (f, ss)) (Type (g, ts)) =
   if f = g
-    then T_tckbolex kbo_data ss ts
+    then T_tckbolex_ref kbo_data ss ts
     else
-      ( kbo_data
-        |> (fn d => T_mfyVWB_tl d ss true)
-        |> (fn d => T_mfyVWB_tl d ts false)
-      , NONE
-      )
-
-and T_tckbolex kbo_data [] [] = (kbo_data, SOME EQUAL)
-  | T_tckbolex kbo_data (s :: ss) (t :: ts) =
       let
-        val (kbo_data, res) = T_tckbo kbo_data s t 
+        val () = T_mfyVWB_tl_ref kbo_data ss true
+        val () = T_mfyVWB_tl_ref kbo_data ts false
+      in
+        NONE
+      end
+
+and T_tckbolex_ref kbo_data [] [] = SOME EQUAL
+  | T_tckbolex_ref kbo_data (s :: ss) (t :: ts) =
+      let
+        val res = T_tckbo_ref kbo_data s t 
       in
         if res = SOME EQUAL
-          then T_tckbolex kbo_data ss ts
+          then T_tckbolex_ref kbo_data ss ts
           else
-            ( kbo_data
-              |> (fn d => T_mfyVWB_tl d ss true)
-              |> (fn d => T_mfyVWB_tl d ts false)
-            , res
-            )
+            let
+              val () = T_mfyVWB_tl_ref kbo_data ss true
+              val () = T_mfyVWB_tl_ref kbo_data ts false
+            in
+              res
+            end
       end
 
-fun tckbo kbo_data (x as FluidOrVar x_data) (y as FluidOrVar y_data) =
-  ( kbo_data
-    |> map_var (Term_Balance.add_var true x_data)
-    |> map_var (Term_Balance.add_var false y_data)
-  , if eq_fluid_or_var x_data y_data then SOME EQUAL else NONE 
-  )
+fun tckbo_ref kbo_data (x as FluidOrVar x_data) (y as FluidOrVar y_data) =
+  let
+    val () = map_var_ref kbo_data (Term_Balance.add_var true x_data)
+    val () = map_var_ref kbo_data (Term_Balance.add_var false y_data)
+  in
+    if eq_fluid_or_var x_data y_data then SOME EQUAL else NONE 
+  end
 
-  | tckbo kbo_data (FluidOrVar x) (t as App (f, _, _)) =
-      kbo_data
-      |> (fn d => mfyVWBc d t (SOME x) false)
-      |>> map_var (Term_Balance.add_var true x)
-      |>> add_weight true (KBO_Config.weight_of_fo_head f)
-      ||> (fn SOME x_in_t => if x_in_t then SOME LESS else NONE)
-
-  | tckbo kbo_data (s as App (f, _, _)) (t as App (g, _, _)) =
+  | tckbo_ref kbo_data (FluidOrVar x) (t as App (f, _, _)) =
       let
-        val (kbo_data, lex) =
-          tckbo' kbo_data s t
-          |>> add_weight true (KBO_Config.weight_of_fo_head f) (* + \<phi>(f) *)
-          |>> add_weight false (KBO_Config.weight_of_fo_head g) (* - \<phi>(g) *)
-        val GREATER_or_NONE = if Term_Balance.no_neg (#var kbo_data) then SOME GREATER else NONE
-        val LESS_or_NONE = if Term_Balance.no_pos (#var kbo_data) then SOME LESS else NONE
+        val SOME x_in_t = mfyVWBc_ref kbo_data t (SOME x) false
+        val () = map_var_ref kbo_data (Term_Balance.add_var true x)
+        val () = add_weight_ref kbo_data true (KBO_Config.weight_of_fo_head f)
+      in
+        if x_in_t then SOME LESS else NONE
+      end
+
+  | tckbo_ref kbo_data (s as App (f, _, _)) (t as App (g, _, _)) =
+      let
+        val lex = tckbo'_ref kbo_data s t
+        val () = add_weight_ref kbo_data true (KBO_Config.weight_of_fo_head f) (* + \<phi>(f) *)
+        val () = add_weight_ref kbo_data false (KBO_Config.weight_of_fo_head g) (* - \<phi>(g) *)
+        val GREATER_or_NONE = if Term_Balance.no_neg (#var (!kbo_data)) then SOME GREATER else NONE
+        val LESS_or_NONE = if Term_Balance.no_pos (#var (!kbo_data)) then SOME LESS else NONE
         val res =
-          (case Slam_Order.weight_ord (weight kbo_data, Slam_Order.zero_weight) of
+          (case Slam_Order.weight_ord (weight (!kbo_data), Slam_Order.zero_weight) of
               GREATER => GREATER_or_NONE
             | LESS => LESS_or_NONE
             | EQUAL =>
@@ -645,54 +688,66 @@ fun tckbo kbo_data (x as FluidOrVar x_data) (y as FluidOrVar y_data) =
             | SOME LESS => LESS_or_NONE
             | NONE => NONE)))
       in
-        (kbo_data, res) 
+        res
       end
   
   (* App - FluidOrVar *)
-  | tckbo kbo_data s t =
+  | tckbo_ref kbo_data s t =
       let
-        val (kbo_data, res) = tckbo (swap kbo_data) t s
+        val () = swap_ref kbo_data
+        val res = tckbo_ref kbo_data t s
+        val () = swap_ref kbo_data
       in
-        (swap kbo_data, Slam_Common.map_some rev_order res)
+        Slam_Common.map_some rev_order res
       end
 
-and tckbo' kbo_data (App (f, ssT, ss)) (App (g, tsT, ts)) =
+and tckbo'_ref kbo_data (App (f, ssT, ss)) (App (g, tsT, ts)) =
   if f = g (* FIXME: is this logically equivalent to equality under the precendence order? *)
     then
-      (case T_tckbolex kbo_data ssT tsT of
+      (case T_tckbolex_ref kbo_data ssT tsT of
         (* FIXME: check all other places where we call T_... variants and make sure that we sequence
         the type and term kbo correctly. Or factor out a mixed tckbolex which takes all four lists. *)
-        (kbo_data, SOME EQUAL) => tckbolex kbo_data (map view_of ss) (map view_of ts)
-      | (kbo_data, res) =>
-          ( kbo_data
-            |> (fn d => mfyVWB_tl d (map view_of ss) true)
-            |> (fn d => mfyVWB_tl d (map view_of ts) false)
-          , res
-          ))
+        SOME EQUAL => tckbolex_ref kbo_data (map view_of ss) (map view_of ts)
+      | res =>
+          let
+            val () = mfyVWB_tl_ref kbo_data (map view_of ss) true
+            val () = mfyVWB_tl_ref kbo_data (map view_of ts) false
+          in
+            res
+          end)
     else
-      ( kbo_data
-        |> (fn d => T_mfyVWB_tl d ssT true)
-        |> (fn d => T_mfyVWB_tl d tsT false)
-        |> (fn d => mfyVWB_tl d (map view_of ss) true)
-        |> (fn d => mfyVWB_tl d (map view_of ts) false)
-      , NONE
-      )
-
-and tckbolex kbo_data [] [] = (kbo_data, SOME EQUAL)
-  | tckbolex kbo_data (s :: ss) (t :: ts) =
       let
-        val (kbo_data, res) = tckbo kbo_data s t (* FIXME: move the view_of calls here *)
+        val () = T_mfyVWB_tl_ref kbo_data ssT true
+        val () = T_mfyVWB_tl_ref kbo_data tsT false
+        val () =   mfyVWB_tl_ref kbo_data (map view_of ss) true
+        val () =   mfyVWB_tl_ref kbo_data (map view_of ts) false
       in
-        if res = SOME EQUAL
-          then tckbolex kbo_data ss ts
-          else
-            ( kbo_data
-              |> (fn d => mfyVWB_tl d ss true)
-              |> (fn d => mfyVWB_tl d ts false)
-            , res 
-            )
+        NONE
       end
 
-fun ord (s, t) = #2 (tckbo empty (view_of (to_kbo_term s)) (view_of (to_kbo_term t)))
+and tckbolex_ref kbo_data [] [] = SOME EQUAL
+  | tckbolex_ref kbo_data (s :: ss) (t :: ts) =
+      let
+        val res = tckbo_ref kbo_data s t (* FIXME: move the view_of calls here *)
+      in
+        if res = SOME EQUAL
+          then tckbolex_ref kbo_data ss ts
+          else
+            let
+              val () = mfyVWB_tl_ref kbo_data ss true
+              val () =  mfyVWB_tl_ref kbo_data ts false
+            in
+              res 
+            end
+      end
+
+fun ord_ref (s, t) =
+  let
+    val kbo_data = Unsynchronized.ref empty
+  in
+    tckbo_ref kbo_data (view_of (to_kbo_term s)) (view_of (to_kbo_term t))
+  end
+
+val ord = ord_ref 
 
 end;
