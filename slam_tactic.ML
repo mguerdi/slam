@@ -48,6 +48,7 @@ fun slam_tac options ctxt goal_term ths i st0 =
     val () = JClause_Id.init ctxt
     val () = JSkolem_Id.init ctxt
     val _ = Slam_Common.validate_config ctxt
+    val ctxt = Slam_Common.init_config ctxt
     val ctxt = Config.put Unify.search_bound (Config.get ctxt Slam_Common.unify_search_bound) ctxt
     val ctxt = Config.put eta_contract false ctxt
     (* tracing *)

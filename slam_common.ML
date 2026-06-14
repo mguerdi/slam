@@ -101,6 +101,8 @@ sig
   val trace_msg_clause_subsumption : Proof.context -> (unit -> string) -> unit
   val trace_msg_equality_subsumption : Proof.context -> (unit -> string) -> unit
 
+  val init_config : Proof.context -> Proof.context
+  
   val validate_config : Proof.context -> unit
 
   val proof_reconstruction : string Config.T
@@ -133,46 +135,58 @@ sig
   val seq_cartesian_product : 'a Seq.seq -> 'b Seq.seq -> ('a * 'b) Seq.seq
   val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
   val max_number_of_steps : int Config.T
-  (* Config options to turn rules on and off. *)
+
+  (* Some configuration options, such as disable_all are handled by init_config and cause "smart"
+  options to be overwritten, unless they have been explicitly set to a value different from "smart",
+  in which case they are left alone and a warning is reported. *)
+
   val disable_all : bool Config.T
-  val rule_enabled : Proof.context -> bool Config.T -> bool
+
+  type ho_unification_strategy
+  val ho_unification_strategy : string Config.T
+  val get_ho_unification_strategy : Proof.context -> ho_unification_strategy
+
+  (* enable/disable individual rules *)
+  val rule_enabled : Proof.context -> string Config.T -> bool
+  val put_rule_if_smart : string Config.T -> bool -> Proof.context -> Proof.context
+
   (* inferences *)
-  val rule_sup : bool Config.T
-  val rule_fluid_sup : bool Config.T
-  val rule_e_res : bool Config.T
-  val rule_imitate_project : bool Config.T
-  val rule_e_fact : bool Config.T
-  val rule_arg_cong : bool Config.T
-  val rule_bool_hoist : bool Config.T
-  val rule_false_elim : bool Config.T
-  val rule_eq_hoist : bool Config.T
-  val rule_neq_hoist : bool Config.T
-  val rule_forall_hoist : bool Config.T
-  val rule_exists_hoist : bool Config.T
-  val rule_bool_rw : bool Config.T
-  val rule_forall_rw : bool Config.T
-  val rule_exists_rw : bool Config.T
-  val rule_fluid_bool_hoist : bool Config.T
-  val rule_fluid_loob_hoist : bool Config.T
-  val rule_ext : bool Config.T
-  val rule_neg_ext : bool Config.T
-  val rule_neg_cong_fun : bool Config.T
-  val rule_choice : bool Config.T
+  val rule_sup : string Config.T
+  val rule_fluid_sup : string Config.T
+  val rule_e_res : string Config.T
+  val rule_imitate_project : string Config.T
+  val rule_e_fact : string Config.T
+  val rule_arg_cong : string Config.T
+  val rule_bool_hoist : string Config.T
+  val rule_false_elim : string Config.T
+  val rule_eq_hoist : string Config.T
+  val rule_neq_hoist : string Config.T
+  val rule_forall_hoist : string Config.T
+  val rule_exists_hoist : string Config.T
+  val rule_bool_rw : string Config.T
+  val rule_forall_rw : string Config.T
+  val rule_exists_rw : string Config.T
+  val rule_fluid_bool_hoist : string Config.T
+  val rule_fluid_loob_hoist : string Config.T
+  val rule_ext : string Config.T
+  val rule_neg_ext : string Config.T
+  val rule_neg_cong_fun : string Config.T
+  val rule_choice : string Config.T
   (* simplifications *)
-  val rule_delete_duplicated_lits : bool Config.T
-  val rule_delete_resolved_lits : bool Config.T
-  val rule_destructive_e_res : bool Config.T
-  val rule_flex_flex_simp : bool Config.T
-  val rule_rewrite_lits : bool Config.T
-  val rule_positive_simplify_reflect : bool Config.T
-  val rule_negative_simplify_reflect : bool Config.T
-  val rule_simp_outer_claus : bool Config.T
-  val rule_bool_simp : bool Config.T
-  val rule_simp_false_elim : bool Config.T
-  val rule_syntactic_tautology_deletion1 : bool Config.T
-  val rule_syntactic_tautology_deletion2 : bool Config.T
-  val rule_clause_subsumption : bool Config.T
-  val rule_equality_subsumption : bool Config.T
+  val rule_delete_duplicated_lits : string Config.T
+  val rule_delete_resolved_lits : string Config.T
+  val rule_destructive_e_res : string Config.T
+  val rule_flex_flex_simp : string Config.T
+  val rule_rewrite_lits : string Config.T
+  val rule_positive_simplify_reflect : string Config.T
+  val rule_negative_simplify_reflect : string Config.T
+  val rule_simp_outer_claus : string Config.T
+  val rule_bool_simp : string Config.T
+  val rule_simp_false_elim : string Config.T
+  val rule_syntactic_tautology_deletion1 : string Config.T
+  val rule_syntactic_tautology_deletion2 : string Config.T
+  val rule_clause_subsumption : string Config.T
+  val rule_equality_subsumption : string Config.T
 
   val delayed_unification : bool Config.T
   val delayed_unification_simpl_only : bool Config.T
@@ -381,58 +395,197 @@ fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config
 
 val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>slam_max_number_of_steps\<close> (K 2000)
 
-(* NOTE: The rules aren't actually all turned off unless disable_all is set. *)
+(* Disable all rules that are set to "smart". *)
 val disable_all = Attrib.setup_config_bool \<^binding>\<open>slam_disable_all\<close> (K false)
 
-val rule_default = false
+val smartN = "smart"
+val onN = "on"
+val offN = "off"
 
 (* inferences *)
-val rule_sup = Attrib.setup_config_bool \<^binding>\<open>slam_rule_sup\<close> (K rule_default)
-val rule_fluid_sup = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_sup\<close> (K rule_default)
-val rule_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_rule_e_res\<close> (K rule_default)
-val rule_imitate_project = Attrib.setup_config_bool \<^binding>\<open>slam_rule_imitate_project\<close> (K rule_default)
-val rule_e_fact = Attrib.setup_config_bool \<^binding>\<open>slam_rule_e_fact\<close> (K rule_default)
-val rule_arg_cong = Attrib.setup_config_bool \<^binding>\<open>slam_rule_arg_cong\<close> (K rule_default)
-val rule_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_hoist\<close> (K rule_default)
-val rule_false_elim = Attrib.setup_config_bool \<^binding>\<open>slam_rule_false_elim\<close> (K rule_default)
-val rule_eq_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_eq_hoist\<close> (K rule_default)
-val rule_neq_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_neq_hoist\<close> (K rule_default)
-val rule_forall_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_forall_hoist\<close> (K rule_default)
-val rule_exists_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_exists_hoist\<close> (K rule_default)
-val rule_bool_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_rw\<close> (K rule_default)
-val rule_forall_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_forall_rw\<close> (K rule_default)
-val rule_exists_rw = Attrib.setup_config_bool \<^binding>\<open>slam_rule_exists_rw\<close> (K rule_default)
-val rule_fluid_bool_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_bool_hoist\<close> (K rule_default)
-val rule_fluid_loob_hoist = Attrib.setup_config_bool \<^binding>\<open>slam_rule_fluid_loob_hoist\<close> (K rule_default)
-val rule_ext = Attrib.setup_config_bool \<^binding>\<open>slam_rule_ext\<close> (K rule_default)
-val rule_neg_ext = Attrib.setup_config_bool \<^binding>\<open>slam_rule_neg_ext\<close> (K rule_default)
-val rule_neg_cong_fun = Attrib.setup_config_bool \<^binding>\<open>slam_rule_neg_cong_fun\<close> (K rule_default)
-val rule_choice = Attrib.setup_config_bool \<^binding>\<open>slam_rule_choice\<close> (K rule_default)
+val rule_sup = Attrib.setup_config_string \<^binding>\<open>slam_rule_sup\<close> (K smartN)
+val rule_fluid_sup = Attrib.setup_config_string \<^binding>\<open>slam_rule_fluid_sup\<close> (K smartN)
+val rule_e_res = Attrib.setup_config_string \<^binding>\<open>slam_rule_e_res\<close> (K smartN)
+val rule_imitate_project = Attrib.setup_config_string \<^binding>\<open>slam_rule_imitate_project\<close> (K smartN)
+val rule_e_fact = Attrib.setup_config_string \<^binding>\<open>slam_rule_e_fact\<close> (K smartN)
+val rule_arg_cong = Attrib.setup_config_string \<^binding>\<open>slam_rule_arg_cong\<close> (K smartN)
+val rule_bool_hoist = Attrib.setup_config_string \<^binding>\<open>slam_rule_bool_hoist\<close> (K smartN)
+val rule_false_elim = Attrib.setup_config_string \<^binding>\<open>slam_rule_false_elim\<close> (K smartN)
+val rule_eq_hoist = Attrib.setup_config_string \<^binding>\<open>slam_rule_eq_hoist\<close> (K smartN)
+val rule_neq_hoist = Attrib.setup_config_string \<^binding>\<open>slam_rule_neq_hoist\<close> (K smartN)
+val rule_forall_hoist = Attrib.setup_config_string \<^binding>\<open>slam_rule_forall_hoist\<close> (K smartN)
+val rule_exists_hoist = Attrib.setup_config_string \<^binding>\<open>slam_rule_exists_hoist\<close> (K smartN)
+val rule_bool_rw = Attrib.setup_config_string \<^binding>\<open>slam_rule_bool_rw\<close> (K smartN)
+val rule_forall_rw = Attrib.setup_config_string \<^binding>\<open>slam_rule_forall_rw\<close> (K smartN)
+val rule_exists_rw = Attrib.setup_config_string \<^binding>\<open>slam_rule_exists_rw\<close> (K smartN)
+val rule_fluid_bool_hoist = Attrib.setup_config_string \<^binding>\<open>slam_rule_fluid_bool_hoist\<close> (K smartN)
+val rule_fluid_loob_hoist = Attrib.setup_config_string \<^binding>\<open>slam_rule_fluid_loob_hoist\<close> (K smartN)
+val rule_ext = Attrib.setup_config_string \<^binding>\<open>slam_rule_ext\<close> (K smartN)
+val rule_neg_ext = Attrib.setup_config_string \<^binding>\<open>slam_rule_neg_ext\<close> (K smartN)
+val rule_neg_cong_fun = Attrib.setup_config_string \<^binding>\<open>slam_rule_neg_cong_fun\<close> (K smartN)
+val rule_choice = Attrib.setup_config_string \<^binding>\<open>slam_rule_choice\<close> (K smartN)
 (* simplifications *)
-val rule_delete_duplicated_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_duplicated_lits\<close> (K rule_default)
-val rule_delete_resolved_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_delete_resolved_lits\<close> (K rule_default)
-val rule_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_rule_destructive_e_res\<close> (K rule_default)
-val rule_flex_flex_simp = Attrib.setup_config_bool \<^binding>\<open>slam_rule_flex_flex_simp\<close> (K rule_default)
-val rule_rewrite_lits = Attrib.setup_config_bool \<^binding>\<open>slam_rule_rewrite_lits\<close> (K rule_default)
-val rule_positive_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_positive_simplify_reflect\<close> (K rule_default)
-val rule_negative_simplify_reflect = Attrib.setup_config_bool \<^binding>\<open>slam_rule_negative_simplify_reflect\<close> (K rule_default)
-val rule_simp_outer_claus = Attrib.setup_config_bool \<^binding>\<open>slam_rule_simp_outer_claus\<close> (K rule_default)
-val rule_bool_simp = Attrib.setup_config_bool \<^binding>\<open>slam_rule_bool_simp\<close> (K rule_default)
-val rule_simp_false_elim = Attrib.setup_config_bool \<^binding>\<open>slam_rule_simp_false_elim\<close> (K rule_default)
-val rule_syntactic_tautology_deletion1 = Attrib.setup_config_bool \<^binding>\<open>slam_rule_syntactic_tautology_deletion1\<close> (K rule_default)
-val rule_syntactic_tautology_deletion2 = Attrib.setup_config_bool \<^binding>\<open>slam_rule_syntactic_tautology_deletion2\<close> (K rule_default)
-val rule_clause_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_rule_clause_subsumption\<close> (K rule_default)
-val rule_equality_subsumption = Attrib.setup_config_bool \<^binding>\<open>slam_rule_equality_subsumption\<close> (K rule_default)
+val rule_delete_duplicated_lits = Attrib.setup_config_string \<^binding>\<open>slam_rule_delete_duplicated_lits\<close> (K smartN)
+val rule_delete_resolved_lits = Attrib.setup_config_string \<^binding>\<open>slam_rule_delete_resolved_lits\<close> (K smartN)
+val rule_destructive_e_res = Attrib.setup_config_string \<^binding>\<open>slam_rule_destructive_e_res\<close> (K smartN)
+val rule_flex_flex_simp = Attrib.setup_config_string \<^binding>\<open>slam_rule_flex_flex_simp\<close> (K smartN)
+val rule_rewrite_lits = Attrib.setup_config_string \<^binding>\<open>slam_rule_rewrite_lits\<close> (K smartN)
+val rule_positive_simplify_reflect = Attrib.setup_config_string \<^binding>\<open>slam_rule_positive_simplify_reflect\<close> (K smartN)
+val rule_negative_simplify_reflect = Attrib.setup_config_string \<^binding>\<open>slam_rule_negative_simplify_reflect\<close> (K smartN)
+val rule_simp_outer_claus = Attrib.setup_config_string \<^binding>\<open>slam_rule_simp_outer_claus\<close> (K smartN)
+val rule_bool_simp = Attrib.setup_config_string \<^binding>\<open>slam_rule_bool_simp\<close> (K smartN)
+val rule_simp_false_elim = Attrib.setup_config_string \<^binding>\<open>slam_rule_simp_false_elim\<close> (K smartN)
+val rule_syntactic_tautology_deletion1 = Attrib.setup_config_string \<^binding>\<open>slam_rule_syntactic_tautology_deletion1\<close> (K smartN)
+val rule_syntactic_tautology_deletion2 = Attrib.setup_config_string \<^binding>\<open>slam_rule_syntactic_tautology_deletion2\<close> (K smartN)
+val rule_clause_subsumption = Attrib.setup_config_string \<^binding>\<open>slam_rule_clause_subsumption\<close> (K smartN)
+val rule_equality_subsumption = Attrib.setup_config_string \<^binding>\<open>slam_rule_equality_subsumption\<close> (K smartN)
 
-fun rule_enabled ctxt rule_cfg = not (Config.get ctxt disable_all) orelse Config.get ctxt rule_cfg
+fun put_rule_if_smart rule enable ctxt =
+  let
+    val new_value = if enable then onN else offN
+  in
+    if Config.get ctxt rule = smartN
+      then Config.put rule new_value ctxt
+      else
+        (warning ("Leaving preset value " ^ Config.name_of rule ^ "=\"" ^ Config.get ctxt rule ^
+          "\" instead of setting to \"" ^ new_value ^ "\"");
+        ctxt)
+  end
 
+fun rule_enabled ctxt rule_cfg =
+  let
+    val value = Config.get ctxt rule_cfg
+  in
+    value = onN orelse value = smartN
+  end
+  
+val all_rules = 
+  [ rule_sup 
+  , rule_fluid_sup 
+  , rule_e_res 
+  , rule_imitate_project 
+  , rule_e_fact 
+  , rule_arg_cong 
+  , rule_bool_hoist 
+  , rule_false_elim 
+  , rule_eq_hoist 
+  , rule_neq_hoist 
+  , rule_forall_hoist 
+  , rule_exists_hoist 
+  , rule_bool_rw 
+  , rule_forall_rw 
+  , rule_exists_rw 
+  , rule_fluid_bool_hoist 
+  , rule_fluid_loob_hoist 
+  , rule_ext 
+  , rule_neg_ext 
+  , rule_neg_cong_fun 
+  , rule_choice 
+  , rule_delete_duplicated_lits 
+  , rule_delete_resolved_lits 
+  , rule_destructive_e_res 
+  , rule_flex_flex_simp 
+  , rule_rewrite_lits 
+  , rule_positive_simplify_reflect 
+  , rule_negative_simplify_reflect 
+  , rule_simp_outer_claus 
+  , rule_bool_simp 
+  , rule_simp_false_elim 
+  , rule_syntactic_tautology_deletion1 
+  , rule_syntactic_tautology_deletion2 
+  , rule_clause_subsumption 
+  , rule_equality_subsumption 
+  ]
+
+(* rule sets *)
+val first_order_core_rules = [rule_sup, rule_e_res, rule_e_fact]
+
+val higher_order_core_rules = [rule_arg_cong, rule_neg_ext]
+
+val fluid_rules = [rule_fluid_sup, rule_fluid_bool_hoist]
+
+val boolean_rules =
+  [ rule_bool_hoist
+  , rule_false_elim
+  , rule_eq_hoist
+  , rule_neq_hoist
+  , rule_forall_hoist
+  , rule_exists_hoist
+  , rule_bool_rw
+  , rule_forall_rw
+  , rule_exists_rw
+  , rule_simp_outer_claus
+  , rule_simp_false_elim
+  , rule_bool_simp
+  ]
+
+val simp_rules =
+  [ rule_delete_duplicated_lits
+  , rule_delete_resolved_lits
+  , rule_flex_flex_simp
+  , rule_positive_simplify_reflect
+  , rule_negative_simplify_reflect
+  , rule_simp_outer_claus
+  , rule_bool_simp
+  , rule_simp_false_elim
+  , rule_syntactic_tautology_deletion1
+  , rule_syntactic_tautology_deletion2
+  , rule_clause_subsumption
+  , rule_equality_subsumption
+  ]
+
+(* doesn't really make sense to turn these off *)
+val cheap_rules =
+  [ rule_delete_duplicated_lits
+  , rule_delete_resolved_lits
+  , rule_flex_flex_simp
+  , rule_simp_false_elim
+  , rule_bool_simp
+  , rule_syntactic_tautology_deletion1
+  , rule_syntactic_tautology_deletion2
+  ]
+
+(* FIXME: switch to string and smartN, but maybe factor that whole logic out first? *)
 val delayed_unification = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification\<close> (K true)
 val delayed_unification_simpl_only = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification_simpl_only\<close> (K true)
 
+datatype ho_unification_strategy
+  = SmashFlexFlex (* smash *)
+  | DelayFlexFlex (* = delay_flex_flex *)
+  | SimplOnly (* similar to Vampire's depth zero + Imitate + Project *)
+
+val ho_unification_strategies = [SmashFlexFlex, DelayFlexFlex, SimplOnly]
+
+fun config_value_set_of_ho_unification_strategy start = case start of
+    SmashFlexFlex => [delayed_unification]
+  | DelayFlexFlex => []
+  | SimplOnly => []
+
+fun string_of_ho_unification_strategy strat = case strat of
+    SmashFlexFlex => "smash_flex_flex"
+  | DelayFlexFlex => "delay_flex_flex"
+  | SimplOnly => "simpl_only"
+
+val clause_selection_heuristic_choices =
+  map (quote o string_of_ho_unification_strategy) ho_unification_strategies
+  |> space_implode ", "
+
+fun parse_ho_unification_strategy s = case s of
+    "smash_flex_flex" => SmashFlexFlex
+  | "delay_flex_flex" => DelayFlexFlex
+  | "simpl_only" => SimplOnly
+  | _ => error
+      ( "Not a valid higher-order unification strategy: "
+      ^ s
+      ^ " (must be either of " ^ clause_selection_heuristic_choices ^ ")")
+
+val ho_unification_strategy = Attrib.setup_config_string \<^binding>\<open>slam_ho_unification_strategy\<close> (K (string_of_ho_unification_strategy SmashFlexFlex))
+
+fun get_ho_unification_strategy ctxt =
+  parse_ho_unification_strategy (Config.get ctxt ho_unification_strategy)
+
 val unifier_cutoff = Attrib.setup_config_int \<^binding>\<open>slam_unifier_cutoff\<close> (K 2)
 fun get_unifier_cutoff ctxt = Config.get ctxt unifier_cutoff
-
-val clause_selection_heuristic = Attrib.setup_config_string \<^binding>\<open>slam_clause_selection_heuristic\<close> (K "default")
 
 datatype clause_selection_heuristic = Default | DelayedSimpOnlyUnification
 
@@ -440,6 +593,8 @@ val clause_selection_heuristics = [Default, DelayedSimpOnlyUnification]
 
 fun string_of_clause_selection_heuristic Default = "default"
   | string_of_clause_selection_heuristic DelayedSimpOnlyUnification = "delayed_simp_only_unification"
+
+val clause_selection_heuristic = Attrib.setup_config_string \<^binding>\<open>slam_clause_selection_heuristic\<close> (K (string_of_clause_selection_heuristic Default))
 
 val clause_selection_heuristic_choices =
   map (quote o string_of_clause_selection_heuristic) clause_selection_heuristics
@@ -465,8 +620,6 @@ val literal_selection_function = Attrib.setup_config_string \<^binding>\<open>sl
 
 val restricted_destructive_e_res = Attrib.setup_config_bool \<^binding>\<open>slam_restricted_destructive_e_res\<close> (K true)
 
-val sup_variable_condition = Attrib.setup_config_string \<^binding>\<open>slam_sup_variable_condition\<close> (K "first_order")
-
 datatype sup_variable_condition = None | FirstOrder | Approximate
 
 val sup_variable_conditions = [None, FirstOrder, Approximate]
@@ -486,6 +639,8 @@ fun parse_sup_variable_condition "none" = None
       ( "Not a valid slam superposition vairable condition: "
       ^ s
       ^ " (must be either of " ^ sup_variable_condition_choices ^ ")")
+
+val sup_variable_condition = Attrib.setup_config_string \<^binding>\<open>slam_sup_variable_condition\<close> (K (string_of_sup_variable_condition FirstOrder))
 
 fun get_sup_variable_condition ctxt =
   parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
@@ -517,6 +672,11 @@ val presimplify = Attrib.setup_config_bool \<^binding>\<open>slam_presimplify\<c
 
 val meson = Attrib.setup_config_bool \<^binding>\<open>slam_meson\<close> (K false)
 
+fun init_config ctxt =
+  ctxt
+  |> (if Config.get ctxt disable_all then fold (fn rule => put_rule_if_smart rule false) all_rules else I)
+  |> error "FIXME: finish ho_unification_strategy"
+
 fun validate_max_number_of_steps ctxt =
   let
     val value = Config.get ctxt max_number_of_steps
@@ -536,6 +696,18 @@ fun validate_delayed_unification ctxt =
   else
     ()
 
+fun validate_rule_value ctxt rule =
+  let
+    val value = Config.get ctxt rule
+  in
+    if not (value = smartN orelse value = onN orelse value = offN) then
+      error ("invalid string value " ^ Config.name_of rule ^ "=" ^ "\"" ^ value ^ "\"")
+    else
+      ()
+  end
+
+fun validate_all_rule_values ctxt = (map (validate_rule_value ctxt) all_rules; ())
+
 fun validate_config ctxt =
   let
     val _: proof_reconstruction_mode = get_proof_reconstruction_mode ctxt
@@ -543,6 +715,8 @@ fun validate_config ctxt =
     val _: unit = validate_max_number_of_steps ctxt
     val _: unit = validate_delayed_unification ctxt
     val _: clause_selection_heuristic = get_clause_selection_heuristic ctxt
+    val _: unit = validate_all_rule_values ctxt
+    val _: ho_unification_strategy = get_ho_unification_strategy ctxt
   in
     ()
   end
