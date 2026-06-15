@@ -42,7 +42,7 @@ sig
   (* left or right side of an equational literal *)
   datatype lpos = Left | Right
 
-  val mk : term * term * bool -> T 
+  val mk : term * term * bool -> T
   val dest : T -> term * term * bool
   val fold : (term -> 'a -> 'a) -> T -> 'a -> 'a
   val fold_with_lpos : (lpos -> term -> 'a -> 'a) -> T -> 'a -> 'a
@@ -112,8 +112,8 @@ val swap_orientation = Lazy.map (Option.map impl_swap_orientation)
 
 datatype T =
   Lit of
-    { lhs: Side.T 
-    , rhs: Side.T 
+    { lhs: Side.T
+    , rhs: Side.T
     , pol: bool
     , orientation: orientation option Lazy.lazy
     }
@@ -260,7 +260,7 @@ would probably not be valid simplifications (the conclusion is not smaller than 
 ?x a b c \<noteq> \<top> \<mapsto> ...
 aren't either.
 The function below disallows the non-simplifications w.r.t. the current literal ordering (or at least
-its implementaiton) 
+its implementaiton)
 *)
 (* FIXME: maybe change our definition of "predicate literal" to include disequations and consolidate" *)
 fun norm_negative_pred (l as Lit { pol = true, ... }) = l

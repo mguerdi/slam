@@ -86,7 +86,7 @@ datatype 'a inference =
   | ExistsHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, fresh_x: term }
   | BoolRw of { premise: 'a, subterm: JClause_Pos.full_pos, subrule: term * term, substitution: Envir.env }
   | ForallRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, skolems: (term * term * term) list }
-  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, skolems: (term * term * term) list } 
+  | ExistsRw of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env, skolems: (term * term * term) list }
   | FluidBoolHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   | FluidLoobHoist of { premise: 'a, subterm: JClause_Pos.full_pos, substitution: Envir.env }
   (** axioms **)
@@ -191,8 +191,8 @@ fun premises_shift_substitution (Sup { left_premise, left_premise_shift, right_p
       = [{ id = left_premise, shift = left_premise_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (RewritePositiveLits { unit, unit_shift, right_premise, substitution, ... })
       = [{ id = unit, shift = unit_shift, substitution = substitution }, { id = right_premise, shift = 0, substitution = substitution }]
-  | premises_shift_substitution (RewriteNegativeLits log) 
-      = premises_shift_substitution (RewritePositiveLits log) 
+  | premises_shift_substitution (RewriteNegativeLits log)
+      = premises_shift_substitution (RewritePositiveLits log)
   | premises_shift_substitution (ERes { premise, substitution, ... })
       = [{ id = premise, shift = 0, substitution = substitution }]
   | premises_shift_substitution (EFact { premise, substitution, ... })
@@ -242,10 +242,10 @@ normalization
   * \<beta>\<eta>Q\<^sub>\<eta>-normal form
 
 superposition with trivial (identity) unification
-  * covers Sup, FluidSup, *Hoist (with LEM), BoolRw (with RW rules as left premises), 
+  * covers Sup, FluidSup, *Hoist (with LEM), BoolRw (with RW rules as left premises),
 
 BoolHoist: superposition with LEM (x = \<top> \<or> x = \<bottom>)
-EqHoist: superposition with LEM 
+EqHoist: superposition with LEM
 
 
 Justifying simplifications
@@ -291,42 +291,42 @@ z\<sigma> t = z\<sigma> t' => C<z\<sigma> t> = C<z\<sigma> t'>
 
 fun name_of (Axiom _) = "Axiom"
   | name_of (NegatedConjecture _) = "NegatedConjecture"
-  | name_of (Sup _) = "Sup" 
+  | name_of (Sup _) = "Sup"
   | name_of FluidSup = "FluidSup"
-  | name_of (ERes _) = "ERes" 
+  | name_of (ERes _) = "ERes"
   | name_of (ImitateProject _) = "ImitateProject"
-  | name_of (EFact _) = "EFact" 
-  | name_of (ArgCong _) = "ArgCong" 
-  | name_of (BoolHoist _) = "BoolHoist" 
-  | name_of (FalseElim _) = "FalseElim" 
-  | name_of (EqHoist _) = "EqHoist" 
-  | name_of (NeqHoist _) = "NeqHoist" 
-  | name_of (ForallHoist _) = "\<forall>Hoist" 
-  | name_of (ExistsHoist _) = "\<exists>Hoist" 
-  | name_of (BoolRw _) = "BoolRw" 
-  | name_of (ForallRw _) = "\<forall>Rw" 
-  | name_of (ExistsRw _) = "\<exists>Rw" 
-  | name_of (FluidBoolHoist _) = "FluidBoolHoist" 
-  | name_of (FluidLoobHoist _) = "FluidLoobHoist" 
-  | name_of Ext = "Ext" 
+  | name_of (EFact _) = "EFact"
+  | name_of (ArgCong _) = "ArgCong"
+  | name_of (BoolHoist _) = "BoolHoist"
+  | name_of (FalseElim _) = "FalseElim"
+  | name_of (EqHoist _) = "EqHoist"
+  | name_of (NeqHoist _) = "NeqHoist"
+  | name_of (ForallHoist _) = "\<forall>Hoist"
+  | name_of (ExistsHoist _) = "\<exists>Hoist"
+  | name_of (BoolRw _) = "BoolRw"
+  | name_of (ForallRw _) = "\<forall>Rw"
+  | name_of (ExistsRw _) = "\<exists>Rw"
+  | name_of (FluidBoolHoist _) = "FluidBoolHoist"
+  | name_of (FluidLoobHoist _) = "FluidLoobHoist"
+  | name_of Ext = "Ext"
   | name_of (NegExt _) = "NegExt"
   | name_of (NegCongFun _) = "NegCongFun"
-  | name_of Choice = "Choice" 
-  | name_of (DeleteDuplicatedLits _) = "DeleteDuplicatedLits" 
-  | name_of (DeleteResolvedLits _) = "DeleteResolvedLits" 
+  | name_of Choice = "Choice"
+  | name_of (DeleteDuplicatedLits _) = "DeleteDuplicatedLits"
+  | name_of (DeleteResolvedLits _) = "DeleteResolvedLits"
   | name_of (FlexFlexSimp _) = "FlexFlexSimp"
-  | name_of (RewritePositiveLits _) = "RewritePositiveLits" 
-  | name_of (RewriteNegativeLits _) = "RewriteNegativeLits" 
-  | name_of (PositiveSimplifyReflect _) = "PositiveSimplifyReflect" 
-  | name_of (NegativeSimplifyReflect _) = "NegativeSimplifyReflect" 
+  | name_of (RewritePositiveLits _) = "RewritePositiveLits"
+  | name_of (RewriteNegativeLits _) = "RewriteNegativeLits"
+  | name_of (PositiveSimplifyReflect _) = "PositiveSimplifyReflect"
+  | name_of (NegativeSimplifyReflect _) = "NegativeSimplifyReflect"
   | name_of (SimpPosNegOuterClaus _) = "SimpPosNegOuterClaus"
-  | name_of (SyntacticTautologyDeletion1 _) = "SyntacticTautologyDeletion1" 
-  | name_of (SyntacticTautologyDeletion2 _) = "SyntacticTautologyDeletion2" 
-  | name_of (ClauseSubsumption _) = "ClauseSubsumption" 
-  | name_of (EqualitySubsumption _) = "EqualitySubsumption" 
+  | name_of (SyntacticTautologyDeletion1 _) = "SyntacticTautologyDeletion1"
+  | name_of (SyntacticTautologyDeletion2 _) = "SyntacticTautologyDeletion2"
+  | name_of (ClauseSubsumption _) = "ClauseSubsumption"
+  | name_of (EqualitySubsumption _) = "EqualitySubsumption"
   | name_of (SimpBoolRw _) = "SimpBoolRw"
-  | name_of (SimpFalseElim _) = "SimpFalseElim" 
-  | name_of Invalid = "Invalid" 
+  | name_of (SimpFalseElim _) = "SimpFalseElim"
+  | name_of Invalid = "Invalid"
   | name_of _ = error "Slam_Log.name_of: unimplemented"
 
 open Pretty

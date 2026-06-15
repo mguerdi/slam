@@ -53,9 +53,9 @@ struct
         else if n_vars < 8 then 3
         else n_vars
     in
-      n * PENALTY_COEFF 
+      n * PENALTY_COEFF
     end
-    
+
   fun all_ground_and_neg c =
     forall (fn lit =>
       JLit.is_negative lit andalso JLit.both_sides JTerm.is_ground lit) (JClause.literals c)
@@ -76,7 +76,7 @@ struct
       (* roughly: fraction of symbols of c that do not occur in the goal *)
       (PENALTY_COEFF * non_goal_symbols) div (goal_symbols + non_goal_symbols + 1)
     end
-  
+
   fun favor_free c =
     let
       fun aterm_weight (Free _) = 0
@@ -163,12 +163,12 @@ end
 
 signature SLAM_PASSIVE_SET =
 sig
-  type T 
+  type T
   val init : Proof.context -> Slam_Symbol_Table.set -> JClause.T list -> T
   val seq_of : T -> JClause.T Seq.seq
-  val add_new_clause : JClause.T -> T -> T 
-  val add_new_clauses : T -> JClause.T list -> T 
-  val select_given_clause : T -> JClause.T * T 
+  val add_new_clause : JClause.T -> T -> T
+  val add_new_clauses : T -> JClause.T list -> T
+  val select_given_clause : T -> JClause.T * T
   val pretty : Proof.context -> int -> T -> string
   (* debug *)
   val length : T -> int
@@ -183,7 +183,7 @@ structure Passive_Set = Heap(type elem = int * JClause.T val ord = int_ord o app
 type T = { heap: Passive_Set.T, weight: JClause.T -> int }
 
 fun seq_of_heap heap =
-  if Passive_Set.is_empty heap 
+  if Passive_Set.is_empty heap
     then Seq.empty
     else Passive_Set.min_elem heap |>> snd ||> seq_of_heap |> uncurry Seq.cons
 
@@ -202,7 +202,7 @@ fun pretty_clauses_with_weight ctxt { weight, ... } (cs : JClause.T list) =
   |> Pretty.commas
   |> Pretty.block
   |> Pretty.string_of
-  
+
 fun pretty ctxt n passive =
   let
     val first_n = passive |> seq_of |> Seq.take n |> Seq.list_of

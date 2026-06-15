@@ -600,7 +600,7 @@ FIXME: create BASIC_JTERM, have Slam_Order depend on that, then use include / op
 to define JTerm.kbo etc. *)
 
 fun is_eligible_tpos_in_eq (Const (@{const_name "HOL.eq"}, _) $ s $ t) (i :: tpos) =
-  let 
+  let
     val s_t_comp = Slam_KBO.ord (s, t)
   in
     not (s_t_comp = SOME EQUAL) andalso

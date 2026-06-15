@@ -17,28 +17,44 @@ lemma paper_example_25_all_rules:
       by blast
   qed
   *)
-  by slam (* 19 ms *)
+  using [[slam_trace]] by slam (* 19 ms *)
+
+lemma paper_example_25_smash_flex_flex:
+  shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
+  using [[slam_ho_unification_strategy=smash_flex_flex]] by slam
+
+lemma paper_example_25_delay_flex_flex:
+  shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
+  using [[slam_ho_unification_strategy=delay_flex_flex]] by slam
+
+lemma paper_example_25_simpl_only:
+  shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
+  using [[slam_ho_unification_strategy=simpl_only]] by slam
 
 (* Slightly closer to the proof of example 25 from the paper. *)
 declare [[slam_disable_all]]
 
-declare [[slam_rule_eq_hoist]]
-declare [[slam_rule_bool_rw]]
-declare [[slam_rule_false_elim]]
-declare [[slam_rule_sup]]
-declare [[slam_rule_e_res]]
+declare [[slam_rule_eq_hoist=on]]
+declare [[slam_rule_bool_rw=on]]
+declare [[slam_rule_false_elim=on]]
+declare [[slam_rule_sup=on]]
+declare [[slam_rule_e_res=on]]
 
 (* To reach the initial clause set of example 25. *)
-declare [[slam_rule_simp_outer_claus]]
+declare [[slam_rule_simp_outer_claus=on]]
 
 (* necessary *)
-declare [[slam_rule_clause_subsumption]]
+declare [[slam_rule_clause_subsumption=on]]
 
-declare [[slam_rule_bool_simp]]
-declare [[slam_rule_simp_false_elim]]
+declare [[slam_rule_bool_simp=on]]
+declare [[slam_rule_simp_false_elim=on]]
+declare [[slam_rule_imitate_project=on]]
+(* necessary with delayed simpl-only unification *)
+declare [[slam_rule_delete_resolved_lits=on]]
 
 lemma paper_example_25:
   shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
+  (* using [[slam_trace]] *)
   by slam (* 14ms *)
 
 end

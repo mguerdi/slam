@@ -19,7 +19,7 @@ end;
 
 signature SLAM_FINGERPRINT =
 sig
-  datatype feature = 
+  datatype feature =
     AnonymousVar (* A *)
   | BelowVar (* B *)
   | InvalidPosition (* N *)
@@ -38,7 +38,7 @@ structure Slam_Fingerprint : SLAM_FINGERPRINT =
 struct
 
 (* see zipperposition Fingerprint.ml *)
-datatype feature = 
+datatype feature =
   AnonymousVar (* A *)
 | BelowVar (* B *)
 | InvalidPosition (* N *)
@@ -76,7 +76,7 @@ fun feature_at Ts p (Abs (_, T, t)) = feature_at (T::Ts) p t
         else feature_of head
       end
   | feature_at Ts (0::_) t = error "can't have 0 position in fingerprint translation"
-  | feature_at Ts (i::is) t = 
+  | feature_at Ts (i::is) t =
       let val (head, args) = strip_comb t in
       if is_var_head Ts head
         then BelowVar
@@ -130,7 +130,7 @@ fun to_int AnonymousVar = 0
   | to_int (FOFree _) = 4
   | to_int (FOConst _) = 5
 
-fun feature_ord feature_pair = 
+fun feature_ord feature_pair =
   let
     val cmp = (int_ord o apply2 to_int) feature_pair
   in
@@ -270,7 +270,7 @@ struct
   structure Term_Index_Trie = Slam_Trie(structure FeatureTable = FPFeatureTable);
 
   open Term_Index_Trie
-  
+
 
   fun compute_key t = map (fn p => Slam_Fingerprint.feature_at [] p t) feature_positions
 
@@ -312,12 +312,12 @@ struct
   fun insert_clause c index : (int * JClause.full_pos) T =
     let
       val id = JClause.id c
-      val green_subterm_positions = JClause.green_full_poss_of c 
+      val green_subterm_positions = JClause.green_full_poss_of c
     in
       Basics.fold
         (fn fp => insert_term (JClause.subterm_at_full_pos c fp, (id, fp)))
         green_subterm_positions
-        index 
+        index
     end
 
   fun insert_unit c index : (int * JLit.lpos) T =
@@ -379,7 +379,7 @@ datatype ('a, 'b) RecFold = RecFold of 'a -> (('a, 'b) RecFold -> 'b) -> 'b
 fun foldr f acc xs = Basics.fold f xs acc
 
 (* fun zip xs =
-  let 
+  let
     fun g e2 r2 e1 r1 = (e1,e2) :: (r1 r2)
     fun f e r x = x e r
   in
@@ -412,7 +412,7 @@ struct
   type index =
     { compute_features : JClause.T -> int list,
       trie : int Subsumption_Index_Trie.T }
-  
+
   (* features *)
   (* independent of signature *)
   val num_positive =
@@ -433,7 +433,7 @@ struct
   In zipperposition does the first guard the second?
   Can we do ~1 if the symbol is not present?
   *)
-  
+
   fun dummify_symbol_type (Const (name, _)) = Const (name, dummyT)
     | dummify_symbol_type (Free (name, _)) = Free (name, dummyT)
     | dummify_symbol_type t =
@@ -507,7 +507,7 @@ struct
       |> cons (num_positive clause)
       |> cons (num_negative clause)
     end
-  
+
   (* The signature of a clause set *)
   fun collect_symbols (clauses : JClause.T list) : term list =
     let
@@ -577,7 +577,7 @@ struct
     in
       { compute_features = compute_features, trie = trie }
     end
-  
+
 end;
 
 (*

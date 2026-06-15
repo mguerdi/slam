@@ -4,7 +4,7 @@ infix 6 ---
 signature SLAM_WEIGHT =
 sig
   type weight = int * int
-  val +++ : weight * weight -> weight 
+  val +++ : weight * weight -> weight
   val --- : weight * weight -> weight
   val negate : weight -> weight
 end;
@@ -154,7 +154,7 @@ fun idxs_of_maximal_elements a_ord xs =
       fold
       ( fn (i, x) =>
           fold
-          ( fn (j, y) => case a_ord (x, y) of 
+          ( fn (j, y) => case a_ord (x, y) of
                 SOME GREATER =>
                   (* y cannot be maximal *)
                   nth_map j (K NONE)
@@ -184,7 +184,7 @@ fun idxs_of_maximal_elements a_ord xs =
 fun is_maximal a_ord strict x xs =
   let
     (* NONE = not maximal, SOME strict = strict maximal *)
-    val (maximal, occurrences) = 
+    val (maximal, occurrences) =
       fold (fn y => fn (maximal, occurrences) =>
         if maximal andalso (not strict orelse occurrences <= 1)
           then case a_ord (y, x) of

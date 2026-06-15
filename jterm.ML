@@ -43,7 +43,7 @@ sig
   val make_skolem_constant :
     Proof.context ->
     term ->
-    { 
+    {
       (* sk *)
       skolem_constant: term,
       (* sk ?\<tau> ?x\<^sub>1 \<dots> ?x\<^sub>n *)
@@ -145,8 +145,37 @@ fun tposs_of (Abs(_,_,u)) = [] :: map (cons 0) (tposs_of u)
     end
   | tposs_of _ = [[]]
 
+(* `tpos list` with prefix sharing *)
+datatype disagreements = Node of (int * disagreements) list
+
 (* NONE means no disagreement, the terms are the same *)
-fun disagreement_tpos_of2 (Abs(_,_,t), Abs(_,_,u)) = Slam_Common.map_some (cons 0) (disagreement_tpos_of2 (t, u))
+(* FIXME: test *)
+fun disagreement_tposs_of2 (Abs(_,T,t), Abs(_,U,u)) : disagreements option =
+    (* if T <> U then error "types unequal" else *)
+      Option.map (fn d => Node [(0, d)]) (disagreement_tposs_of2 (t, u))
+  | disagreement_tposs_of2 (t as (_$_), u as (_$_)) =
+    let
+      val (head_args_t, head_args_u) = (apply2 (uncurry cons o strip_comb)) (t, u)
+    in
+      if length head_args_t <> length head_args_u then SOME (Node []) else
+        let
+          val disagreements =
+            map_index
+              (fn (i, tu) => Option.map (pair i) (disagreement_tposs_of2 tu))
+              (head_args_t ~~ head_args_u)
+            |> map_filter I
+        in
+          case disagreements of
+            [] => NONE
+          | d => SOME (Node d)
+        end
+    end
+  | disagreement_tposs_of2 (t, u) = if t aconv u then NONE else SOME (Node [])
+
+(* NONE means no disagreement, the terms are the same *)
+fun disagreement_tpos_of2 (Abs(_,T,t), Abs(_,U,u)) =
+    (* if T <> U then error "disagreement_tpos_of2: types not equal" else *)
+      Slam_Common.map_some (cons 0) (disagreement_tpos_of2 (t, u))
   | disagreement_tpos_of2 (t as (_$_), u as (_$_)) =
     let
       val (head_args_t, head_args_u) = (apply2 (uncurry cons o strip_comb)) (t, u)
@@ -219,7 +248,7 @@ fun is_position_of_fully_applied_logical_symbol tpos term =
       (* a logical symbol (except for \<top> and \<bottom>) is fully applied iff. it is the
       head of a combination with boolean type *)
       is_comb comb andalso @{typ "HOL.bool"} = comb_typ
-    end 
+    end
   end
 
 (* The arguments of f are in green position iff. f \<in> \<Sigma>\<setminus>{\<forall>, \<exists>}, where Free _ variables are taken to
@@ -476,7 +505,7 @@ fun eta_expand_once t =
 (* Q t \<mapsto> Q (\<lambda>x. t x) *)
 fun ensure_lambda_under_q (Abs (x, T, t)) = Abs (x, T, ensure_lambda_under_q t)
   | ensure_lambda_under_q (t $ (u as (Abs _))) = ensure_lambda_under_q t $ ensure_lambda_under_q u
-  | ensure_lambda_under_q (t $ u) = 
+  | ensure_lambda_under_q (t $ u) =
       if is_quantifier t
         then
           (* \<eta>-expand u (which is not a \<lambda>-expression!) *)
@@ -512,7 +541,7 @@ fun is_skolem_constant (Free (name, _)) = String.isPrefix "jsk" (Name.dest_skole
 fun make_choice_witness (Free (name, T)) predicate =
       HOLogic.choice_const T $ (absfree (name, T) predicate)
   | make_choice_witness t _ = error ("make_choice_witness: not a Free variable " ^ @{make_string} t)
-  
+
 
 fun abs_over_var (v as Var ((name, index), T)) body =
       Abs (name ^ @{make_string} index, T, abstract_over (v, body))
