@@ -102,7 +102,7 @@ sig
   val trace_msg_equality_subsumption : Proof.context -> (unit -> string) -> unit
 
   val init_config : Proof.context -> Proof.context
-  
+
   val validate_config : Proof.context -> unit
 
   val proof_reconstruction : string Config.T
@@ -136,6 +136,12 @@ sig
   val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
   val max_number_of_steps : int Config.T
 
+  type smart_value = bool option
+  val put_smart : string Config.T * bool -> Proof.context -> Proof.context
+  val put_smarts : (string Config.T * bool) list -> Proof.context -> Proof.context
+  val get_smart : Proof.context -> string Config.T -> smart_value (* "smart" => NONE *)
+  val get_smart_default : Proof.context -> string Config.T -> bool (* "smart" => true *)
+
   (* Some configuration options, such as disable_all are handled by init_config and cause "smart"
   options to be overwritten, unless they have been explicitly set to a value different from "smart",
   in which case they are left alone and a warning is reported. *)
@@ -148,7 +154,6 @@ sig
 
   (* enable/disable individual rules *)
   val rule_enabled : Proof.context -> string Config.T -> bool
-  val put_rule_if_smart : string Config.T -> bool -> Proof.context -> Proof.context
 
   (* inferences *)
   val rule_sup : string Config.T
@@ -188,8 +193,8 @@ sig
   val rule_clause_subsumption : string Config.T
   val rule_equality_subsumption : string Config.T
 
-  val delayed_unification : bool Config.T
-  val delayed_unification_simpl_only : bool Config.T
+  val delayed_unification : string Config.T
+  val delayed_unification_simpl_only : string Config.T
 
   val unifier_cutoff : int Config.T
   val get_unifier_cutoff : Proof.context -> int
@@ -395,12 +400,56 @@ fun get_proof_reconstruction_mode ctxt = parse_proof_reconstruction_mode (Config
 
 val max_number_of_steps = Attrib.setup_config_int \<^binding>\<open>slam_max_number_of_steps\<close> (K 2000)
 
-(* Disable all rules that are set to "smart". *)
-val disable_all = Attrib.setup_config_bool \<^binding>\<open>slam_disable_all\<close> (K false)
+(* smart options *)
+
+type smart_value = bool option
 
 val smartN = "smart"
 val onN = "on"
 val offN = "off"
+
+fun string_of_smart_value smart_value = case smart_value of
+    NONE => smartN
+  | SOME b => if b then onN else offN
+
+fun parse_smart_value s = case s of
+    "smart" => NONE
+  | "on" => SOME true
+  | "off" => SOME false
+  | _ => error ("parse_smart: invalid string value \"" ^ s ^ "\"")
+
+fun get_smart ctxt cfg =
+  let
+    val value = Config.get ctxt cfg
+  in
+    if value = onN
+      then SOME true
+    else if value = offN
+      then SOME false
+    else if value = smartN
+      then NONE
+    else
+      error ("get_smart: invalid value for smart option " ^ Config.name_of cfg ^ "=\"" ^ Config.get ctxt cfg)
+  end
+
+fun get_smart_default ctxt cfg = the_default true (get_smart ctxt cfg)
+
+fun put_smart (cfg, enable) ctxt =
+  let
+    val new_value = if enable then onN else offN
+  in
+    if Config.get ctxt cfg = smartN
+      then Config.put cfg new_value ctxt
+      else
+        (warning ("Leaving preset value " ^ Config.name_of cfg ^ "=\"" ^ Config.get ctxt cfg ^
+          "\" instead of setting to \"" ^ new_value ^ "\"");
+        ctxt)
+  end
+
+val put_smarts = fold put_smart
+
+(* Disable all rules that are set to "smart". *)
+val disable_all = Attrib.setup_config_bool \<^binding>\<open>slam_disable_all\<close> (K false)
 
 (* inferences *)
 val rule_sup = Attrib.setup_config_string \<^binding>\<open>slam_rule_sup\<close> (K smartN)
@@ -440,67 +489,53 @@ val rule_syntactic_tautology_deletion2 = Attrib.setup_config_string \<^binding>\
 val rule_clause_subsumption = Attrib.setup_config_string \<^binding>\<open>slam_rule_clause_subsumption\<close> (K smartN)
 val rule_equality_subsumption = Attrib.setup_config_string \<^binding>\<open>slam_rule_equality_subsumption\<close> (K smartN)
 
-fun put_rule_if_smart rule enable ctxt =
-  let
-    val new_value = if enable then onN else offN
-  in
-    if Config.get ctxt rule = smartN
-      then Config.put rule new_value ctxt
-      else
-        (warning ("Leaving preset value " ^ Config.name_of rule ^ "=\"" ^ Config.get ctxt rule ^
-          "\" instead of setting to \"" ^ new_value ^ "\"");
-        ctxt)
-  end
-
-fun rule_enabled ctxt rule_cfg =
-  let
-    val value = Config.get ctxt rule_cfg
-  in
-    value = onN orelse value = smartN
-  end
-  
-val all_rules = 
-  [ rule_sup 
-  , rule_fluid_sup 
-  , rule_e_res 
-  , rule_imitate_project 
-  , rule_e_fact 
-  , rule_arg_cong 
-  , rule_bool_hoist 
-  , rule_false_elim 
-  , rule_eq_hoist 
-  , rule_neq_hoist 
-  , rule_forall_hoist 
-  , rule_exists_hoist 
-  , rule_bool_rw 
-  , rule_forall_rw 
-  , rule_exists_rw 
-  , rule_fluid_bool_hoist 
-  , rule_fluid_loob_hoist 
-  , rule_ext 
-  , rule_neg_ext 
-  , rule_neg_cong_fun 
-  , rule_choice 
-  , rule_delete_duplicated_lits 
-  , rule_delete_resolved_lits 
-  , rule_destructive_e_res 
-  , rule_flex_flex_simp 
-  , rule_rewrite_lits 
-  , rule_positive_simplify_reflect 
-  , rule_negative_simplify_reflect 
-  , rule_simp_outer_claus 
-  , rule_bool_simp 
-  , rule_simp_false_elim 
-  , rule_syntactic_tautology_deletion1 
-  , rule_syntactic_tautology_deletion2 
-  , rule_clause_subsumption 
-  , rule_equality_subsumption 
-  ]
+val rule_enabled = get_smart_default
 
 (* rule sets *)
+
+val all_rules =
+  [ rule_sup
+  , rule_fluid_sup
+  , rule_e_res
+  , rule_imitate_project
+  , rule_e_fact
+  , rule_arg_cong
+  , rule_bool_hoist
+  , rule_false_elim
+  , rule_eq_hoist
+  , rule_neq_hoist
+  , rule_forall_hoist
+  , rule_exists_hoist
+  , rule_bool_rw
+  , rule_forall_rw
+  , rule_exists_rw
+  , rule_fluid_bool_hoist
+  , rule_fluid_loob_hoist
+  , rule_ext
+  , rule_neg_ext
+  , rule_neg_cong_fun
+  , rule_choice
+  , rule_delete_duplicated_lits
+  , rule_delete_resolved_lits
+  , rule_destructive_e_res
+  , rule_flex_flex_simp
+  , rule_rewrite_lits
+  , rule_positive_simplify_reflect
+  , rule_negative_simplify_reflect
+  , rule_simp_outer_claus
+  , rule_bool_simp
+  , rule_simp_false_elim
+  , rule_syntactic_tautology_deletion1
+  , rule_syntactic_tautology_deletion2
+  , rule_clause_subsumption
+  , rule_equality_subsumption
+  ]
+
 val first_order_core_rules = [rule_sup, rule_e_res, rule_e_fact]
 
-val higher_order_core_rules = [rule_arg_cong, rule_neg_ext]
+val higher_order_core_rules = [rule_arg_cong]
+
+val ext_rules = [rule_neg_ext]
 
 val fluid_rules = [rule_fluid_sup, rule_fluid_bool_hoist]
 
@@ -545,21 +580,23 @@ val cheap_rules =
   , rule_syntactic_tautology_deletion2
   ]
 
-(* FIXME: switch to string and smartN, but maybe factor that whole logic out first? *)
-val delayed_unification = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification\<close> (K true)
-val delayed_unification_simpl_only = Attrib.setup_config_bool \<^binding>\<open>slam_delayed_unification_simpl_only\<close> (K true)
+val delayed_unification = Attrib.setup_config_string \<^binding>\<open>slam_delayed_unification\<close> (K smartN)
+val delayed_unification_simpl_only = Attrib.setup_config_string \<^binding>\<open>slam_delayed_unification_simpl_only\<close> (K smartN)
 
 datatype ho_unification_strategy
-  = SmashFlexFlex (* smash *)
-  | DelayFlexFlex (* = delay_flex_flex *)
+  = SmashFlexFlex
+  | DelayFlexFlex
   | SimplOnly (* similar to Vampire's depth zero + Imitate + Project *)
 
 val ho_unification_strategies = [SmashFlexFlex, DelayFlexFlex, SimplOnly]
 
-fun config_value_set_of_ho_unification_strategy start = case start of
-    SmashFlexFlex => [delayed_unification]
-  | DelayFlexFlex => []
-  | SimplOnly => []
+fun config_value_set_of_ho_unification_strategy strat = case strat of
+    SmashFlexFlex =>
+      [(delayed_unification, false), (delayed_unification_simpl_only, false), (rule_imitate_project, false)]
+  | DelayFlexFlex =>
+      [(delayed_unification, true), (delayed_unification_simpl_only, false), (rule_imitate_project, false)]
+  | SimplOnly =>
+      [(delayed_unification, true), (delayed_unification_simpl_only, true), (rule_imitate_project, true)]
 
 fun string_of_ho_unification_strategy strat = case strat of
     SmashFlexFlex => "smash_flex_flex"
@@ -674,8 +711,8 @@ val meson = Attrib.setup_config_bool \<^binding>\<open>slam_meson\<close> (K fal
 
 fun init_config ctxt =
   ctxt
-  |> (if Config.get ctxt disable_all then fold (fn rule => put_rule_if_smart rule false) all_rules else I)
-  |> error "FIXME: finish ho_unification_strategy"
+  |> (put_smarts (config_value_set_of_ho_unification_strategy (get_ho_unification_strategy ctxt)))
+  |> (if Config.get ctxt disable_all then fold (fn rule => put_smart (rule, false)) all_rules else I)
 
 fun validate_max_number_of_steps ctxt =
   let
@@ -686,27 +723,26 @@ fun validate_max_number_of_steps ctxt =
     else if value = ~1
       then warning "no heartbeat (slam_max_number_of_steps set to -1)"
     else
-      error ("Invalid slam_max_number_of_steps: must be \<ge> -1.")
+      error ("validate_max_number_of_steps: Invalid slam_max_number_of_steps: must be \<ge> -1.")
   end
 
 fun validate_delayed_unification ctxt =
-  if (Config.get ctxt delayed_unification_simpl_only andalso
-        not (Config.get ctxt delayed_unification)) then
+  if (get_smart_default ctxt delayed_unification_simpl_only andalso
+        not (get_smart_default ctxt delayed_unification)) then
     warning "slam_delayed_unification_simpl_only has no effect without slam_delayed_unification"
   else
     ()
 
-fun validate_rule_value ctxt rule =
+fun validate_smart ctxt cfg =
   let
-    val value = Config.get ctxt rule
+    val _: smart_value =
+      parse_smart_value (Config.get ctxt cfg)
+      handle ERROR msg => error ("validate_smart: " ^ Config.name_of cfg ^ ": " ^ msg)
   in
-    if not (value = smartN orelse value = onN orelse value = offN) then
-      error ("invalid string value " ^ Config.name_of rule ^ "=" ^ "\"" ^ value ^ "\"")
-    else
-      ()
+    ()
   end
 
-fun validate_all_rule_values ctxt = (map (validate_rule_value ctxt) all_rules; ())
+fun validate_all_rule_values ctxt = (map (validate_smart ctxt) all_rules; ())
 
 fun validate_config ctxt =
   let

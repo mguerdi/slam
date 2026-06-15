@@ -985,7 +985,7 @@ fun infer_sup ctxt (d, (lp, cp), tt'_eligibility) (c, u_pos, u_eligibility) =
       val () = tracer (fn () =>
         Slam_Common.pretty_term ctxt t ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt u)
       val preunifiers =
-        if Config.get ctxt Slam_Common.delayed_unification
+        if Slam_Common.get_smart_default ctxt Slam_Common.delayed_unification
           then Slam_Unify.preunifiers (Context.Proof ctxt) [(t, u)] env
           else Slam_Unify.smash_unifiers (Context.Proof ctxt) [(t, u)] env |> Seq.map (rpair [])
       val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
@@ -1138,7 +1138,7 @@ fun infer_eres (ctxt : Proof.context) (c, cp, eligibility) =
     val (u, u', is_pos_eq) = JLit.dest (JClause.lit_at cp c)
     val env = Envir.empty (JClause.maxidx c)
     val preunifiers =
-      if Config.get ctxt Slam_Common.delayed_unification
+      if Slam_Common.get_smart_default ctxt Slam_Common.delayed_unification
         then Slam_Unify.preunifiers (Context.Proof ctxt) [(u, u')] env
         else Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] env |> Seq.map (rpair [])
     val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
@@ -1218,7 +1218,7 @@ fun infer_efact ctxt c ((lp', cp'), (lp, cp)) =
       Slam_Common.pretty_term ctxt u ^ " ?= " ^ Slam_Common.pretty_term ctxt u')
     val env = Envir.empty (JClause.maxidx c)
     val preunifiers =
-        if Config.get ctxt Slam_Common.delayed_unification
+        if Slam_Common.get_smart_default ctxt Slam_Common.delayed_unification
           then Slam_Unify.preunifiers (Context.Proof ctxt) [(u, u')] env
           else Slam_Unify.smash_unifiers (Context.Proof ctxt) [(u, u')] env |> Seq.map (rpair [])
     val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers

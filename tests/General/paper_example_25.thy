@@ -19,6 +19,18 @@ lemma paper_example_25_all_rules:
   *)
   using [[slam_trace]] by slam (* 19 ms *)
 
+lemma paper_example_25_smash_flex_flex:
+  shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
+  using [[slam_ho_unification_strategy=smash_flex_flex]] by slam
+
+lemma paper_example_25_delay_flex_flex:
+  shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
+  using [[slam_ho_unification_strategy=delay_flex_flex]] by slam
+
+lemma paper_example_25_simpl_only:
+  shows "(\<And>z. z a \<Longrightarrow> z b) \<Longrightarrow> a = b"
+  using [[slam_ho_unification_strategy=simpl_only]] by slam
+
 (* Slightly closer to the proof of example 25 from the paper. *)
 declare [[slam_disable_all]]
 

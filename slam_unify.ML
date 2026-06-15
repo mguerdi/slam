@@ -97,7 +97,7 @@ fun to_preunifier ctxt (substitution, flex_flex_pairs) =
           is_variable_headed_application s andalso is_variable_headed_application t
     fun check_pair (i, (s, t)) =
       if (not (is_flex_flex (s, t)) andalso
-            not (Config.get ctxt Slam_Common.delayed_unification_simpl_only))
+            not (Slam_Common.get_smart_default ctxt Slam_Common.delayed_unification_simpl_only))
         then warning (
           "to_preunifier: not a flex-flex pair: "
           ^ Slam_Common.pretty_term ctxt s ^ " =\<^sup>? " ^ Slam_Common.pretty_term ctxt t
@@ -161,7 +161,7 @@ fun simpl_only_preunifiers ctxt tus env =
   end
 
 fun preunifiers ctxt =
-  if Config.get_generic ctxt Slam_Common.delayed_unification_simpl_only then
+  if Slam_Common.get_smart_default (Context.the_proof ctxt) Slam_Common.delayed_unification_simpl_only then
     simpl_only_preunifiers ctxt
   else
     with_timeout ctxt oo impl_preunifiers ctxt
