@@ -20,7 +20,7 @@ mkdir -p results
 file_path="$TPTP/$relative_problem_path"
 file_basename=$(basename "$file_path")
 
-echo "Running \`tptp_$tptp_command" "$@" "\` on problem $file_basename with timeout ${timeout}s."
+# echo "Running \`tptp_$tptp_command" "$@" "\` on problem $file_basename with timeout ${timeout}s."
 
 output_file_path="results/$file_basename.log"
 
