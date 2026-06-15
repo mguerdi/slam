@@ -31,11 +31,20 @@ logical_cores=$(nproc --all)
 max_procs=$((logical_cores / 2 - 2))
 max_args=$((problems_count / max_procs))
 
-echo RUNNING SLAM
-xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" slam
-# FIXME: get rid of this once num_locks is set correctly
-echo REMOVING ALL STOPPED CONTAINERS
-podman container rm --all
+ho_unification_strategies=(
+  smash_flex_flex
+  delay_flex_flex
+  simpl_only
+)
+
+for ho_unification_strategy in "${ho_unification_strategies[@]}"
+do
+  echo RUNNING SLAM VARIANT "$ho_unification_strategy"
+  xargs --arg-file="$problems_file" --max-procs=$max_procs --max-args=$max_args ./evaluation/tptp/run_tptp.sh "$results_dir" slam "$ho_unification_strategy"
+  # FIXME: get rid of this once num_locks is set correctly
+  echo REMOVING ALL STOPPED CONTAINERS
+  podman container rm --all
+done
 
 # for index in $(seq 0 25)
 # do

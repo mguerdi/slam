@@ -62,7 +62,7 @@ fun SOLVE_TIMEOUT seconds name tac st =
 fun informative_can_tac ctxt tactic conj: thm Exn.result =
   Exn.capture (Goal.prove_internal ctxt [] (Thm.cterm_of ctxt conj)) (fn [] => tactic ctxt)
 
-fun slam_tptp_file thy timeout file_name =
+fun slam_tptp_file ho_unification_strategy thy timeout file_name =
   let
     val (conjs, assms, lthy) = ATP_Problem_Import.read_tptp_file thy snd file_name
     val conj = ATP_Problem_Import.make_conj ([], []) conjs
@@ -74,7 +74,8 @@ fun slam_tptp_file thy timeout file_name =
     fun tac lthy =
       (Slam_Tactic.slam_tac [] lthy (SOME conj) assm_ths0)
       |> HEADGOAL
-      |> SOLVE_TIMEOUT timeout "slam"
+      |> SOLVE_TIMEOUT timeout ("slam_" ^ ho_unification_strategy)
+    val lthy = Config.put Slam_Common.ho_unification_strategy ho_unification_strategy lthy
   in
     informative_can_tac lthy tac conj
     |> (fn res => case res of
