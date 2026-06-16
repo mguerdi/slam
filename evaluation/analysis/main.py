@@ -1,9 +1,12 @@
 import argparse
+from dataclasses import dataclass
 from enum import Enum, auto
 from functools import total_ordering
 import os
 import random
 import math
+from typing import Any, Optional
+from matplotlib.typing import RcKeyType
 import numpy as np
 
 
@@ -126,6 +129,16 @@ class Result:
             return "timeout"
 
 
+@dataclass
+class Call:
+    goal: str
+    method: str
+    command: str
+    facts: str
+    result: Result
+    dubious_goal: Optional[bool] = None
+
+
 def parse_file(mirabelle_log, timeout_ms, only_theory, only_session):
     lines = [
         squeezed
@@ -178,14 +191,13 @@ def parse_file(mirabelle_log, timeout_ms, only_theory, only_session):
             pass
         else:
             calls.append(
-                {
-                    "goal": goal,
-                    "method": method,
-                    "command": command,
-                    "facts": facts,
-                    "result": result,
-                    "dubious_goal": None,
-                }
+                Call(
+                    goal=goal,
+                    method=method,
+                    command=command,
+                    facts=facts,
+                    result=result,
+                )
             )
 
     print(
@@ -199,12 +211,12 @@ def parse_file(mirabelle_log, timeout_ms, only_theory, only_session):
 def best(calls):
     if len(calls) == 0:
         raise RuntimeError("Empty list of calls.")
-    goal = calls[0]["goal"]
+    goal = calls[0].goal
     best_call = calls[0]
     for call in calls:
-        if call["goal"] != goal:
+        if call.goal != goal:
             raise RuntimeError("Calls don't all have the same goal.")
-        if call["result"] < best_call["result"]:
+        if call.result < best_call.result:
             best_call = call
     return best_call
 
@@ -212,17 +224,17 @@ def best(calls):
 def group_by(dictionaries, key):
     grouped = {}
     for d in dictionaries:
-        if d[key] in grouped:
-            grouped[d[key]].append(d)
+        if getattr(d, key) in grouped:
+            grouped[getattr(d, key)].append(d)
         else:
-            grouped[d[key]] = [d]
+            grouped[getattr(d, key)] = [d]
     return grouped
 
 
 def get_best_metis_by_goal(calls):
     calls_by_goal = group_by(calls, "goal")
     metis_calls_by_goal = {
-        goal: [call for call in calls if call["method"] == "metis"]
+        goal: [call for call in calls if call.method == "metis"]
         for goal, calls in calls_by_goal.items()
     }
 
@@ -236,32 +248,30 @@ def get_best_metis_by_goal(calls):
     # sorry.
     def is_dubious_set_of_calls(metis_calls):
         for metis_call in metis_calls:
-            is_call_with_ext = metis_call["facts"] == "ext" or metis_call["facts"].startswith(
-                "ext "
-            )
+            is_call_with_ext = metis_call.facts == "ext" or metis_call.facts.startswith("ext ")
             if is_call_with_ext:
-                metis_command = metis_call["command"]
+                metis_command = metis_call.command
                 assert metis_command.startswith("metis (")
-                assert metis_command.endswith(metis_call["facts"])
+                assert metis_command.endswith(metis_call.facts)
                 # "metis (..., ...)"
-                metis_command_without_facts = metis_command[: -len(metis_call["facts"])].strip()
+                metis_command_without_facts = metis_command[: -len(metis_call.facts)].strip()
 
                 def is_same_call_without_ext(other_metis_call):
-                    other_metis_command = other_metis_call["command"]
+                    other_metis_command = other_metis_call.command
                     # print(repr(other_metis_command))
-                    # print(repr(" ".join(["ext", other_metis_call["facts"]])), "vs.", repr(metis_call["facts"]))
-                    if metis_call["facts"] == "ext":
+                    # print(repr(" ".join(["ext", other_metis_call.facts])), "vs.", repr(metis_call.facts))
+                    if metis_call.facts == "ext":
                         metis_call_facts_without_ext = ""
-                    elif metis_call["facts"].startswith("ext "):
-                        metis_call_facts_without_ext = metis_call["facts"][4:]
+                    elif metis_call.facts.startswith("ext "):
+                        metis_call_facts_without_ext = metis_call.facts[4:]
                     else:
                         raise RuntimeError("we checked these conditions earlier...")
                     return (
                         other_metis_command.startswith(
                             metis_command_without_facts
                         )  # the same arguments
-                        and not other_metis_call["facts"].startswith("ext")  # no ext
-                        and other_metis_call["facts"]
+                        and not other_metis_call.facts.startswith("ext")  # no ext
+                        and other_metis_call.facts
                         == metis_call_facts_without_ext  # but the same facts otherwise
                     )
 
@@ -270,7 +280,7 @@ def get_best_metis_by_goal(calls):
                     [is_same_call_without_ext(other_metis_call) for other_metis_call in metis_calls]
                 ):
                     # print("bad list of metis calls:")
-                    print("bad call:", repr(metis_call["command"]))
+                    print("bad call:", repr(metis_call.command))
                     # for other_metis_call in metis_calls:
                     #     print(repr(other_metis_call["command"]))
                     # raise RuntimeError("Bad list of metis calls")
@@ -288,16 +298,16 @@ def get_best_metis_by_goal(calls):
 
         best_metis_call = best(metis_calls)
 
-        previously_dubious = best_metis_call["dubious_goal"]  # for sanity check
+        previously_dubious = best_metis_call.dubious_goal  # for sanity check
 
         if is_dubious_set_of_calls(metis_calls):
             assert (previously_dubious is None) or previously_dubious
-            best_metis_call["dubious_goal"] = True
+            best_metis_call.dubious_goal = True
         else:
             assert (previously_dubious is None) or not previously_dubious
-            best_metis_call["dubious_goal"] = False
+            best_metis_call.dubious_goal = False
 
-        assert best_metis_call["dubious_goal"] is not None
+        assert best_metis_call.dubious_goal is not None
 
         best_metis_by_goal[goal] = best_metis_call
 
@@ -310,7 +320,7 @@ def get_best_metis(calls):
 
 def get_call_by_goal(calls, goal):
     for call in calls:
-        if call["goal"] == goal:
+        if call.goal == goal:
             return call
     raise ValueError(f"No call with {goal} in calls.")
 
@@ -323,18 +333,18 @@ def goals_with_differing_facts(all_goals, slam_calls, metis_calls):
         slam_call = get_call_by_goal(slam_calls, goal)
         metis_call = get_call_by_goal(metis_calls, goal)
         if (
-            slam_call["facts"] != metis_call["facts"]
-        ):  # and (not metis_call["facts"].startswith("ext") or slam_call["facts"] != metis_call["facts"][4:]):
+            slam_call.facts != metis_call.facts
+        ):  # and (not metis_call.facts.startswith("ext") or slam_call.facts != metis_call.facts[4:]):
             differing_facts_goal_list.append(goal)
-            if slam_call["result"] < metis_call["result"]:
+            if slam_call.result < metis_call.result:
                 differing_facts_slam_better_goal_list.append(goal)
                 # print("DIFFERING FACTS, SLAM BETTER: " + goal)
-                # print("SLAM COMMAND: ", slam_call["command"], slam_call["result"].as_string)
-                # print("METIS COMMAND:", metis_call["command"], metis_call["result"].as_string)
-                # print("SLAM FACTS:  ", repr(slam_call["facts"]))
-                # print("METIS FACTS: ", repr(metis_call["facts"]))
-                assert metis_call["dubious_goal"] is not None
-                if metis_call["dubious_goal"]:
+                # print("SLAM COMMAND: ", slam_call.command, slam_call.result.as_string)
+                # print("METIS COMMAND:", metis_call.command, metis_call.result.as_string)
+                # print("SLAM FACTS:  ", repr(slam_call.facts))
+                # print("METIS FACTS: ", repr(metis_call.facts))
+                assert metis_call.dubious_goal is not None
+                if metis_call.dubious_goal:
                     differing_facts_slam_better_and_metis_dubious_goal_list.append(goal)
     differing_facts_goals = set(differing_facts_goal_list)
     differing_facts_slam_better_goals = set(differing_facts_slam_better_goal_list)
@@ -358,9 +368,9 @@ def summarize(
     invocation,
     exclude_differing_facts,
 ):
-    all_goals = set(call["goal"] for call in calls)
+    all_goals = set(call.goal for call in calls)
 
-    slam_calls = [call for call in calls if call["method"] == "slam"]
+    slam_calls = [call for call in calls if call.method == "slam"]
     metis_calls = get_best_metis(calls)
 
     (
@@ -394,11 +404,11 @@ def summarize(
         raise ValueError(f"invalid value {exclude_differing_facts=}")
 
     # filter ground truth
-    calls = [call for call in calls if call["goal"] not in excluded_goals]
+    calls = [call for call in calls if call.goal not in excluded_goals]
 
     # reinitialize
-    all_goals = set(call["goal"] for call in calls)
-    slam_calls = [call for call in calls if call["method"] == "slam"]
+    all_goals = set(call.goal for call in calls)
+    slam_calls = [call for call in calls if call.method == "slam"]
     metis_calls = get_best_metis(calls)
 
     # sanity check
@@ -417,11 +427,11 @@ def summarize(
         len(differing_facts_slam_better_and_metis_dubious_goals),
     )
 
-    failed = [call for call in calls if call["result"].is_failed()]
-    timed_out = [call for call in calls if call["result"].is_timeout()]
-    success = [call for call in calls if call["result"].is_success()]
+    failed = [call for call in calls if call.result.is_failed()]
+    timed_out = [call for call in calls if call.result.is_timeout()]
+    success = [call for call in calls if call.result.is_success()]
 
-    success_goals = set(call["goal"] for call in success)
+    success_goals = set(call.goal for call in success)
     always_failed_or_timed_out_goals = all_goals - success_goals
 
     # print(f"{len(failed)} calls failed")
@@ -432,9 +442,9 @@ def summarize(
     print(f"{len(always_failed_or_timed_out_goals)} goals failed or timed out (all calls)")
     print(f"{len(success_goals)} goals succeeded")
 
-    slam_fails = [call["goal"] for call in slam_calls if call["result"].is_failed()]
-    slam_timeouts = [call["goal"] for call in slam_calls if call["result"].is_timeout()]
-    slam_success = [call["goal"] for call in slam_calls if call["result"].is_success()]
+    slam_fails = [call.goal for call in slam_calls if call.result.is_failed()]
+    slam_timeouts = [call.goal for call in slam_calls if call.result.is_timeout()]
+    slam_success = [call.goal for call in slam_calls if call.result.is_success()]
 
     slam_fails_or_timeouts = slam_fails + slam_timeouts
 
@@ -442,9 +452,9 @@ def summarize(
     # print(slam_fails)
 
     # From now on "metis" means the best-performing metis variant for any particular goal.
-    metis_fails = [call["goal"] for call in metis_calls if call["result"].is_failed()]
-    metis_timeouts = [call["goal"] for call in metis_calls if call["result"].is_timeout()]
-    metis_success = [call["goal"] for call in metis_calls if call["result"].is_success()]
+    metis_fails = [call.goal for call in metis_calls if call.result.is_failed()]
+    metis_timeouts = [call.goal for call in metis_calls if call.result.is_timeout()]
+    metis_success = [call.goal for call in metis_calls if call.result.is_success()]
 
     metis_fails_or_timeouts = metis_fails + metis_timeouts
 
@@ -463,7 +473,7 @@ def summarize(
     print(
         "\n".join(
             [
-                get_call_by_goal(slam_calls, goal)["result"].as_string.ljust(12) + goal
+                get_call_by_goal(slam_calls, goal).result.as_string.ljust(12) + goal
                 for goal in sorted(
                     slam_success_metis_fail_or_timeout
                 )  # , key=lambda goal: get_call_by_goal(slam_calls, goal)["result"])
@@ -484,14 +494,14 @@ def summarize(
     print("10 easiest (to metis) problems where slam fails:")
     easiest_slam_fails = sorted(
         list(metis_success_slam_fail),
-        key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
+        key=lambda goal: get_call_by_goal(metis_calls, goal).result,
     )[:10]
     print("- " + "\n- ".join(easiest_slam_fails))
 
     print("10 easiest (to metis) problems where slam times out:")
     easiest_slam_timeouts = sorted(
         list(metis_success_slam_timeout),
-        key=lambda goal: get_call_by_goal(metis_calls, goal)["result"],
+        key=lambda goal: get_call_by_goal(metis_calls, goal).result,
     )[:10]
     print("- " + "\n- ".join(easiest_slam_timeouts))
 
@@ -503,10 +513,10 @@ def summarize(
     both_success = list(set(metis_success).intersection(set(slam_success)))
     # get_call_by_goal(slam_calls, goal)["result"].as_string + "\t\t" + goal
     slam_both_success_times = [
-        get_call_by_goal(slam_calls, goal)["result"].time_ms for goal in both_success
+        get_call_by_goal(slam_calls, goal).result.time_ms for goal in both_success
     ]
     metis_both_success_times = [
-        get_call_by_goal(metis_calls, goal)["result"].time_ms for goal in both_success
+        get_call_by_goal(metis_calls, goal).result.time_ms for goal in both_success
     ]
 
     log_slam_both_success_times = np.log(slam_both_success_times)
@@ -527,7 +537,7 @@ def summarize(
     )
 
     metis_success_slam_fail_or_timeout_times = [
-        get_call_by_goal(metis_calls, goal)["result"].time_ms
+        get_call_by_goal(metis_calls, goal).result.time_ms
         for goal in metis_success_slam_fail_or_timeout
     ]
     slam_fake_long_times = len(metis_success_slam_fail_or_timeout_times) * [8000.0]
@@ -541,7 +551,7 @@ def summarize(
     ]
 
     slam_success_metis_fail_or_timeout_times = [
-        get_call_by_goal(slam_calls, goal)["result"].time_ms
+        get_call_by_goal(slam_calls, goal).result.time_ms
         for goal in slam_success_metis_fail_or_timeout
     ]
 
@@ -634,11 +644,11 @@ def plot_success_calls(metis_calls, slam_calls, label, invocation, scale_metis=F
         label = "FAKE " + label
 
     metis_success = sorted(
-        [call for call in metis_calls if call["result"].is_success()],
-        key=lambda call: call["result"],
+        [call for call in metis_calls if call.result.is_success()],
+        key=lambda call: call.result,
     )
     metis_successes = len(metis_success)
-    metis_success_times = [call["result"].time_ms for call in metis_success]
+    metis_success_times = [call.result.time_ms for call in metis_success]
 
     if scale_metis:
         metis_cumulative_problems = [
@@ -652,11 +662,11 @@ def plot_success_calls(metis_calls, slam_calls, label, invocation, scale_metis=F
     )
 
     slam_success = sorted(
-        [call for call in slam_calls if call["result"].is_success()],
-        key=lambda call: call["result"],
+        [call for call in slam_calls if call.result.is_success()],
+        key=lambda call: call.result,
     )
     slam_successes = len(slam_success)
-    slam_success_times = [call["result"].time_ms for call in slam_success]
+    slam_success_times = [call.result.time_ms for call in slam_success]
 
     if scale_metis:
         slam_cumulative_problems = [
@@ -675,11 +685,11 @@ def summarize_diff(runs_to_diff):
         raise ValueError("Can only diff exactly two runs.")
     (left_name, left_calls), (right_name, right_calls) = runs_to_diff
 
-    left_calls = [call for call in left_calls if call["method"] == "slam"]
-    right_calls = [call for call in right_calls if call["method"] == "slam"]
+    left_calls = [call for call in left_calls if call.method == "slam"]
+    right_calls = [call for call in right_calls if call.method == "slam"]
 
-    left_goals = sorted(call["goal"] for call in left_calls)
-    right_goals = sorted(call["goal"] for call in right_calls)
+    left_goals = sorted(call.goal for call in left_calls)
+    right_goals = sorted(call.goal for call in right_calls)
 
     if left_goals != right_goals:
         left_goals_set = set(left_goals)
@@ -690,28 +700,28 @@ def summarize_diff(runs_to_diff):
         print("CONTINUING WITH INTERSECTION")
         common_goals = left_goals_set.intersection(right_goals_set)
 
-    left_by_goal = {call["goal"]: call for call in left_calls}
-    right_by_goal = {call["goal"]: call for call in right_calls}
+    left_by_goal = {call.goal: call for call in left_calls}
+    right_by_goal = {call.goal: call for call in right_calls}
 
     changed_calls = [
         (left_by_goal[goal], right_by_goal[goal])
         for goal in common_goals
-        if left_by_goal[goal]["result"].kind != right_by_goal[goal]["result"].kind
+        if left_by_goal[goal].result.kind != right_by_goal[goal].result.kind
     ]
 
     def sort_key(call_pair):
-        # print(type(call_pair[0]["result"]))
-        # print(repr((call_pair[0]["result"], call_pair[1]["result"])))
-        return (call_pair[0]["result"], call_pair[1]["result"])
+        # print(type(call_pair[0].result))
+        # print(repr((call_pair[0].result, call_pair[1].result)))
+        return (call_pair[0].result, call_pair[1].result)
 
     changed_calls.sort(key=sort_key)
 
     print(f"CHANGED GOALS from {left_name} to {right_name}")
     messages = []
     for left_call, right_call in changed_calls:
-        left_result = str(left_call["result"]).rjust(9)
-        right_result = str(right_call["result"]).rjust(9)
-        messages.append(f'{left_result} -> {right_result}: {left_call["goal"]}')
+        left_result = str(left_call.result).rjust(9)
+        right_result = str(right_call.result).rjust(9)
+        messages.append(f"{left_result} -> {right_result}: {left_call.goal}")
     for message in messages:
         print(message)
 
@@ -794,7 +804,7 @@ if __name__ == "__main__":
         from matplotlib import pyplot as plt
 
         plt.rc("axes", axisbelow=True)
-        rc_fonts = {
+        rc_fonts: dict[RcKeyType, Any] = {
             "font.family": "serif",
             "font.size": 10 if args.save_plot else 20,
             "figure.figsize": (5, 3),
