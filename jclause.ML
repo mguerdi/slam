@@ -177,7 +177,7 @@ fun lits_hash c =
   c
   |> lits_stringify_for_hash
   |> SHA1.digest
-  |> SHA1.rep
+  |> @{make_string}
   |> (fn s => String.substring (s, 0, 6))
   |> String.explode
   |> map (fn c => Char.ord c mod 10)
