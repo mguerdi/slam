@@ -232,10 +232,22 @@ fun check_type clause =
     ()
   end
 
+fun check_beta_reduced clause =
+  let
+    val term = term_of clause
+  in
+    if Term.could_beta_contract term then error "check_beta_reduced" else ()
+  end
+
 fun check_clause ctxt clause =
   if not (Config.get ctxt Slam_Common.debug_check_clauses) then () else (
-    check_maxidx clause;
-    check_type clause
+    let
+      val () =  check_maxidx clause
+      val () = check_type clause
+      val () = check_beta_reduced clause
+    in
+      ()
+    end
   )
 
 fun origin { origin = { inference , ... } , ... } = inference
