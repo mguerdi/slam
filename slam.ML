@@ -2563,10 +2563,8 @@ fun given_clause_step
     fun trace_msg_clauses tracer msg clauses =
       tracer context
         (fn () => msg ^ JClause.pretty_clauses context clauses)
-    val _ =
-      let val passive_seq = passive |> Slam_Passive_Set.seq_of in
-        Slam_Common.trace_msg_passive context (fn () => Slam_Passive_Set.pretty context 10 passive)
-      end
+    val _ = Slam_Common.trace_msg_passive context (fn () =>
+      Slam_Passive_Set.pretty context (Config.get context Slam_Common.trace_passive) passive)
 
     (* FIXME: return MAYBE_SAT (because of incompleteness) if passive set is empty (i.e. no
     inferences are possible and empty clause has not been derived). Later: no non-redundant
