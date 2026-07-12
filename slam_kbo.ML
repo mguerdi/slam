@@ -367,6 +367,7 @@ fun view_of { below_lam = below_lam, term = t as Var _, ... } =
         else
           let
             val (f, ts) = strip_comb t
+            val () = (case f of Abs _ => error ("view_of: beta-redex: " ^ @{make_string} t) | _ => ())
             val T = fastype_of1 (boundTs, f)
             val (T, ts) =
               if JTerm.is_quantifier f

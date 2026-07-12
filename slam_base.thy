@@ -48,6 +48,7 @@ ML\<open>
 \<close>
 
 ML_file \<open>slam_common.ML\<close>
+ML_file \<open>slam_lazy.ML\<close>
 ML_file \<open>slam_id.ML\<close>
 ML_file \<open>jterm.ML\<close>
 ML_file \<open>slam_symbol_table.ML\<close>
