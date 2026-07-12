@@ -170,6 +170,7 @@ sig
     (('a * 'a * bool) * ('a * 'a * bool)) ->
     Slam_Order.partial_order
   val kbo_compare_left_to_right : T -> Slam_Order.partial_order
+  val dest_smaller_greater : T -> (term * term) option
   val pretty_lit' : Proof.context -> T -> Pretty.T
   val pretty_lit : Proof.context -> T -> string
   val pretty_subterm' : Proof.context -> T -> lpos * JTerm.tpos -> Pretty.T
@@ -411,14 +412,55 @@ fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
   (* fall back to multiset comparison *)
   else Slam_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
 
-val kbo = kbo_generic Slam_KBO.ord o apply2 dest
+fun maximal_lpos (l as Lit { orientation, ... }) =
+  let
+    val (lhs, rhs, _) = dest l
+  in
+    case Orientation.get orientation of
+      SOME LeftGreater => SOME Left
+    | SOME RightGreater => SOME Right
+    | SOME Equal => NONE
+    | NONE => NONE
+  end
+
+fun dest_smaller_greater (l as Lit { orientation, ... }) =
+  let
+    val (lhs, rhs, _) = dest l
+  in
+    case Orientation.get orientation of
+      SOME LeftGreater => SOME (rhs, lhs)
+    | SOME RightGreater => SOME (lhs, rhs)
+    | SOME Equal => NONE
+    | NONE => NONE
+  end
+
+
+val kbo_naive = kbo_generic Slam_KBO.ord o apply2 dest
 
 fun kbo_compare_left_to_right (Lit { orientation, ... }) =
-  case Lazy.force orientation of
+  case Orientation.get orientation of
     SOME LeftGreater => SOME GREATER
   | SOME RightGreater => SOME LESS
   | SOME Equal => SOME EQUAL
   | NONE => NONE
+
+(* FIXME: specialize further using formalization. *)
+fun kbo_specialized (l1, l2) =
+  case dest_smaller_greater l1 of
+    SOME (smaller1, greater1) =>
+      (case dest_smaller_greater l2 of
+        SOME (smaller2, greater2) =>
+          (case Slam_KBO.ord (greater1, greater2) of
+            NONE => NONE
+          | SOME EQUAL =>
+              (case bool_ord (is_negative l1, is_negative l2) (* true > false *) of
+                EQUAL => Slam_KBO.ord (smaller1, smaller2)
+              | res => SOME res)
+          | res => res)
+      | NONE => kbo_naive (l1, l2))
+    | NONE => kbo_naive (l1, l2)
+
+val kbo = kbo_specialized
 
 fun pretty_lit' ctxt = Slam_Common.pretty_term' ctxt o term_of
 
