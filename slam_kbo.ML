@@ -29,13 +29,13 @@ signature KBO_CONFIG =
 sig
   include SLAM_WEIGHT
   include KBO_TERM
-  val var_weight : weight
-  val const_weight : weight
-  val weight_of_type_constructor : string -> weight
-  val weight_of_tfree : string -> weight
-  val weight_of_tfree_or_type_constructor : typ -> weight
-  val weight_of_fo_head : fo_head -> weight
-  val quantifier_weight : bool -> weight
+  val var_weight : Slam_Weight.weight
+  val const_weight : Slam_Weight.weight
+  val weight_of_type_constructor : string -> Slam_Weight.weight
+  val weight_of_tfree : string -> Slam_Weight.weight
+  val weight_of_tfree_or_type_constructor : typ -> Slam_Weight.weight
+  val weight_of_fo_head : fo_head -> Slam_Weight.weight
+  val quantifier_weight : bool -> Slam_Weight.weight
 
   (* debugging *)
   val prec_key_fun : term -> bool (* below_lam *) -> int
@@ -49,8 +49,8 @@ struct
 open Slam_Weight
 open KBO_Term
 
-val var_weight = (0, 1)
-val const_weight = (0, 1)
+val var_weight = Slam_Weight.make 0 1
+val const_weight = Slam_Weight.make 0 1
 
 fun weight_of_type_constructor _ = const_weight
 fun weight_of_tfree _ = const_weight
@@ -58,7 +58,7 @@ fun weight_of_tfree_or_type_constructor (TFree (name, _)) = weight_of_tfree name
   | weight_of_tfree_or_type_constructor (Type (name, _)) = weight_of_type_constructor name
 
 (* below lambdas there are only \<forall>' and \<exists>' *)
-fun quantifier_weight below_lam = if below_lam then const_weight else (1, 0)
+fun quantifier_weight below_lam = if below_lam then const_weight else Slam_Weight.make 1 0
 
 fun weight_of_fo_head _ = const_weight
 
@@ -114,11 +114,10 @@ fun weight_of { weight = weight, swapped = swapped } = (swapped ? Slam_Weight.ne
 
 fun add_weight increment added_weight { weight = weight, swapped = swapped } =
   let
-    val actually_increment = (swapped ? not) increment
+    val actually_increment = if swapped then not increment else increment
+    val delta = if actually_increment then added_weight else negate added_weight
   in
-    if actually_increment
-      then { weight = weight +++ added_weight, swapped = swapped }
-      else { weight = weight --- added_weight, swapped = swapped }
+    { weight = weight +++ delta, swapped = swapped }
   end
 
 fun swap { weight = weight, swapped = swapped } = { weight = weight, swapped = not swapped }
@@ -367,6 +366,7 @@ fun view_of { below_lam = below_lam, term = t as Var _, ... } =
         else
           let
             val (f, ts) = strip_comb t
+            val () = (case f of Abs _ => error ("view_of: beta-redex: " ^ @{make_string} t) | _ => ())
             val T = fastype_of1 (boundTs, f)
             val (T, ts) =
               if JTerm.is_quantifier f

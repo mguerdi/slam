@@ -177,7 +177,7 @@ fun lits_hash c =
   c
   |> lits_stringify_for_hash
   |> SHA1.digest
-  |> SHA1.rep
+  |> @{make_string}
   |> (fn s => String.substring (s, 0, 6))
   |> String.explode
   |> map (fn c => Char.ord c mod 10)
@@ -232,10 +232,22 @@ fun check_type clause =
     ()
   end
 
+fun check_beta_reduced clause =
+  let
+    val term = term_of clause
+  in
+    if Term.could_beta_contract term then error "check_beta_reduced" else ()
+  end
+
 fun check_clause ctxt clause =
   if not (Config.get ctxt Slam_Common.debug_check_clauses) then () else (
-    check_maxidx clause;
-    check_type clause
+    let
+      val () =  check_maxidx clause
+      val () = check_type clause
+      val () = check_beta_reduced clause
+    in
+      ()
+    end
   )
 
 fun origin { origin = { inference , ... } , ... } = inference

@@ -5,8 +5,8 @@ sig
   val trace : bool Config.T
   (* output the active set whenver it changes *)
   val trace_active : bool Config.T
-  (* output 10 passive clauses at each step *)
-  val trace_passive : bool Config.T
+  (* output the given number of passive clauses at each step *)
+  val trace_passive : int Config.T
 
   (* override slam_trace during the respective phases *)
   val trace_forward_simp : bool Config.T
@@ -268,8 +268,7 @@ val trace = Attrib.setup_config_bool \<^binding>\<open>slam_trace\<close> (K fal
 fun trace_msg ctxt msg = if Config.get ctxt trace then tracing (msg ()) else ();
 
 val trace_active = Attrib.setup_config_bool \<^binding>\<open>slam_trace_active\<close> (K true)
-(* FIXME change to int and show only that many *)
-val trace_passive = Attrib.setup_config_bool \<^binding>\<open>slam_trace_passive\<close> (K true)
+val trace_passive = Attrib.setup_config_int \<^binding>\<open>slam_trace_passive\<close> (K 10)
 
 (* override slam_trace during the respective phases *)
 val trace_forward_simp = Attrib.setup_config_bool \<^binding>\<open>slam_trace_forward_simp\<close> (K false)
@@ -322,7 +321,7 @@ val trace_all_rule_timings =
 
 (* only output if trace would *)
 fun trace_msg_active ctxt msg = if Config.get ctxt trace_active then trace_msg ctxt msg else ();
-fun trace_msg_passive ctxt msg = if Config.get ctxt trace_passive then trace_msg ctxt msg else ();
+fun trace_msg_passive ctxt msg = if Config.get ctxt trace_passive > 0 then trace_msg ctxt msg else ();
 fun trace_msg_forward_simp ctxt msg =
   if Config.get ctxt trace_forward_simp
     then trace_msg ctxt (fn () => "forward simplification: " ^ msg ())

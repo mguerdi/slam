@@ -3,24 +3,88 @@ infix 6 ---
 
 signature SLAM_WEIGHT =
 sig
-  type weight = int * int
+  type weight
+  val make : int -> int -> weight
+  val dest : weight -> int * int
   val +++ : weight * weight -> weight
   val --- : weight * weight -> weight
   val negate : weight -> weight
+  val ord : weight ord
 end;
 
-structure Slam_Weight : SLAM_WEIGHT =
+structure Slam_Weight_Paired : SLAM_WEIGHT =
 struct
 
 (* (omega, one) represents the number: omega * \<omega> + one * 1 *)
 type weight = int * int;
 
-fun plus_weight (omega, one) (omega', one') = (omega + omega', one + one')
+val make = pair
+val dest = I
+
+fun plus_weight (omega, one) (0, one') = (omega, one + one') (* just special-cased *)
+  | plus_weight (omega, one) (omega', 0) = (omega + omega', one) (* just special-cased *)
+  | plus_weight (omega, one) (omega', one') = (omega + omega', one + one')
 fun (w +++ w') = plus_weight w w'
 fun negate (omega, one) = (~omega, ~one)
 fun (w --- w') = w +++ negate w'
 
+val ord = prod_ord int_ord int_ord
+
 end;
+
+(* claude *)
+(* FIXME: crash on overflow *)
+structure Packed : sig
+  type t = FixedInt.int
+  val pack    : FixedInt.int * FixedInt.int -> t        (* (a, b), a is the major key *)
+  val unpack  : t -> FixedInt.int * FixedInt.int
+  val add     : t * t -> t
+  val sub     : t * t -> t
+  val neg     : t -> t
+  val compare : t * t -> order         (* lexicographic on (a, b) *)
+end =
+struct
+  type t = FixedInt.int
+  (* layout:  [ ......... a ......... | k bits of b ] *)
+  val k    = 16
+  val K    = 0x10000      (* 2^k     *)
+  val half = 0x8000       (* 2^(k-1) *)
+
+  fun pack (a, b) = a * K + b
+
+  fun lo v =
+      let val r = v mod K              (* 0 <= r < K, since K > 0 *)
+      in if r >= half then r - K else r end
+
+  fun hi v = (v - lo v) div K
+  fun unpack v = (hi v, lo v)
+
+  fun add (x, y) = x + y
+  fun sub (x, y) = x - y
+  fun neg x      = ~x
+  fun compare (x, y) = FixedInt.compare (x, y)
+end
+
+structure Slam_Weight_Packed : SLAM_WEIGHT =
+struct
+
+type weight = FixedInt.int
+
+fun make omega one = Packed.pack (FixedInt.fromInt omega, FixedInt.fromInt one)
+val dest = apply2 FixedInt.toInt o Packed.unpack
+
+fun plus_weight w1 w2 = w1 + w2
+
+fun (w +++ w') = w + w'
+fun negate w = ~w
+fun (w --- w') = w + ~w'
+
+val ord = FixedInt.compare
+
+end
+
+(* FIXME: try and compare to a reference-based weight *)
+structure Slam_Weight = Slam_Weight_Packed
 
 signature PARTIAL_ORD =
 sig
@@ -51,10 +115,10 @@ signature SLAM_ORDER =
 sig
   include SLAM_WEIGHT
   include PARTIAL_ORD
-  val weight_ord : weight ord
-  val zero_weight : weight
-  val var_weight : weight
-  val const_weight : weight
+  val weight_ord : Slam_Weight.weight ord
+  val zero_weight : Slam_Weight.weight
+  val var_weight : Slam_Weight.weight
+  val const_weight : Slam_Weight.weight
   val mk_multiset_order_of_strict :
         ('a * 'a -> partial_order) -> ('a list) * ('a list) -> partial_order
   val idxs_of_maximal_elements : ('a * 'a -> partial_order) -> 'a list -> (int * bool) list
@@ -70,13 +134,13 @@ struct
 open Slam_Weight
 open Partial_Ord
 
-val zero_weight = (0, 0)
+val zero_weight = Slam_Weight.make 0 0
 
 (* lexicographic comparison *)
-val weight_ord = prod_ord int_ord int_ord
+val weight_ord = Slam_Weight.ord
 
-val var_weight = (0, 1)
-val const_weight = (0, 1)
+val var_weight = Slam_Weight.make 0 1
+val const_weight = Slam_Weight.make 0 1
 
 fun multiset_eq a_eq (m, n) = submultiset a_eq (m, n) andalso submultiset a_eq (n, m)
 

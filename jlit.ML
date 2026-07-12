@@ -1,40 +1,122 @@
+(* a normalized term *)
 signature SIDE =
 sig
-  type T = { term: term, normed: bool Lazy.lazy, ground: bool Lazy.lazy }
+  type tm
+  type T (* = { term: term, normed: bool, ground: bool } *)
   val init: term -> T
-  val term: T -> term
-  val is_normed: T -> bool
+  val term: T -> unit -> term
   val is_ground: T -> bool
   val map: (term -> term) -> T -> T
   val norm_beta_eta_qeta_env : Envir.env -> T Same.operation  (*exception SAME*)
   val norm_beta_eta_qeta : T Same.operation  (*exception SAME*)
 end
 
-structure Side : SIDE =
+structure EagerSide : SIDE =
 struct
 
+type tm = term
 (* FIXME: include maxidx? *)
-type T = { term: term, normed: bool Lazy.lazy, ground: bool Lazy.lazy }
-fun init t = { term = t, normed = Lazy.lazy (fn () => JTerm.is_normed t), ground = Lazy.lazy (fn () => JTerm.is_ground t) }
-val term = #term
-val is_normed = Lazy.force o #normed
-val is_ground = Lazy.force o #ground
+type T = { term: tm, ground: bool }
+fun init t = { term = JTerm.norm_beta_eta_qeta t, ground = JTerm.is_ground t }
+fun term { term, ... } = (fn () => term) (* FIXME: can we get rid of this again? *)
+val is_ground = #ground
 fun map f { term, ... } = init (f term)
 
 fun norm_beta_eta_qeta_env env side =
   (* FIXME: add special case for normed + type-only subst (?) *)
   if Envir.is_empty env orelse is_ground side then (* no need to apply substitution *)
-    if is_normed side then
-      raise Same.SAME
-    else
-      { term = JTerm.norm_beta_eta_qeta (term side), normed = Lazy.value true, ground = Lazy.lazy (fn () => is_ground side) }
+    raise Same.SAME
   else
-    init (JTerm.norm_beta_eta_qeta_env env (term side))
+    init (JTerm.norm_beta_eta_qeta_env env (term side ()))
 
 val norm_beta_eta_qeta = norm_beta_eta_qeta_env Envir.init
 
 end
 
+(* Slower than EagerSide? *)
+structure LazySide : SIDE =
+struct
+
+structure RetainLazy = SimpleRetainLazy
+
+(* FIXME: include maxidx? *)
+type tm = term RetainLazy.lazy
+type T = { term: tm, ground: bool Lazy.lazy }
+fun init t = { term = RetainLazy.lazy JTerm.norm_beta_eta_qeta t, ground = Lazy.lazy (fn () => JTerm.is_ground t) }
+fun term { term, ... } = (fn () => RetainLazy.force term)
+val is_ground = Lazy.force o #ground
+fun map f side = init (f (term side ()))
+
+fun norm_beta_eta_qeta_env env side =
+  (* FIXME: add special case for normed + type-only subst (?) *)
+  if Envir.is_empty env orelse is_ground side then (* no need to apply substitution *)
+    raise Same.SAME
+  else
+    init (JTerm.norm_beta_eta_qeta_env env (RetainLazy.get_any (#term side)))
+
+val norm_beta_eta_qeta = norm_beta_eta_qeta_env Envir.init
+
+end
+
+structure Side: SIDE = LazySide
+
+(* a known orientation *)
+datatype orientation = LeftGreater | RightGreater | Equal
+
+signature ORIENTATION =
+sig
+  structure Side : SIDE
+  type tm
+  type T
+
+  val swap: T -> T
+  val init : Side.T -> Side.T -> T
+  val get: T -> orientation option
+end
+
+functor EagerOrientation(Side : SIDE) : ORIENTATION =
+struct
+  structure Side: SIDE = Side;
+
+  type tm = term
+
+  fun impl_swap LeftGreater = RightGreater
+    | impl_swap RightGreater = LeftGreater
+    | impl_swap Equal = Equal
+
+  type T = orientation option
+
+  val swap = Option.map impl_swap
+
+  (* FIXME: pass in sides, and fail if NONE but ground (sanity check) *)
+  fun init lhs rhs =
+    case Slam_KBO.ord (Side.term lhs (), Side.term rhs ()) of
+      SOME GREATER => SOME LeftGreater
+    | SOME EQUAL => SOME Equal
+    | SOME LESS => SOME RightGreater
+    | NONE => NONE
+
+  fun get (x : T) = x
+end
+
+functor LazyOrientation(Side : SIDE) : ORIENTATION =
+struct
+  structure Side: SIDE = Side;
+  structure EagerOrientation = EagerOrientation(Side);
+  type tm = unit -> term
+
+  type T = EagerOrientation.T Lazy.lazy
+
+  val swap = Lazy.map EagerOrientation.swap
+
+  (* FIXME: pass in sides, and fail if NONE but ground (sanity check) *)
+  fun init lhs rhs =
+    Lazy.lazy (fn () => EagerOrientation.init lhs rhs)
+
+  fun get (x : T) = (Lazy.force x : orientation option)
+end
+
+structure Orientation = LazyOrientation(Side)
 
 signature JLIT =
 sig
@@ -88,6 +170,7 @@ sig
     (('a * 'a * bool) * ('a * 'a * bool)) ->
     Slam_Order.partial_order
   val kbo_compare_left_to_right : T -> Slam_Order.partial_order
+  val dest_smaller_greater : T -> (term * term) option
   val pretty_lit' : Proof.context -> T -> Pretty.T
   val pretty_lit : Proof.context -> T -> string
   val pretty_subterm' : Proof.context -> T -> lpos * JTerm.tpos -> Pretty.T
@@ -100,51 +183,36 @@ end;
 structure JLit : JLIT =
 struct
 
-(* a known orientation *)
-datatype orientation = LeftGreater | RightGreater | Equal
-
-fun impl_swap_orientation LeftGreater = RightGreater
-  | impl_swap_orientation RightGreater = LeftGreater
-  | impl_swap_orientation Equal = Equal
-
-val swap_orientation = Lazy.map (Option.map impl_swap_orientation)
-
-
 datatype T =
   Lit of
     { lhs: Side.T
     , rhs: Side.T
     , pol: bool
-    , orientation: orientation option Lazy.lazy
+    , orientation: Orientation.T
     }
 
 datatype lpos = Left | Right
 
-(* FIXME: pass in sides, and fail if NONE but ground (sanity check) *)
-fun compute_orientation_lazy lhs rhs = Lazy.lazy (fn () =>
-  case Slam_KBO.ord (lhs, rhs) of
-    SOME GREATER => SOME LeftGreater
-  | SOME EQUAL => SOME Equal
-  | SOME LESS => SOME RightGreater
-  | NONE => NONE
-)
-
 fun mk (lhs, rhs, is_positive) =
-  Lit { lhs = Side.init lhs, rhs = Side.init rhs, pol = is_positive, orientation = compute_orientation_lazy lhs rhs }
+  let
+    val (lhs, rhs) = apply2 Side.init (lhs, rhs)
+  in
+    Lit { lhs = lhs, rhs = rhs, pol = is_positive, orientation = Orientation.init lhs rhs }
+  end
 
 fun mk_from_sides (lhs: Side.T, rhs: Side.T, is_positive: bool) : T =
-  Lit { lhs = lhs, rhs = rhs, pol = is_positive, orientation = compute_orientation_lazy (Side.term lhs) (Side.term rhs) }
+  Lit { lhs = lhs, rhs = rhs, pol = is_positive, orientation = Orientation.init lhs rhs }
 
 (* FIXME: deprecate? *)
-fun dest (Lit { lhs, rhs, pol, ... }) = (Side.term lhs, Side.term rhs, pol)
+fun dest (Lit { lhs, rhs, pol, ... }) = (Side.term lhs (), Side.term rhs (), pol)
 
-fun fold f (Lit { lhs, rhs, ... }) = f (Side.term lhs) #> f (Side.term rhs)
+fun fold f (Lit { lhs, rhs, ... }) = f (Side.term lhs ()) #> f (Side.term rhs ())
 
-fun fold_with_lpos f (Lit { lhs, rhs, ...}) = f Left (Side.term lhs) #> f Right (Side.term rhs)
+fun fold_with_lpos f (Lit { lhs, rhs, ...}) = f Left (Side.term lhs ()) #> f Right (Side.term rhs ())
 
-fun any_side p (Lit { lhs, rhs, ... }) = p (Side.term lhs) orelse p (Side.term rhs)
+fun any_side p (Lit { lhs, rhs, ... }) = p (Side.term lhs ()) orelse p (Side.term rhs ())
 
-fun both_sides p (Lit { lhs, rhs, ... }) = p (Side.term lhs) andalso p (Side.term rhs)
+fun both_sides p (Lit { lhs, rhs, ... }) = p (Side.term lhs ()) andalso p (Side.term rhs ())
 
 fun is_positive (Lit { pol, ... }) = pol
 
@@ -152,8 +220,8 @@ val is_negative = not o is_positive
 
 fun is_negativoid (l as Lit { lhs, rhs, ... }) =
   is_negative l
-    orelse JTerm.is_false (Side.term lhs) andalso not (JTerm.is_false (Side.term rhs))
-    orelse JTerm.is_false (Side.term rhs) andalso not (JTerm.is_false (Side.term lhs))
+    orelse JTerm.is_false (Side.term lhs ()) andalso not (JTerm.is_false (Side.term rhs ()))
+    orelse JTerm.is_false (Side.term rhs ()) andalso not (JTerm.is_false (Side.term lhs ()))
 
 fun is_negative_or_negativoid_cfg ctxt =
   if Config.get ctxt (Slam_Common.select_negativoid)
@@ -221,7 +289,7 @@ fun of_term t =
 
 fun aconv_as (Lit { lhs = s, rhs = t, pol = b, ... }, Lit { lhs = s', rhs = t', pol = b', ... }) =
   let
-    val (s, t, s', t') = (Side.term s, Side.term t, Side.term s', Side.term t')
+    val (s, t, s', t') = (Side.term s (), Side.term t (), Side.term s' (), Side.term t' ())
   in
     if b <> b' then NONE
     else if Term.aconv (s, s') andalso Term.aconv (t, t') then SOME Left
@@ -232,7 +300,7 @@ fun aconv_as (Lit { lhs = s, rhs = t, pol = b, ... }, Lit { lhs = s', rhs = t', 
 val aconv = is_some o aconv_as
 
 fun swap (Lit { lhs, rhs, pol, orientation }) =
-  Lit { lhs = rhs, rhs = lhs, pol = pol, orientation = swap_orientation orientation }
+  Lit { lhs = rhs, rhs = lhs, pol = pol, orientation = Orientation.swap orientation }
 
 fun negate (Lit { lhs, rhs, pol, orientation }) =
   (Lit { lhs = lhs, rhs = rhs, pol = not pol, orientation = orientation })
@@ -244,10 +312,10 @@ fun is_pred lit = is_positive lit andalso any_side JTerm.is_truth_value lit
 
 fun dest_pred (Lit { lhs, rhs, pol = true, ... }) =
   (* FIXME: what about when both are truth values? do we prefer an orientation? *)
-  if JTerm.is_truth_value (Side.term rhs)
-    then (Side.term lhs, Side.term rhs)
-  else if JTerm.is_truth_value (Side.term lhs)
-    then (Side.term rhs, Side.term lhs)
+  if JTerm.is_truth_value (Side.term rhs ())
+    then (Side.term lhs (), Side.term rhs ())
+  else if JTerm.is_truth_value (Side.term lhs ())
+    then (Side.term rhs (), Side.term lhs ())
   else error "neither is HOL.True or HOL.False"
   (* FIXME: allow disequations? (see similar comment above mk_pred) *)
   | dest_pred _ = error "disequation"
@@ -295,7 +363,7 @@ fun norm_beta_eta_qeta_env env (l as Lit { lhs, rhs, pol, ... }: T) =
   end
 
 fun term_of (Lit { lhs = s, rhs = t, pol = b, ... }) =
-  (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (Side.term s, Side.term t))
+  (if b then I else HOLogic.mk_not) (HOLogic.mk_eq (Side.term s (), Side.term t ()))
 
 (* law: term_at_lpos lp (s, t, b) = JTerm.subterm_at (as_tpos b lp) (term_of (s, t, b)) *)
 fun as_tpos true Left = [1]
@@ -303,8 +371,8 @@ fun as_tpos true Left = [1]
   | as_tpos false Left = [1, 1]
   | as_tpos false Right = [1, 2]
 
-fun term_at_lpos (Lit { lhs, ... }) Left = Side.term lhs
-  | term_at_lpos (Lit { rhs, ... }) Right = Side.term rhs
+fun term_at_lpos (Lit { lhs, ... }) Left = Side.term lhs ()
+  | term_at_lpos (Lit { rhs, ... }) Right = Side.term rhs ()
 
 fun orient Left lit = lit
   | orient Right lit = swap lit
@@ -318,7 +386,7 @@ fun map_at_lpos Left f (Lit { lhs, rhs, pol, ... }) = mk_from_sides (Side.map f 
 
 fun occurs_deeply_in x = any_side (JTerm.occurs_deeply_in x)
 
-fun maxidx_of (Lit { lhs, rhs, ... }) = Int.max (apply2 (maxidx_of_term o Side.term) (lhs, rhs))
+fun maxidx_of (Lit { lhs, rhs, ... }) = Int.max (apply2 (maxidx_of_term o (fn s => Side.term s ())) (lhs, rhs))
 
 fun kbo_generic_different_signs_greater cmp ((s, t, st_pos), (u, v, uv_pos)) =
   (* different signs => never equal *)
@@ -344,14 +412,55 @@ fun kbo_generic cmp (st as (s, t, st_pos), uv as (u, v, uv_pos)) =
   (* fall back to multiset comparison *)
   else Slam_Order.mk_multiset_order_of_strict cmp ([s, t], [u, v])
 
-val kbo = kbo_generic Slam_KBO.ord o apply2 dest
+fun maximal_lpos (l as Lit { orientation, ... }) =
+  let
+    val (lhs, rhs, _) = dest l
+  in
+    case Orientation.get orientation of
+      SOME LeftGreater => SOME Left
+    | SOME RightGreater => SOME Right
+    | SOME Equal => NONE
+    | NONE => NONE
+  end
+
+fun dest_smaller_greater (l as Lit { orientation, ... }) =
+  let
+    val (lhs, rhs, _) = dest l
+  in
+    case Orientation.get orientation of
+      SOME LeftGreater => SOME (rhs, lhs)
+    | SOME RightGreater => SOME (lhs, rhs)
+    | SOME Equal => NONE
+    | NONE => NONE
+  end
+
+
+val kbo_naive = kbo_generic Slam_KBO.ord o apply2 dest
 
 fun kbo_compare_left_to_right (Lit { orientation, ... }) =
-  case Lazy.force orientation of
+  case Orientation.get orientation of
     SOME LeftGreater => SOME GREATER
   | SOME RightGreater => SOME LESS
   | SOME Equal => SOME EQUAL
   | NONE => NONE
+
+(* FIXME: specialize further using formalization. *)
+fun kbo_specialized (l1, l2) =
+  case dest_smaller_greater l1 of
+    SOME (smaller1, greater1) =>
+      (case dest_smaller_greater l2 of
+        SOME (smaller2, greater2) =>
+          (case Slam_KBO.ord (greater1, greater2) of
+            NONE => NONE
+          | SOME EQUAL =>
+              (case bool_ord (is_negative l1, is_negative l2) (* true > false *) of
+                EQUAL => Slam_KBO.ord (smaller1, smaller2)
+              | res => SOME res)
+          | res => res)
+      | NONE => kbo_naive (l1, l2))
+    | NONE => kbo_naive (l1, l2)
+
+val kbo = kbo_specialized
 
 fun pretty_lit' ctxt = Slam_Common.pretty_term' ctxt o term_of
 

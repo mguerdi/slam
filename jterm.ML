@@ -315,14 +315,20 @@ leaves. *)
 (* NOTE: In particular all heads are considered non green subterms! *)
 fun fold_non_greens f = fold_non_greens_lvl (K f) 0
 
+local
+
+fun is_not_ground_type T =
+  fold_atyps (fn U => fn acc => acc orelse is_TVar U) T false
+
+fun is_immediate_not_ground_term (Var _) = true
+  | is_immediate_not_ground_term _ = false (* need to look further down *)
+
+in
+
 (* "A raw \<lambda>-term is ground if it is built without using type variables and contains no free term
 variables" *)
-fun is_not_ground t =
+fun is_not_ground_old t =
   let
-    fun is_not_ground_type T =
-      fold_atyps (fn U => fn acc => acc orelse is_TVar U) T false
-    fun is_immediate_not_ground_term (Var _) = true
-      | is_immediate_not_ground_term _ = false (* need to look further down *)
   in
     fold_term_types
       (fn t => fn T => fn acc =>
@@ -330,6 +336,30 @@ fun is_not_ground t =
       t
       false
   end
+
+fun ingT (TVar _) = true
+  | ingT (Type (_, Ts)) = exists ingT Ts
+  | ingT (TFree _) = false
+
+fun ingt (Var _) = true
+  | ingt (s $ t) = ingt s orelse ingt t
+  | ingt (Abs (_, T, u)) = ingT T orelse ingt u
+  | ingt (Free (_, T)) = ingT T
+  | ingt (Const (_, T)) = ingT T
+  | ingt (Bound _) = false
+
+fun is_not_ground_debug t =
+  let
+    val old = is_not_ground_old t
+    val new = ingt t
+    val () = if old <> new then error ("disagree about " ^ @{make_string} t ^ ": old=" ^ @{make_string} old ^ ", new=" ^ @{make_string} new) else ()
+  in
+    new
+  end
+
+val is_not_ground = ingt
+
+end
 
 val is_ground = not o is_not_ground
 
