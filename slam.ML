@@ -2320,47 +2320,43 @@ fun map_filter_partition ctxt f x (archive, changed) =
           the simplification steps that led to deletion for proof reconstruction. *)
           { simplifications = [], archive = new_archive } =>
             (x :: archive, changed)
-        | { simplifications = [y], archive = new_archive } =>
-            (* One simplification, check the id to see if it is actually the original clause and no
-            simplification was performed. *)
-            if JClause.id y <> JClause.id x
-              (* id changed, clause was simplified *)
-              then (new_archive @ archive, y :: changed)
-              (* clause was not simplified *)
-              else
-                if null new_archive
-                  then (archive, changed)
-                  (* error *)
-                  else (
-                    let
-                      fun trace_msg_clauses tracer msg clauses =
-                        tracer ctxt
-                          (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
-                      val () =
-                        trace_msg_clauses
-                          Slam_Common.trace_msg_backward_simp
-                          "active clause, single simplified active"
-                          [x,y]
-                      val () = Slam_Common.trace_msg_backward_simp ctxt (fn () =>
-                        "with ids: "
-                        ^ @{make_string} (JClause.id x)
-                        ^ " and "
-                        ^ @{make_string} (JClause.id y))
-                      val () =
-                        trace_msg_clauses
-                          Slam_Common.trace_msg_archive
-                          "intermediate simplificaitons"
-                          new_archive
-                    in
-                      error ("map_filter_partition: clause id was unchanged, but intermediate " ^
-                        "simplifications returned.")
-                    end)
-        (* This cannot happen in backwards simplification, because all the unary simplification
-        rules (some of which have multiple conclusions) have been applied to active clauses already,
-        so the only simplifications that apply are binary one between the active clause and the
-        given clause. None of these yield multiple conclusions (this could change in the future). *)
-        | ys => error ("map_filter_partition: multiple simplifications in backward " ^
-            "simplification but there is no binary simplification with multiple conclusions!")
+        | { simplifications = ys, archive = new_archive } =>
+            let
+              val new_clauses = filter_out (fn y => JClause.id x = JClause.id y) ys
+            in
+              case new_clauses of
+                _::_ => (new_archive @ archive, ys @ changed)
+              | [] =>
+                  if null new_archive andalso length ys = 1
+                    (* original clause was returned, no simplification was performed (unchanged id) *)
+                    then (archive, changed)
+                    (* error *)
+                    else (
+                      let
+                        fun trace_msg_clauses tracer msg clauses =
+                          tracer ctxt
+                            (fn () => msg ^ JClause.pretty_clauses ctxt clauses)
+                        val () =
+                          trace_msg_clauses
+                            Slam_Common.trace_msg_backward_simp
+                            "active clause, single simplified actives (all with the same id)"
+                            (x::ys)
+                        val () = Slam_Common.trace_msg_backward_simp ctxt (fn () =>
+                          "with ids: "
+                          ^ @{make_string} (JClause.id x)
+                          ^ " and "
+                          ^ @{make_string} (map JClause.id ys))
+                        val () =
+                          trace_msg_clauses
+                            Slam_Common.trace_msg_archive
+                            "intermediate simplificaitons"
+                            new_archive
+                      in
+                        error ("map_filter_partition: clause id was unchanged, but intermediate " ^
+                          "simplifications returned.")
+                      end)
+            end
+
 
 (* Returns a 3-tuple of:
 * redundant actives and intermediate simplifications (for archival)
