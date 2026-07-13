@@ -229,7 +229,7 @@ fun ord
           (Abs (_, T, t), Abs (_, U, u)) =>
             (case Term_Ord.typ_ord (T, U) of EQUAL => open_ord (smallestFree + 1) (t, u) | r => r)
         | (t1 $ t2, u1 $ u2) =>
-            (case open_ord smallestFree (t1, t2) of EQUAL => open_ord smallestFree (u1, u2) | r => r)
+            (case open_ord smallestFree (t1, u1) of EQUAL => open_ord smallestFree (t2, u2) | r => r)
         | (Bound i, Bound j) =>
             (case int_ord (i, j) of
               (* FIXME: cache the results of this comparison for each loose bound var *)
