@@ -317,11 +317,11 @@ fun select_first_heaviest_neg_lit ctxt lits =
       |> filter (fn (cpos, lit) => is_selectable ctxt lit)
     fun size_of_lit l = JLit.fold (fn t => fn acc => acc + size_of_term t) l 0
     val size_of_neg_lits = map (apsnd size_of_lit) neg_lits_cposs
-    fun go_max (next_weight, next_lp) (current_weight, current_lp) =
-      if next_weight > current_weight then (next_weight, SOME next_lp) else (current_weight, current_lp)
-    val (_, lp) = fold go_max size_of_neg_lits (0, NONE)
+    fun go_max (next_cp, next_weight) (current_cp, current_weight) =
+      if next_weight > current_weight then (SOME next_cp, next_weight) else (current_cp, current_weight)
+    val (cp, _) = fold go_max size_of_neg_lits (NONE, 0)
   in
-    the_list lp
+    the_list cp
   end
 
 fun select_first_most_var_neg_lit ctxt lits =
@@ -338,11 +338,11 @@ fun select_first_most_var_neg_lit ctxt lits =
       |> JLit.fold Vars.add_vars l
       |> Vars.size
     val var_count_of_neg_lits = map (apsnd number_of_distinct_vars) neg_lits_cposs
-    fun go_max (next_var_count, next_lp) (current_var_count, current_lp) =
-      if next_var_count > current_var_count then (next_var_count, SOME next_lp) else (current_var_count, current_lp)
-    val (_, lp) = fold go_max var_count_of_neg_lits (0, NONE)
+    fun go_max (next_cp, next_var_count) (current_cp, current_var_count) =
+      if next_var_count > current_var_count then (SOME next_cp, next_var_count) else (current_cp, current_var_count)
+    val (cp, _) = fold go_max var_count_of_neg_lits (NONE, 0)
   in
-    the_list lp
+    the_list cp
   end
 
 val literal_selection_functions =
