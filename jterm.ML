@@ -37,7 +37,6 @@ sig
   (* normalization *)
   val norm_beta_eta_qeta_env : Envir.env -> term -> term
   val norm_beta_eta_qeta : term -> term
-  val ensure_lambda_under_q : term -> term
   val is_normed : term -> bool
   (* skolemization *)
   val make_skolem_constant :
@@ -525,29 +524,29 @@ fun norm_beta_eta_env env = Envir.eta_contract o Envir.norm_term env
 
 end
 
-fun eta_expand_once t =
+fun eta_expand_once Ts t =
   let
-    val (T, _) = dest_funT (fastype_of t)
+    val (T, _) = dest_funT (fastype_of1 (Ts, t))
   in
     Abs(Name.uu, T, incr_boundvars 1 t $ Bound 0)
   end
 
 (* Q t \<mapsto> Q (\<lambda>x. t x) *)
-fun ensure_lambda_under_q (Abs (x, T, t)) = Abs (x, T, ensure_lambda_under_q t)
-  | ensure_lambda_under_q (t $ (u as (Abs _))) = ensure_lambda_under_q t $ ensure_lambda_under_q u
-  | ensure_lambda_under_q (t $ u) =
+fun ensure_lambda_under_q Ts (Abs (x, T, t)) = Abs (x, T, ensure_lambda_under_q (T::Ts) t)
+  | ensure_lambda_under_q Ts (t $ (u as (Abs _))) = ensure_lambda_under_q Ts t $ ensure_lambda_under_q Ts u
+  | ensure_lambda_under_q Ts (t $ u) =
       if is_quantifier t
         then
           (* \<eta>-expand u (which is not a \<lambda>-expression!) *)
-          t $ eta_expand_once (ensure_lambda_under_q u)
-        else ensure_lambda_under_q t $ ensure_lambda_under_q u
-  | ensure_lambda_under_q (t as Free _) = t
-  | ensure_lambda_under_q (t as Const _) = t
-  | ensure_lambda_under_q (t as Var _) = t
-  | ensure_lambda_under_q (t as Bound _) = t
+          t $ eta_expand_once Ts (ensure_lambda_under_q Ts u)
+        else ensure_lambda_under_q Ts t $ ensure_lambda_under_q Ts u
+  | ensure_lambda_under_q Ts (t as Free _) = t
+  | ensure_lambda_under_q Ts (t as Const _) = t
+  | ensure_lambda_under_q Ts (t as Var _) = t
+  | ensure_lambda_under_q Ts (t as Bound _) = t
 
 (* apply substitution and normalize (compare Envir.beta_eta_contract) *)
-fun norm_beta_eta_qeta_env env = ensure_lambda_under_q o norm_beta_eta_env env
+fun norm_beta_eta_qeta_env env = ensure_lambda_under_q [] o norm_beta_eta_env env
 
 (* applies \<beta> and \<eta> reduction and the rewrite rule
     Q t \<mapsto> Q (\<lambda>x. t x)
