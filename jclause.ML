@@ -22,6 +22,7 @@ sig
   val maxidx : T -> int
   val maxidx_of2 : T * T -> int
   val set_maxidx : int -> T -> T
+  val set_maxidx_if_greater : int -> T -> T
   val recalculate_maxidx : T -> T
   val set_origin : Proof.context -> int Slam_Log.inference -> T -> T
   val origin : T -> int Slam_Log.inference
@@ -202,6 +203,8 @@ fun map_maxidx f { literals, id, maxidx, origin, selected } =
 
 fun set_maxidx maxidx = map_maxidx (K maxidx)
 
+fun set_maxidx_if_greater new = map_maxidx (curry Int.max new)
+
 fun check_maxidx clause =
   let
     val actual = maxidx_of_literal_list (literals clause)
@@ -226,8 +229,8 @@ fun term_of { literals = [], ... } = @{term False}
 
 fun check_type clause =
   let
-    val term = term_of clause
-    val typ = type_of term
+    val term: term = term_of clause
+    val typ: typ = type_of term
   in
     ()
   end
