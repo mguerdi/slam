@@ -307,14 +307,54 @@ fun select_first_maximal_neg_lit ctxt lits =
     | _ => []
   end
 
+fun select_first_heaviest_neg_lit ctxt lits =
+  let
+    val neg_lits_cposs =
+      lits
+      |> map_index I
+      (* FIXME: maybe the blocker disallowing for selection of literals with a variable-headed side
+      is really important? *)
+      |> filter (fn (cpos, lit) => is_selectable ctxt lit)
+    fun size_of_lit l = JLit.fold (fn t => fn acc => acc + size_of_term t) l 0
+    val size_of_neg_lits = map (apsnd size_of_lit) neg_lits_cposs
+    fun go_max (next_weight, next_lp) (current_weight, current_lp) =
+      if next_weight > current_weight then (next_weight, SOME next_lp) else (current_weight, current_lp)
+    val (_, lp) = fold go_max size_of_neg_lits (0, NONE)
+  in
+    the_list lp
+  end
+
+fun select_first_most_var_neg_lit ctxt lits =
+  let
+    val neg_lits_cposs =
+      lits
+      |> map_index I
+      (* FIXME: maybe the blocker disallowing for selection of literals with a variable-headed side
+      is really important? *)
+      |> filter (fn (cpos, lit) => is_selectable ctxt lit)
+    fun var_count_of_lit l = JLit.fold (fn t => fn acc => acc + size_of_term t) l 0
+    fun number_of_distinct_vars l =
+      Vars.empty
+      |> JLit.fold Vars.add_vars l
+      |> Vars.size
+    val var_count_of_neg_lits = map (apsnd number_of_distinct_vars) neg_lits_cposs
+    fun go_max (next_var_count, next_lp) (current_var_count, current_lp) =
+      if next_var_count > current_var_count then (next_var_count, SOME next_lp) else (current_var_count, current_lp)
+    val (_, lp) = fold go_max var_count_of_neg_lits (0, NONE)
+  in
+    the_list lp
+  end
+
 val literal_selection_functions =
-  ["select_none", "select_all_neg_lit", "select_first_neg_lit", "select_first_maximal_neg_lit"]
+  ["select_none", "select_all_neg_lit", "select_first_neg_lit", "select_first_maximal_neg_lit", "select_first_heaviest_neg_lit", "select_first_most_var_neg_lit"]
 
 fun literal_selection_function_from_name name = case name of
   "select_none" => select_none
   | "select_all_neg_lit" => select_all_neg_lit
   | "select_first_neg_lit" => select_first_neg_lit
   | "select_first_maximal_neg_lit" => select_first_maximal_neg_lit
+  | "select_first_heaviest_neg_lit" => select_first_heaviest_neg_lit
+  | "select_first_most_var_neg_lit" => select_first_most_var_neg_lit
   | name =>
     if member (op=) literal_selection_functions name
       then error ("BUG: JClause.literal_selection_functions and " ^
