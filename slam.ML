@@ -1309,16 +1309,25 @@ fun infer_arg_cong ctxt (c, cpos, eligibility) =
             (fastype_of s, function_type)
             (Envir.empty new_maxidx)
 
+        val c_instance =
+          c
+          |> JClause.norm_beta_eta_qeta_env ctxt unifier
+
+        val (s_instance, s'_instance, true) = JLit.dest (JClause.lit_at cpos c_instance)
+
+        val fresh_variables_instances : term list =
+          map (JTerm.norm_beta_eta_qeta_env unifier) fresh_variables
+
         val new_literal =
-          (s, s')
-          |> apply2 (fn t => list_comb (t, fresh_variables))
+          (s_instance, s'_instance)
+          |> apply2 (fn t => list_comb (t, fresh_variables_instances))
           |> (fn (x, y) => (x, y, true))
           |> JLit.mk
 
         val new_clause =
-          c
-          |> JClause.map_at_cpos cpos (K new_literal)
-          |> JClause.norm_beta_eta_qeta_env ctxt unifier (* sets maxidx *)
+          c_instance
+          |> JClause.map_at_cpos cpos (K new_literal) (* JLit.mk already normalized *)
+          |> JClause.set_maxidx_if_greater (JLit.maxidx_of new_literal)
           |> JClause.norm_negative_predicate_literals ctxt
           |> JClause.recompute_selected ctxt
           |> JClause.set_origin ctxt
