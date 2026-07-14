@@ -176,7 +176,15 @@ fun imitate_project ctxt { flex, rigid } env =
         [(flex, rigid)]
         ~1
     val env = Envir.merge (Envir.empty maxidx, env)
-    (* FIXME: do flex and rigid have to have the same type? *)
+
+    (* FIXME: Pattern.unify_types if this function needs to be generalized *)
+    val () =
+      if fastype_of flex <> fastype_of rigid
+        then error "imitate_project: flex and rigid have different types"
+        else ()
+
+    (* \<eta>-expand, required by MATCH, originally established by SIMPL0 *)
+    val (dpair, env) = Slam_Isabelle_Unify.head_norm_dpair ctxt (env, ([], flex, rigid))
 
     fun make_preunifier (env, dpairs) =
       let
@@ -188,9 +196,10 @@ fun imitate_project ctxt { flex, rigid } env =
       end
   in
     (* FIXME: magic number *)
-    Slam_Isabelle_Unify.MATCH (Slam_Fuel.new 100000) ctxt (env, ([], flex, rigid), [])
+    Slam_Isabelle_Unify.MATCH (Slam_Fuel.new 100000) ctxt (env, dpair, [])
     |> Seq.map make_preunifier
   end
+  handle Slam_Isabelle_Unify.CANTUNIFY => Seq.empty
 
 fun upto_exp first last =
   if first < 0 orelse last < first then error ("first (" ^ @{make_string} first ^ ") or last (" ^ @{make_string} last ^ ") too small") else
