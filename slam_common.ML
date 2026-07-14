@@ -682,7 +682,7 @@ fun get_sup_variable_condition ctxt =
   parse_sup_variable_condition (Config.get ctxt sup_variable_condition)
 
 (* FIXME: unnecessary now that we have SIMPL-only delayed unification? *)
-val neg_cong_fun_reveal_variable_headed = Attrib.setup_config_bool \<^binding>\<open>slam_neg_cong_fun_reveal_variable_headed\<close> (K true)
+val neg_cong_fun_reveal_variable_headed = Attrib.setup_config_bool \<^binding>\<open>slam_neg_cong_fun_reveal_variable_headed\<close> (K false)
 
 (* FIXME: split into sup_into_var_headed, ... *)
 val sup_into_fluid = Attrib.setup_config_bool \<^binding>\<open>slam_sup_into_fluid\<close> (K true)
