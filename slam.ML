@@ -322,6 +322,8 @@ fun simp_flex_flex ctxt c =
 (* FIXME: Can this ever be used as a simplification? (i.e. if all imitations / projections are
 enumerated) *)
 (* FIXME: selection, ordering constraints *)
+(* Similar to Vampire's Imitate/Project but removes the target literal by decomposing it. This
+prevents the conclusion being (higher-order) subsumed by the premise. *)
 fun infer_imitate_project ctxt (c, cp, eligibility) =
   let
     val tracer =
@@ -347,8 +349,8 @@ fun infer_imitate_project ctxt (c, cp, eligibility) =
         val instance = JClause.norm_beta_eta_qeta_env ctxt substitution c
       in
         if not (JClause.is_eligible_cpos instance (cp, eligibility)) then fail NONE (K "literal not eligible") else
-        c
-        |> JClause.norm_beta_eta_qeta_env ctxt substitution
+        instance
+        |> JClause.delete_lit_at ctxt cp (* remove literal to prevent subsumption by premise *)
         |> fold (JClause.add_literal ctxt o uncurry JLit.mk_neq) dpairs
         |> JClause.norm_negative_predicate_literals ctxt
         |> JClause.recompute_selected ctxt
