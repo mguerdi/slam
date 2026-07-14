@@ -336,7 +336,10 @@ fun infer_imitate_project ctxt (c, cp, eligibility) =
   let
     val (flex, rigid, false) = JLit.dest_known_flex_rigid l
     val preunifiers =
-      Slam_Unify.imitate_project (Context.Proof ctxt) { flex = flex, rigid = rigid } Envir.init
+      Slam_Unify.imitate_project
+        (Context.Proof ctxt)
+        { flex = flex, rigid = rigid }
+        (Envir.empty (JClause.maxidx c))
     val (preunifiers, _) = Seq.chop (Slam_Common.get_unifier_cutoff ctxt) preunifiers
     val () = if 0 = length preunifiers then fail () (K "no preunifiers") else ()
     fun build_conclusion (substitution, dpairs) =

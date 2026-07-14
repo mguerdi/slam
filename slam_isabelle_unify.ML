@@ -27,6 +27,7 @@ sig
         ((string * typ) list * term * term) list
   type binderlist = (string * typ) list;
   type dpair = binderlist * term * term;
+  val head_norm_dpair : Context.generic -> Envir.env * dpair -> dpair * Envir.env
   val MATCH : Slam_Fuel.fuel ->
       Context.generic ->
         Envir.env * ((string * typ) list * term * term) *
