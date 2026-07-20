@@ -60,9 +60,9 @@ fun slam_tac options ctxt goal_term ths i st0 =
       if exists (curry (op =) "dump") options
         then
           (let val _ = dump := state :: (!dump) in
-            (writeln "EXCEPTION WAS RAISED! Prover state dumped to Slam_Tactic.dump"; raise e)
+            (writeln "EXCEPTION WAS RAISED! Prover state dumped to Slam_Tactic.dump"; Exn.reraise e)
           end)
-        else raise e
+        else Exn.reraise e
     fun contains_const name t =
       fold_aterms (fn (Const (name', _)) => (fn b => b orelse name = name') | _ => I) t false
     val atomized_ths = map (Conv.fconv_rule (Object_Logic.atomize ctxt)) ths
@@ -84,7 +84,7 @@ fun slam_tac options ctxt goal_term ths i st0 =
           in
             case ((Slam_Common.cpu_time_milliseconds (Slam.try_saturate context goal_term) initial_clauses
                 handle Slam.SLAM_EXCEPTION (e, state) => handle_exception (e, state))
-                handle Exn.Interrupt_Breakdown => error "caught Interrupt_Breakdown") of
+                (* handle Exn.Interrupt_Breakdown => error "caught Interrupt_Breakdown" *)) of
               ((Slam.Unsat, final_state), time) =>
                 let val () =
                   writeln ("total elapsed time until contradiction: " ^ @{make_string} time ^ " ms")
