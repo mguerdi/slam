@@ -8,41 +8,43 @@ lemma "(\<And>x. P (x a)) \<Longrightarrow> (\<And>y. \<not> P (y b)) \<Longrigh
   using [[
     slam_trace
   , slam_disable_all
-  , slam_rule_flex_flex_simp
-  , slam_rule_simp_outer_claus
-  , slam_rule_sup
-  , slam_rule_simp_false_elim
+  , slam_rule_flex_flex_simp=on
+  , slam_rule_simp_outer_claus=on
+  , slam_rule_sup=on
+  , slam_rule_simp_false_elim=on
   ]] by slam
 
 lemma "(\<And>x y. P (x a) (y b)) \<Longrightarrow> (\<And>u v. \<not> P (u c) (v d)) \<Longrightarrow> False"
   using [[
     slam_trace
   , slam_disable_all
-  , slam_rule_flex_flex_simp
-  , slam_rule_simp_outer_claus
-  , slam_rule_sup
-  , slam_rule_simp_false_elim
+  , slam_rule_flex_flex_simp=on
+  , slam_rule_simp_outer_claus=on
+  , slam_rule_sup=on
+  , slam_rule_simp_false_elim=on
   ]] by slam
 
 (* A higher-order Vampire, Example 1 *)
 lemma "(\<And>x. x a b \<noteq> f b a \<or> x c d \<noteq> f b a) \<Longrightarrow> False"
-  using [[slam_delayed_unification=false]] by slam
+  using [[slam_delayed_unification=off]] by slam
 
 (* A higher-order Vampire, Example 1 *)
 lemma "(\<And>x. x a b \<noteq> f b a \<or> x c d \<noteq> f b a) \<Longrightarrow> False"
-  using [[slam_delayed_unification=true]] by slam
+  using [[slam_delayed_unification=on]] by slam
 
 lemma "(\<And>x. x a b \<noteq> f b a \<or> x c d \<noteq> f b a) \<Longrightarrow> False"
 using [[
     slam_trace,
     slam_disable_all,
-    slam_rule_simp_outer_claus,
-    slam_rule_e_res,
-    slam_rule_sup,
+    slam_rule_simp_outer_claus=on,
+    slam_rule_e_res=on,
+    slam_rule_sup=on,
+    slam_rule_clause_subsumption=on,
+    slam_rule_imitate_project=on,
     (* slightly closer to the example in the paper *)
     slam_literal_selection_function="select_first_neg_lit",
     slam_select_flex_sided,
-    slam_delayed_unification=true,
+    slam_delayed_unification=on,
     slam_unifier_cutoff=4 (* CRITICAL *)
   ]] by slam
 
@@ -78,13 +80,20 @@ lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g
 using [[
     slam_trace
   , slam_disable_all
-  , slam_rule_simp_outer_claus
-  , slam_rule_sup
-  , slam_rule_e_res
-  , slam_delayed_unification=true
-  , slam_rule_neg_cong_fun
+  , slam_rule_simp_outer_claus=on
+  , slam_rule_sup=on
+  , slam_rule_e_res=on
+  , slam_rule_imitate_project=on
+  , slam_delayed_unification=on
+  , slam_rule_neg_cong_fun=on
   , slam_trace_e_res
   ]] by slam
+
+lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g c)) \<Longrightarrow> False"
+  using [[slam_ho_unification_strategy="simpl_only"]]
+  using [[slam_trace]]
+  using [[slam_neg_cong_fun_reveal_variable_headed=false]]
+  by slam
 
 declare [[slam_supress_unify_trace=false]]
 declare [[slam_isabelle_unify_trace]]
@@ -155,10 +164,10 @@ declare [[unify_trace_failure=false]]
 
 (* A modified NegCongFun can mimic ERes from the paper. (not a proper solution) *)
 lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g c)) \<Longrightarrow> False"
-  using [[slam_delayed_unification=false, slam_neg_cong_fun_reveal_variable_headed]] by slam
+  using [[slam_delayed_unification=off, slam_neg_cong_fun_reveal_variable_headed]] by slam
 
 lemma "f a = c \<Longrightarrow> (\<And>y. h (y b) (y a) \<noteq> h (g (f b)) (g c)) \<Longrightarrow> False"
-  using [[slam_delayed_unification=true, slam_neg_cong_fun_reveal_variable_headed]] by slam
+  using [[slam_delayed_unification=on, slam_neg_cong_fun_reveal_variable_headed]] by slam
 
 lemma "
       (\<And>z. z (f a) = (z :: 'a \<Rightarrow> 'd) c)
@@ -168,11 +177,11 @@ lemma "
   using [[
       slam_delayed_unification=true
     , slam_disable_all
-    , slam_rule_simp_outer_claus
-    , slam_rule_sup
+    , slam_rule_simp_outer_claus=on
+    , slam_rule_sup=on
     , slam_sup_into_fluid
     , slam_sup_variable_condition="none"
-    , slam_rule_e_res
+    , slam_rule_e_res=on
     , slam_trace
     (* , slam_trace_sup *)
     , slam_max_number_of_steps=100
